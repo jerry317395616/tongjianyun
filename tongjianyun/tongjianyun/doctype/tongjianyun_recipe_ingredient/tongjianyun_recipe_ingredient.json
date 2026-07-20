@@ -1,0 +1,124 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:ingredient_row_id",
+ "creation": "2026-07-16 14:32:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "relation_section",
+  "ingredient_row_id",
+  "recipe",
+  "recipe_dish",
+  "ingredient_section",
+  "ingredient_name",
+  "amount",
+  "unit",
+  "column_break_grams",
+  "grams_per_child",
+  "sort_order"
+ ],
+ "fields": [
+  {
+   "fieldname": "relation_section",
+   "fieldtype": "Section Break",
+   "label": "Dish Relation"
+  },
+  {
+   "fieldname": "ingredient_row_id",
+   "fieldtype": "Data",
+   "label": "Ingredient Row ID",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "recipe",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Recipe",
+   "options": "Tongjianyun Recipe",
+   "reqd": 1
+  },
+  {
+   "fieldname": "recipe_dish",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Recipe Dish",
+   "options": "Tongjianyun Recipe Dish",
+   "reqd": 1
+  },
+  {
+   "fieldname": "ingredient_section",
+   "fieldtype": "Section Break",
+   "label": "Ingredient"
+  },
+  {
+   "fieldname": "ingredient_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Ingredient Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Amount",
+   "reqd": 1
+  },
+  {
+   "default": "g",
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Unit",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_grams",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "grams_per_child",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Grams Per Child"
+  },
+  {
+   "default": "0",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Recipe Ingredient",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "ingredient_name,recipe_dish",
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "ingredient_name",
+ "track_changes": 1
+}

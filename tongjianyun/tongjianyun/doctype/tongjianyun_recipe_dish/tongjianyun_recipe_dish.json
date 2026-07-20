@@ -1,0 +1,207 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:dish_row_id",
+ "creation": "2026-07-16 14:31:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "relation_section",
+  "dish_row_id",
+  "recipe",
+  "day_id",
+  "column_break_meal",
+  "meal_date",
+  "day_label",
+  "meal_slot",
+  "meal_label",
+  "dish_section",
+  "dish_name",
+  "dish_order",
+  "sort_order",
+  "column_break_amount",
+  "amount_per_child_text",
+  "total_amount_text",
+  "day_meta_section",
+  "day_score",
+  "day_risk",
+  "day_locked",
+  "day_version",
+  "column_break_edit",
+  "day_updated_at",
+  "day_updated_by",
+  "day_edit_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "relation_section",
+   "fieldtype": "Section Break",
+   "label": "Recipe Relation"
+  },
+  {
+   "fieldname": "dish_row_id",
+   "fieldtype": "Data",
+   "label": "Dish Row ID",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "recipe",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Recipe",
+   "options": "Tongjianyun Recipe",
+   "reqd": 1
+  },
+  {
+   "fieldname": "day_id",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Day ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_meal",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "meal_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Meal Date"
+  },
+  {
+   "fieldname": "day_label",
+   "fieldtype": "Data",
+   "label": "Day Label"
+  },
+  {
+   "fieldname": "meal_slot",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Meal Slot",
+   "options": "breakfast\nmorningSnack\nlunch\nsnack\ndinner",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meal_label",
+   "fieldtype": "Data",
+   "label": "Meal Label"
+  },
+  {
+   "fieldname": "dish_section",
+   "fieldtype": "Section Break",
+   "label": "Dish"
+  },
+  {
+   "fieldname": "dish_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Dish Name",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "dish_order",
+   "fieldtype": "Int",
+   "label": "Dish Order"
+  },
+  {
+   "default": "0",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  },
+  {
+   "fieldname": "column_break_amount",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount_per_child_text",
+   "fieldtype": "Small Text",
+   "label": "Amount Per Child"
+  },
+  {
+   "fieldname": "total_amount_text",
+   "fieldtype": "Data",
+   "label": "Total Amount"
+  },
+  {
+   "fieldname": "day_meta_section",
+   "fieldtype": "Section Break",
+   "label": "Day Metadata"
+  },
+  {
+   "fieldname": "day_score",
+   "fieldtype": "Float",
+   "label": "Day Score"
+  },
+  {
+   "fieldname": "day_risk",
+   "fieldtype": "Data",
+   "label": "Day Risk"
+  },
+  {
+   "default": "0",
+   "fieldname": "day_locked",
+   "fieldtype": "Check",
+   "label": "Day Locked"
+  },
+  {
+   "default": "1",
+   "fieldname": "day_version",
+   "fieldtype": "Int",
+   "label": "Day Version"
+  },
+  {
+   "fieldname": "column_break_edit",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "day_updated_at",
+   "fieldtype": "Datetime",
+   "label": "Day Updated At"
+  },
+  {
+   "fieldname": "day_updated_by",
+   "fieldtype": "Data",
+   "label": "Day Updated By"
+  },
+  {
+   "fieldname": "day_edit_reason",
+   "fieldtype": "Small Text",
+   "label": "Day Edit Reason"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Recipe Dish",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "dish_name,meal_date,meal_slot",
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "dish_name",
+ "track_changes": 1
+}

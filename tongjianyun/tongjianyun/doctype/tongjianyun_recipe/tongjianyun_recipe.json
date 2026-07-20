@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:recipe_id",
+ "creation": "2026-07-16 14:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_section",
+  "recipe_id",
+  "title",
+  "column_break_period",
+  "week_start",
+  "week_end",
+  "source_section",
+  "source_file_name",
+  "parser",
+  "relation_source",
+  "imported_at",
+  "detail_section",
+  "recipe_detail_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "\u98df\u8c31\u4fe1\u606f"
+  },
+  {
+   "fieldname": "recipe_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "\u98df\u8c31\u7f16\u53f7",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "\u98df\u8c31\u540d\u79f0",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_period",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "week_start",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "\u5f00\u59cb\u65e5\u671f"
+  },
+  {
+   "fieldname": "week_end",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "\u7ed3\u675f\u65e5\u671f"
+  },
+  {
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "\u89e3\u6790\u4fe1\u606f"
+  },
+  {
+   "fieldname": "source_file_name",
+   "fieldtype": "Data",
+   "label": "\u539f\u59cb\u6587\u4ef6\u540d"
+  },
+  {
+   "fieldname": "parser",
+   "fieldtype": "Data",
+   "label": "\u89e3\u6790\u65b9\u5f0f"
+  },
+  {
+   "fieldname": "relation_source",
+   "fieldtype": "Data",
+   "label": "\u83dc\u54c1\u98df\u6750\u5173\u7cfb\u6765\u6e90"
+  },
+  {
+   "fieldname": "imported_at",
+   "fieldtype": "Datetime",
+   "label": "\u5bfc\u5165\u65f6\u95f4"
+  },
+  {
+   "fieldname": "detail_section",
+   "fieldtype": "Section Break",
+   "label": "\u98df\u8c31\u660e\u7ec6"
+  },
+  {
+   "fieldname": "recipe_detail_html",
+   "fieldtype": "HTML",
+   "label": "\u98df\u8c31\u660e\u7ec6"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Recipe",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "title,week_start,week_end",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

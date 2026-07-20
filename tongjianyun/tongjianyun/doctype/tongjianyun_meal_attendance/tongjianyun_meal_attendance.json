@@ -1,0 +1,180 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:MEAL-ATT-{YYYY}-{#####}",
+ "creation": "2026-07-12 03:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "period_section",
+  "month",
+  "month_label",
+  "column_break_meta",
+  "status",
+  "prepared_by",
+  "table_section",
+  "attendance_table",
+  "details",
+  "summary_section",
+  "breakfast_total",
+  "lunch_total",
+  "dinner_total",
+  "column_break_summary",
+  "total_meal_times",
+  "total_person_days",
+  "remark"
+ ],
+ "fields": [
+  {
+   "fieldname": "period_section",
+   "fieldtype": "Section Break",
+   "label": "填报信息"
+  },
+  {
+   "fieldname": "month",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "统计月份",
+   "reqd": 1
+  },
+  {
+   "fieldname": "month_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "月份",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "草稿",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "状态",
+   "options": "草稿\n已确认",
+   "reqd": 1
+  },
+  {
+   "fieldname": "prepared_by",
+   "fieldtype": "Data",
+   "label": "填报人",
+   "read_only": 1
+  },
+  {
+   "fieldname": "table_section",
+   "fieldtype": "Section Break",
+   "label": "就餐人数记录表"
+  },
+  {
+   "fieldname": "attendance_table",
+   "fieldtype": "HTML",
+   "label": "就餐人数表格"
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "就餐人数明细",
+   "options": "Tongjianyun Meal Attendance Row"
+  },
+  {
+   "fieldname": "summary_section",
+   "fieldtype": "Section Break",
+   "label": "汇总信息"
+  },
+  {
+   "default": "0",
+   "fieldname": "breakfast_total",
+   "fieldtype": "Int",
+   "label": "早餐合计",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "lunch_total",
+   "fieldtype": "Int",
+   "label": "午餐合计",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "dinner_total",
+   "fieldtype": "Int",
+   "label": "晚餐合计",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_summary",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_meal_times",
+   "fieldtype": "Int",
+   "label": "总人次数",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "按总人次数除以三餐后四舍五入",
+   "fieldname": "total_person_days",
+   "fieldtype": "Int",
+   "label": "总人日数",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remark",
+   "fieldtype": "Small Text",
+   "label": "备注"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Meal Attendance",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 0,
+   "role": "Tongjianyun Service",
+   "share": 0,
+   "submit": 0,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 0,
+   "write": 1
+  }
+ ],
+ "search_fields": "month_label,status",
+ "sort_field": "month",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "month_label",
+ "track_changes": 1
+}

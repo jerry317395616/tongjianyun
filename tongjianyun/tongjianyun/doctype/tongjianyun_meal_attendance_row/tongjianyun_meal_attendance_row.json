@@ -1,0 +1,70 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-12 03:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "class_id",
+  "class_name",
+  "breakfast_count",
+  "lunch_count",
+  "dinner_count",
+  "sort_order"
+ ],
+ "fields": [
+  {
+   "fieldname": "class_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "班级编号"
+  },
+  {
+   "fieldname": "class_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "班级",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "breakfast_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "早餐"
+  },
+  {
+   "default": "0",
+   "fieldname": "lunch_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "午餐"
+  },
+  {
+   "default": "0",
+   "fieldname": "dinner_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "晚餐"
+  },
+  {
+   "default": "10",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "排序"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Meal Attendance Row",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": []
+}

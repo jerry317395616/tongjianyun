@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from math import floor
+
+import frappe
+from frappe import _
+from frappe.model.document import Document
+from frappe.utils import getdate, nowdate
+
+
+CLASS_DOCTYPE = "Tongjianyun Class"
+ATTENDANCE_DOCTYPE = "Tongjianyun Meal Attendance"
+
+
+def _active_classes() -> list[dict]:
+	if not frappe.db.table_exists(CLASS_DOCTYPE):
+		return []
+	return frappe.get_all(
+		CLASS_DOCTYPE,
+		filters={"status": "active"},
+		fields=["class_id", "class_name", "sort_order"],
+		order_by="sort_order asc, class_name asc",
+	)
+
+
+def _as_non_negative_int(value, label: str) -> int:
+	try:
+		number = int(value or 0)
+	except (TypeError, ValueError):
+		frappe.throw(_("{0}必须填写整数").format(label))
+	if number < 0:
+		frappe.throw(_("{0}不能小于 0").format(label))
+	return number
+
+
+class TongjianyunMealAttendance(Document):
+	def before_validate(self):
+		self._normalize_month()
+		self._ensure_class_rows()
+		self._normalize_rows()
+		self._calculate_totals()
+		if not self.prepared_by and frappe.session.user != "Guest":
+			self.prepared_by = (
+				frappe.db.get_value("User", frappe.session.user, "full_name")
+				or frappe.session.user
+			)
+
+	def validate(self):
+		duplicate = frappe.db.exists(
+			ATTENDANCE_DOCTYPE,
+			{"month": self.month, "name": ["!=", self.name or ""]},
+		)
+		if duplicate:
+			frappe.throw(_("{0}已经存在就餐人数记录：{1}").format(self.month_label, duplicate))
+
+	def _normalize_month(self):
+		value = getdate(self.month or nowdate())
+		self.month = value.replace(day=1)
+		self.month_label = f"{value.year}年{value.month}月"
+
+	def _ensure_class_rows(self):
+		if self.details:
+			return
+		for row in _active_classes():
+			self.append(
+				"details",
+				{
+					"class_id": row.class_id,
+					"class_name": row.class_name,
+					"breakfast_count": 0,
+					"lunch_count": 0,
+					"dinner_count": 0,
+					"sort_order": row.sort_order or 10,
+				},
+			)
+
+	def _normalize_rows(self):
+		seen: set[str] = set()
+		for row in self.details:
+			class_key = (row.class_id or row.class_name or "").strip()
+			if not class_key:
+				frappe.throw(_("就餐人数表中存在未指定班级的行"))
+			if class_key in seen:
+				frappe.throw(_("班级 {0} 重复出现").format(row.class_name or class_key))
+			seen.add(class_key)
+			row.breakfast_count = _as_non_negative_int(row.breakfast_count, f"{row.class_name}早餐人数")
+			row.lunch_count = _as_non_negative_int(row.lunch_count, f"{row.class_name}午餐人数")
+			row.dinner_count = _as_non_negative_int(row.dinner_count, f"{row.class_name}晚餐人数")
+
+	def _calculate_totals(self):
+		self.breakfast_total = sum(int(row.breakfast_count or 0) for row in self.details)
+		self.lunch_total = sum(int(row.lunch_count or 0) for row in self.details)
+		self.dinner_total = sum(int(row.dinner_count or 0) for row in self.details)
+		self.total_meal_times = self.breakfast_total + self.lunch_total + self.dinner_total
+		self.total_person_days = floor(self.total_meal_times / 3 + 0.5)
+
+
+@frappe.whitelist()
+def get_active_classes() -> list[dict]:
+	if frappe.session.user == "Guest":
+		frappe.throw(_("请先登录"), frappe.AuthenticationError)
+	return [dict(row) for row in _active_classes()]
