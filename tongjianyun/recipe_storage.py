@@ -347,6 +347,17 @@ def save_current_recipe(payload: Any = None) -> dict[str, Any]:
     return _save_current_recipe(payload, commit=True)
 
 
+def save_recipe_payload(payload: Any, *, commit: bool = False) -> dict[str, Any]:
+    """Persist one complete recipe payload for trusted in-process integrations.
+
+    Row identifiers remain server-managed: dishes and ingredients are rebuilt
+    atomically by ``_save_current_recipe`` and receive deterministic IDs from
+    their recipe, day, meal and row content.
+    """
+
+    return _save_current_recipe(payload, commit=commit)
+
+
 @frappe.whitelist()
 def delete_current_recipe() -> dict[str, int]:
     _require_login()
