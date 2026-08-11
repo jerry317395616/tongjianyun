@@ -1,7 +1,7 @@
 {
  "app": "tongjianyun",
  "charts": [],
- "content": "[{\"id\":\"tjy4bkhRQ5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"儿童主数据\",\"col\":3}},{\"id\":\"tjye0Xhqal\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"班级维护\",\"col\":3}},{\"id\":\"tjy5MtCePB\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食谱\",\"col\":3}},{\"id\":\"tjy63dsmyb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食安采购\",\"col\":3}},{\"id\":\"tjyVR0nZao\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjygEMJTm3\",\"type\":\"card\",\"data\":{\"card_name\":\"主数据\",\"col\":4}},{\"id\":\"tjyDlSyXYL\",\"type\":\"card\",\"data\":{\"card_name\":\"膳食营养\",\"col\":4}},{\"id\":\"tjyZYkEZyU\",\"type\":\"card\",\"data\":{\"card_name\":\"食安采购\",\"col\":4}}]",
+ "content": "[{\"id\":\"tjy5MtCePB\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食谱\",\"col\":3}},{\"id\":\"tjy63dsmyb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食安采购\",\"col\":3}},{\"id\":\"tjyVR0nZao\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjygEMJTm3\",\"type\":\"card\",\"data\":{\"card_name\":\"主数据\",\"col\":4}},{\"id\":\"tjyDlSyXYL\",\"type\":\"card\",\"data\":{\"card_name\":\"膳食营养\",\"col\":4}},{\"id\":\"tjyZYkEZyU\",\"type\":\"card\",\"data\":{\"card_name\":\"食安采购\",\"col\":4}}]",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -17,27 +17,7 @@
    "label": "主数据",
    "hidden": 0,
    "link_type": "DocType",
-   "link_count": 3,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "儿童主数据",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Child",
-   "link_count": 0,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "班级维护",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Class",
-   "link_count": 0,
+   "link_count": 1,
    "onboard": 0,
    "is_query_report": 0
   },
@@ -132,22 +112,6 @@
  "shortcuts": [
   {
    "type": "DocType",
-   "link_to": "Tongjianyun Child",
-   "doc_view": "List",
-   "label": "儿童主数据",
-   "color": "Blue",
-   "stats_filter": "[]"
-  },
-  {
-   "type": "DocType",
-   "link_to": "Tongjianyun Class",
-   "doc_view": "List",
-   "label": "班级维护",
-   "color": "Cyan",
-   "stats_filter": "[]"
-  },
-  {
-   "type": "DocType",
    "link_to": "Tongjianyun Recipe",
    "doc_view": "List",
    "label": "食谱",
@@ -164,34 +128,6 @@
   }
  ],
  "sidebar_items": [
-  {
-   "type": "Link",
-   "label": "儿童主数据",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Child",
-   "icon": "circle-dot",
-   "default_workspace": 0,
-   "child": 0,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
-  {
-   "type": "Link",
-   "label": "班级维护",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Class",
-   "icon": "circle-dot",
-   "default_workspace": 0,
-   "child": 0,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
   {
    "type": "Link",
    "label": "食谱",
