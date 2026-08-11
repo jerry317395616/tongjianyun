@@ -141,23 +141,7 @@
  "name": "Tongjianyun Class",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
- "permissions": [
-  {
-   "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "submit": 0,
-   "cancel": 0,
-   "amend": 0,
-   "report": 1,
-   "export": 1,
-   "share": 1,
-   "print": 1,
-   "email": 1
-  }
- ],
+ "permissions": [],
  "sort_field": "sort_order",
  "sort_order": "ASC",
  "states": [],
