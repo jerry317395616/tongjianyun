@@ -6,7 +6,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt, now_datetime
+from frappe.utils import cint, flt, now_datetime, nowdate
 
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
 DISH_DOCTYPE = "Tongjianyun Recipe Dish"
@@ -325,6 +325,15 @@ def get_current_recipe() -> dict[str, Any] | None:
     _require_login()
     name = frappe.db.get_value(RECIPE_DOCTYPE, {"recipe_id": "current"}, "name")
     if not name:
+        name = frappe.db.get_value(
+            RECIPE_DOCTYPE,
+            {"week_start": ["<=", nowdate()], "week_end": [">=", nowdate()]},
+            "name",
+            order_by="modified desc",
+        )
+    if not name:
+        name = frappe.db.get_value(RECIPE_DOCTYPE, {}, "name", order_by="week_start desc, modified desc")
+    if not name:
         return None
     return _current_recipe_payload(frappe.get_doc(RECIPE_DOCTYPE, name))
 
@@ -339,6 +348,86 @@ def get_recipe_detail(recipe: str) -> dict[str, Any]:
     if not recipe_name:
         frappe.throw(_("Recipe not found."), frappe.DoesNotExistError)
     return _current_recipe_payload(frappe.get_doc(RECIPE_DOCTYPE, recipe_name))
+
+
+@frappe.whitelist()
+def get_recipe_library(
+    search: str | None = None,
+    start: int = 0,
+    page_length: int = 50,
+) -> dict[str, Any]:
+    """Return the lightweight recipe-library projection used by the desk page."""
+
+    _require_login()
+    start = max(0, cint(start))
+    page_length = min(100, max(1, cint(page_length) or 50))
+    filters: list[list[Any]] = []
+    or_filters: list[list[Any]] = []
+    search_text = _clean(search)
+    if search_text:
+        or_filters.extend(
+            [
+                [RECIPE_DOCTYPE, "title", "like", f"%{search_text}%"],
+                [RECIPE_DOCTYPE, "recipe_id", "like", f"%{search_text}%"],
+            ]
+        )
+
+    recipes = frappe.get_list(
+        RECIPE_DOCTYPE,
+        filters=filters,
+        or_filters=or_filters,
+        fields=[
+            "name",
+            "recipe_id",
+            "title",
+            "week_start",
+            "week_end",
+            "source_file_name",
+            "parser",
+            "relation_source",
+            "imported_at",
+            "modified",
+            "modified_by",
+        ],
+        order_by="week_start desc, modified desc",
+        start=start,
+        page_length=page_length,
+    )
+    recipe_names = [row.name for row in recipes]
+    counts: dict[str, dict[str, int]] = {
+        name: {"dish_count": 0, "ingredient_count": 0} for name in recipe_names
+    }
+    if recipe_names:
+        dish_counts = frappe.get_all(
+            DISH_DOCTYPE,
+            filters={"recipe": ["in", recipe_names]},
+            fields=["recipe", "count(name) as dish_count"],
+            group_by="recipe",
+        )
+        ingredient_counts = frappe.get_all(
+            INGREDIENT_DOCTYPE,
+            filters={"recipe": ["in", recipe_names]},
+            fields=["recipe", "count(name) as ingredient_count"],
+            group_by="recipe",
+        )
+        for row in dish_counts:
+            counts[row.recipe]["dish_count"] = cint(row.dish_count)
+        for row in ingredient_counts:
+            counts[row.recipe]["ingredient_count"] = cint(row.ingredient_count)
+
+    items = []
+    for row in recipes:
+        item = dict(row)
+        item.update(counts[row.name])
+        item["status"] = "complete" if item["dish_count"] else "draft"
+        items.append(item)
+
+    return {
+        "items": items,
+        "start": start,
+        "page_length": page_length,
+        "has_more": len(items) == page_length,
+    }
 
 
 @frappe.whitelist()

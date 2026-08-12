@@ -44,8 +44,8 @@
    "type": "Link",
    "label": "食谱",
    "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Recipe",
+   "link_type": "Page",
+   "link_to": "tongjianyun-recipe",
    "link_count": 0,
    "onboard": 0,
    "is_query_report": 0
@@ -111,9 +111,9 @@
  "sequence_id": 1,
  "shortcuts": [
   {
-   "type": "DocType",
-   "link_to": "Tongjianyun Recipe",
-   "doc_view": "List",
+   "type": "Page",
+   "link_to": "tongjianyun-recipe",
+   "doc_view": "",
    "label": "食谱",
    "color": "Green",
    "stats_filter": "[]"
@@ -131,8 +131,8 @@
   {
    "type": "Link",
    "label": "食谱",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Recipe",
+   "link_type": "Page",
+   "link_to": "tongjianyun-recipe",
    "icon": "calendar-days",
    "default_workspace": 0,
    "child": 0,
