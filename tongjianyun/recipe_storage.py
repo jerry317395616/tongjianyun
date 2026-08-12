@@ -6,6 +6,7 @@ from typing import Any
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Count
 from frappe.utils import cint, flt, now_datetime, nowdate
 
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
@@ -398,18 +399,20 @@ def get_recipe_library(
         name: {"dish_count": 0, "ingredient_count": 0} for name in recipe_names
     }
     if recipe_names:
-        dish_counts = frappe.get_all(
-            DISH_DOCTYPE,
-            filters={"recipe": ["in", recipe_names]},
-            fields=["recipe", "count(name) as dish_count"],
-            group_by="recipe",
-        )
-        ingredient_counts = frappe.get_all(
-            INGREDIENT_DOCTYPE,
-            filters={"recipe": ["in", recipe_names]},
-            fields=["recipe", "count(name) as ingredient_count"],
-            group_by="recipe",
-        )
+        dish = frappe.qb.DocType(DISH_DOCTYPE)
+        dish_counts = (
+            frappe.qb.from_(dish)
+            .select(dish.recipe, Count(dish.name).as_("dish_count"))
+            .where(dish.recipe.isin(recipe_names))
+            .groupby(dish.recipe)
+        ).run(as_dict=True)
+        ingredient = frappe.qb.DocType(INGREDIENT_DOCTYPE)
+        ingredient_counts = (
+            frappe.qb.from_(ingredient)
+            .select(ingredient.recipe, Count(ingredient.name).as_("ingredient_count"))
+            .where(ingredient.recipe.isin(recipe_names))
+            .groupby(ingredient.recipe)
+        ).run(as_dict=True)
         for row in dish_counts:
             counts[row.recipe]["dish_count"] = cint(row.dish_count)
         for row in ingredient_counts:
