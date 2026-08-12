@@ -45,7 +45,7 @@
    "label": "食谱",
    "hidden": 0,
    "link_type": "Page",
-   "link_to": "tongjianyun-recipe",
+   "link_to": "tongjianyun-recipe-workbench",
    "link_count": 0,
    "onboard": 0,
    "is_query_report": 0
@@ -112,7 +112,7 @@
  "shortcuts": [
   {
    "type": "Page",
-   "link_to": "tongjianyun-recipe",
+   "link_to": "tongjianyun-recipe-workbench",
    "doc_view": "",
    "label": "食谱",
    "color": "Green",
@@ -132,7 +132,7 @@
    "type": "Link",
    "label": "食谱",
    "link_type": "Page",
-   "link_to": "tongjianyun-recipe",
+   "link_to": "tongjianyun-recipe-workbench",
    "icon": "calendar-days",
    "default_workspace": 0,
    "child": 0,

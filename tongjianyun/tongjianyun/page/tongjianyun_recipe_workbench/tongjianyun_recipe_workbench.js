@@ -1,4 +1,4 @@
-frappe.pages["tongjianyun-recipe"].on_page_load = function (wrapper) {
+frappe.pages["tongjianyun-recipe-workbench"].on_page_load = function (wrapper) {
     const page = frappe.ui.make_app_page({
         parent: wrapper,
         title: "食谱",
