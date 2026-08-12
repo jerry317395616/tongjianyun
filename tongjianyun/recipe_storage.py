@@ -700,13 +700,24 @@ def save_recipe_payload(payload: Any, *, commit: bool = False) -> dict[str, Any]
 
 @frappe.whitelist()
 def delete_current_recipe() -> dict[str, int]:
-    _require_login()
-    names = frappe.get_all(RECIPE_DOCTYPE, filters={"recipe_id": "current"}, pluck="name", limit_page_length=0)
+    """Retain the legacy endpoint while enforcing the lifecycle policy.
+
+    Older clients still call this method for the special ``current`` recipe.
+    Route those requests through the same guarded soft-delete operation used by
+    the workbench so the endpoint cannot bypass status or downstream-data
+    checks and cannot physically erase recipe history.
+    """
+
+    _require_recipe_write()
+    names = frappe.get_all(
+        RECIPE_DOCTYPE,
+        filters={"recipe_id": "current", "is_deleted": 0},
+        pluck="name",
+        limit_page_length=0,
+    )
     for name in names:
-        _delete_recipe_rows(name)
-        frappe.delete_doc(RECIPE_DOCTYPE, name, ignore_permissions=True)
-    frappe.db.commit()
-    return {"deleted": len(names)}
+        update_recipe_lifecycle(name, "delete")
+    return {"deleted": 0, "moved_to_recycle_bin": len(names)}
 
 
 def migrate_legacy_current_recipe() -> dict[str, int]:
