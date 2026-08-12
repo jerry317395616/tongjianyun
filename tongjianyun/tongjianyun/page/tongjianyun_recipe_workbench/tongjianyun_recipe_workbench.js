@@ -35,7 +35,6 @@ class TongjianyunRecipePage {
         this.page.set_primary_action("编辑食谱", () => this.enterEdit(), "edit");
         this.page.add_menu_item("全部食谱", () => this.showLibrary());
         this.page.add_menu_item("新建食谱", () => this.createRecipe());
-        this.page.add_menu_item("打开标准记录", () => this.openStandardRecord());
     }
 
     async loadInitialRecipe() {
@@ -109,7 +108,6 @@ class TongjianyunRecipePage {
                         <p>${formatDateRange(recipe.weekStart, recipe.weekEnd)}</p>
                     </div>
                     <div class="tjy-hero-actions">
-                        <button class="btn btn-default btn-sm" data-action="standard-record">记录信息</button>
                         <button class="btn btn-primary btn-sm" data-action="edit">编辑食谱</button>
                     </div>
                 </header>
@@ -491,17 +489,11 @@ class TongjianyunRecipePage {
         this.state.activeDay = 0;
     }
 
-    openStandardRecord() {
-        if (!this.state.payload?.recipe?.recipeId) return;
-        frappe.set_route("Form", "Tongjianyun Recipe", this.state.selectedRecipe || this.state.payload.recipe.recipeId);
-    }
-
     bindCommonActions() {
         this.main.find('[data-action="library"]').on("click", () => this.showLibrary());
         this.main.find('[data-action="edit"]').on("click", () => this.enterEdit());
         this.main.find('[data-action="browse"]').on("click", () => this.showBrowse());
         this.main.find('[data-action="save"]').on("click", () => this.saveRecipe());
-        this.main.find('[data-action="standard-record"]').on("click", () => this.openStandardRecord());
     }
 
     showLoading(message) {

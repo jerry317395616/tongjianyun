@@ -1,5 +1,10 @@
 frappe.ui.form.on("Tongjianyun Recipe", {
     refresh(frm) {
+        if (!frm.is_new() && !frappe.flags.tongjianyun_allow_standard_recipe_form) {
+            frappe.route_options = { recipe: frm.doc.name };
+            frappe.set_route("tongjianyun-recipe-workbench");
+            return;
+        }
         if (frm.is_new()) {
             frm.fields_dict.recipe_detail_html.$wrapper.html(
                 '<div class="text-muted">保存食谱后显示菜品和食材明细。</div>',
