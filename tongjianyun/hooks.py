@@ -5,6 +5,7 @@ app_description = "\u7ae5\u5065\u4e91 Frappe \u540e\u53f0\u5e94\u7528"
 app_email = "admin@example.com"
 app_license = "mit"
 use_json_request_body = True
+required_apps = ["education"]
 
 app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
@@ -18,8 +19,48 @@ add_to_apps_screen = [
     }
 ]
 
+before_migrate = "tongjianyun.education_integration.before_migrate"
+
 after_migrate = [
+    "tongjianyun.education_integration.install",
     "tongjianyun.meal_attendance_setup.install",
     "tongjianyun.recipe_storage.install",
     "tongjianyun.workbench.install",
 ]
+
+override_doctype_class = {
+    "Student": "tongjianyun.education_integration.TongjianyunStudent",
+}
+
+override_doctype_dashboards = {
+    "Student": "tongjianyun.education_integration.get_student_dashboard",
+}
+
+doc_events = {
+    "Student Attendance": {
+        "after_insert": "tongjianyun.daily_meals.refresh_confirmation_from_event",
+        "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_event",
+        "on_submit": "tongjianyun.daily_meals.refresh_confirmation_from_event",
+        "on_cancel": "tongjianyun.daily_meals.refresh_confirmation_from_event",
+    },
+    "Student Leave Application": {
+        "after_insert": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
+        "on_update": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
+        "on_submit": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
+        "on_cancel": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
+    },
+    "Tongjianyun Daily Meal Adjustment": {
+        "after_insert": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
+        "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
+        "on_trash": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
+    },
+    "Tongjianyun Special Diet": {
+        "after_insert": "tongjianyun.daily_meals.refresh_confirmation_from_special_diet",
+        "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_special_diet",
+        "on_trash": "tongjianyun.daily_meals.refresh_confirmation_from_special_diet",
+    },
+}
+
+scheduler_events = {
+    "daily": ["tongjianyun.daily_meals.prepare_today_confirmation"],
+}

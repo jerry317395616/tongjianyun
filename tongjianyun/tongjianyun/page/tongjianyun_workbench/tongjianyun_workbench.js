@@ -45,8 +45,8 @@ class TongjianyunWorkflowWorkbench {
                 <header class="tjy-hero">
                     <div>
                         <div class="tjy-eyebrow">${escapeHtml(this.state.date_label || "今日")}</div>
-                        <h1>膳食与食安业务工作台</h1>
-                        <p>按就餐人数、食谱、采购、留样和追溯的顺序完成每日闭环。</p>
+                        <h1>童健云业务工作台</h1>
+                        <p>从园务主数据、考勤就餐到健康膳食和食安追溯，按顺序完成每日闭环。</p>
                     </div>
                     <div class="tjy-progress-summary">
                         <strong>${doneCount}/${steps.length}</strong>
@@ -79,8 +79,8 @@ class TongjianyunWorkflowWorkbench {
 
                 <section class="tjy-process-section">
                     <div class="tjy-section-heading">
-                        <div><span>业务流程</span><h2>从计划到追溯，一步一步完成</h2></div>
-                        <p>每个环节都会使用上一步的数据，建议按顺序处理。</p>
+                        <div><span>业务流程</span><h2>从幼儿入园到每日供餐，一步一步完成</h2></div>
+                        <p>Education 维护幼儿和班级，童健云承接健康、膳食与食安业务。</p>
                     </div>
                     <div class="tjy-step-list">
                         ${steps.map((step, index) => this.renderStep(step, index, steps.length)).join("")}

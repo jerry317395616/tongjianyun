@@ -4,19 +4,23 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-12 15:00:00.000000",
+ "modified": "2026-08-12 16:30:00.000000",
  "modified_by": "Administrator",
  "module": "Tongjianyun",
  "name": "tongjianyun-workbench",
  "owner": "Administrator",
  "page_name": "tongjianyun-workbench",
  "roles": [
-  {
-   "role": "System Manager"
-  },
-  {
-   "role": "Tongjianyun Service"
-  }
+  {"role":"System Manager"},
+  {"role":"Tongjianyun Service"},
+  {"role":"Tongjianyun Director"},
+  {"role":"Tongjianyun Academic"},
+  {"role":"Tongjianyun Teacher"},
+  {"role":"Tongjianyun Health"},
+  {"role":"Tongjianyun Nutrition"},
+  {"role":"Tongjianyun Kitchen"},
+  {"role":"Tongjianyun Procurement"},
+  {"role":"Tongjianyun Food Safety"}
  ],
  "script": null,
  "standard": "Yes",

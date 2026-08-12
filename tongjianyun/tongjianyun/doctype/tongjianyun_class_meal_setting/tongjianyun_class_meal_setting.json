@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:student_group",
+ "creation": "2026-08-12 16:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["student_group","meal_age_group","enabled","column_break_class","serves_breakfast","serves_morning_snack","serves_lunch","serves_afternoon_snack","serves_dinner","remark"],
+ "fields": [
+  {"fieldname":"student_group","fieldtype":"Link","in_list_view":1,"in_standard_filter":1,"label":"班级","options":"Student Group","reqd":1,"unique":1},
+  {"fieldname":"meal_age_group","fieldtype":"Data","in_list_view":1,"label":"膳食年龄段","reqd":1},
+  {"default":"1","fieldname":"enabled","fieldtype":"Check","in_list_view":1,"label":"启用"},
+  {"fieldname":"column_break_class","fieldtype":"Column Break"},
+  {"default":"1","fieldname":"serves_breakfast","fieldtype":"Check","label":"供应早餐"},
+  {"default":"1","fieldname":"serves_morning_snack","fieldtype":"Check","label":"供应早点"},
+  {"default":"1","fieldname":"serves_lunch","fieldtype":"Check","label":"供应午餐"},
+  {"default":"1","fieldname":"serves_afternoon_snack","fieldtype":"Check","label":"供应午点"},
+  {"default":"0","fieldname":"serves_dinner","fieldtype":"Check","label":"供应晚餐"},
+  {"fieldname":"remark","fieldtype":"Small Text","label":"备注"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Class Meal Setting",
+ "naming_rule": "By fieldname",
+ "permissions": [
+  {"create":1,"delete":1,"email":1,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","share":1,"write":1},
+  {"create":1,"delete":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Nutrition","write":1},
+  {"print":1,"read":1,"report":1,"role":"Tongjianyun Director"}
+ ],
+ "search_fields": "student_group,meal_age_group",
+ "sort_field": "student_group",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "student_group",
+ "track_changes": 1
+}

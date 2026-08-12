@@ -5,12 +5,14 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import get_first_day, getdate, now_datetime, today
+from frappe.utils import getdate, now_datetime, today
+
 
 WORKSPACE_NAME = "童健云"
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
 DISH_DOCTYPE = "Tongjianyun Recipe Dish"
-ATTENDANCE_DOCTYPE = "Tongjianyun Meal Attendance"
+CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
+SPECIAL_DIET_DOCTYPE = "Tongjianyun Special Diet"
 PURCHASE_DOCTYPE = "Tongjianyun Food Purchase"
 SUPPLIER_DOCTYPE = "Tongjianyun Food Supplier"
 SAMPLE_DOCTYPE = "Tongjianyun Food Sample"
@@ -48,28 +50,34 @@ def _current_recipe() -> dict[str, Any] | None:
     return dict(rows[0]) if rows else None
 
 
-def _current_attendance() -> dict[str, Any] | None:
-    if not _can_read(ATTENDANCE_DOCTYPE):
+def _today_confirmation() -> dict[str, Any] | None:
+    if not _can_read(CONFIRMATION_DOCTYPE):
         return None
-    month_start = get_first_day(today())
     rows = frappe.get_list(
-        ATTENDANCE_DOCTYPE,
-        filters={"month": month_start},
-        fields=["name", "month_label", "status", "total_person_days", "total_meal_times", "modified"],
-        order_by="modified desc",
+        CONFIRMATION_DOCTYPE,
+        filters={"meal_date": getdate(today())},
+        fields=[
+            "name",
+            "meal_date",
+            "status",
+            "total_enrolled_count",
+            "total_lunch_count",
+            "total_special_diet_count",
+            "modified",
+        ],
         page_length=1,
     )
     return dict(rows[0]) if rows else None
 
 
 def _open_count(doctype: str) -> int:
-	if not _can_read(doctype):
-		return 0
-	return sum(
-		1
-		for row in frappe.get_list(doctype, fields=["status"], page_length=0)
-		if str(row.status or "").strip().lower() not in CLOSED_STATUSES
-	)
+    if not _can_read(doctype):
+        return 0
+    return sum(
+        1
+        for row in frappe.get_list(doctype, fields=["status"], page_length=0)
+        if str(row.status or "").strip().lower() not in CLOSED_STATUSES
+    )
 
 
 def _status(done: bool, *, attention: bool = False) -> tuple[str, str]:
@@ -82,19 +90,21 @@ def _status(done: bool, *, attention: bool = False) -> tuple[str, str]:
 
 @frappe.whitelist()
 def get_overview() -> dict[str, Any]:
-    """Return permission-aware operating signals for the Tongjianyun workflow page."""
-
     _require_login()
     recipe = _current_recipe()
-    attendance = _current_attendance()
+    confirmation = _today_confirmation()
     dish_count = _count(DISH_DOCTYPE, {"recipe": recipe["name"]}) if recipe else 0
+    student_count = _count("Student", {"enabled": 1})
+    group_count = _count("Student Group", {"disabled": 0})
+    special_diet_count = _count(SPECIAL_DIET_DOCTYPE, {"status": "生效中"})
     purchase_total = _count(PURCHASE_DOCTYPE)
     purchase_open = _open_count(PURCHASE_DOCTYPE)
     sample_total = _count(SAMPLE_DOCTYPE)
     trace_open = _open_count(TRACE_DOCTYPE)
     supplier_total = _count(SUPPLIER_DOCTYPE)
 
-    attendance_status = _status(bool(attendance))
+    attendance_done = bool(confirmation and confirmation.get("status") in {"已确认", "已锁定"})
+    attendance_status = _status(attendance_done, attention=bool(confirmation and not attendance_done))
     recipe_status = _status(bool(recipe and dish_count))
     purchase_status = _status(bool(purchase_total), attention=bool(purchase_open))
     sample_status = _status(bool(sample_total))
@@ -104,19 +114,19 @@ def get_overview() -> dict[str, Any]:
         {
             "id": "attendance",
             "number": "01",
-            "title": "核对就餐人数",
-            "description": "按月维护各班早餐、午餐和晚餐人数，形成备餐基数。",
+            "title": "完成考勤并确认就餐",
+            "description": "Education 考勤和请假自动生成各班餐次人数，只需核对例外调整。",
             "status": attendance_status[0],
             "status_label": attendance_status[1],
-            "action_label": "填写人数",
+            "action_label": "确认今日人数",
             "route_type": "DocType",
-            "route": ATTENDANCE_DOCTYPE,
+            "route": CONFIRMATION_DOCTYPE,
         },
         {
             "id": "recipe",
             "number": "02",
             "title": "编制本周食谱",
-            "description": "安排每日餐次、菜品和每人食材用量，确认后进入采购。",
+            "description": "根据就餐人数、年龄段和特殊膳食安排每日菜品与食材用量。",
             "status": recipe_status[0],
             "status_label": recipe_status[1],
             "action_label": "打开食谱",
@@ -127,7 +137,7 @@ def get_overview() -> dict[str, Any]:
             "id": "purchase",
             "number": "03",
             "title": "执行食材采购",
-            "description": "依据食谱和就餐人数形成采购任务，跟踪供应商与采购状态。",
+            "description": "依据食谱和确认人数形成采购任务，跟踪供应商、数量与状态。",
             "status": purchase_status[0],
             "status_label": purchase_status[1],
             "action_label": "处理采购",
@@ -137,8 +147,8 @@ def get_overview() -> dict[str, Any]:
         {
             "id": "sample",
             "number": "04",
-            "title": "完成供餐留样",
-            "description": "供餐后登记留样信息，保留日期、餐次和责任记录。",
+            "title": "完成供餐与留样",
+            "description": "供餐后登记留样信息，保留日期、餐次、菜品和责任记录。",
             "status": sample_status[0],
             "status_label": sample_status[1],
             "action_label": "登记留样",
@@ -162,27 +172,27 @@ def get_overview() -> dict[str, Any]:
         "generated_at": str(now_datetime()),
         "date_label": getdate(today()).strftime("%Y年%m月%d日"),
         "recipe": recipe,
-        "attendance": attendance,
+        "confirmation": confirmation,
         "steps": steps,
         "next_step": next_step,
         "metrics": [
             {
-                "label": "本周菜品",
-                "value": dish_count,
-                "suffix": "道",
-                "hint": recipe.get("title") if recipe else "本周尚未编制食谱",
+                "label": "在园幼儿",
+                "value": student_count,
+                "suffix": "人",
+                "hint": f"共 {group_count} 个班级",
             },
             {
-                "label": "本月就餐人日",
-                "value": int((attendance or {}).get("total_person_days") or 0),
-                "suffix": "人日",
-                "hint": (attendance or {}).get("month_label") or "本月尚未填报",
+                "label": "今日午餐",
+                "value": int((confirmation or {}).get("total_lunch_count") or 0),
+                "suffix": "人",
+                "hint": (confirmation or {}).get("status") or "等待考勤数据",
             },
             {
-                "label": "待处理采购",
-                "value": purchase_open,
-                "suffix": "项",
-                "hint": f"共有 {purchase_total} 条采购记录",
+                "label": "特殊膳食",
+                "value": special_diet_count,
+                "suffix": "人",
+                "hint": "过敏与饮食禁忌需重点核对",
             },
             {
                 "label": "待处理风险",
@@ -199,8 +209,6 @@ def get_overview() -> dict[str, Any]:
 
 
 def install() -> None:
-    """Make the workflow page and authored sidebar the canonical Tongjianyun entry."""
-
     if not frappe.db.exists("Workspace", WORKSPACE_NAME):
         return
     workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
@@ -210,6 +218,9 @@ def install() -> None:
     workspace.set("shortcuts", [])
     for item in _shortcuts():
         workspace.append("shortcuts", item)
+    workspace.set("links", [])
+    for item in _workspace_links():
+        workspace.append("links", item)
     workspace.content = json.dumps(_workspace_content(), ensure_ascii=False, separators=(",", ":"))
     workspace.save(ignore_permissions=True)
     frappe.clear_cache()
@@ -218,27 +229,36 @@ def install() -> None:
 def _sidebar_items() -> list[dict[str, Any]]:
     return [
         _sidebar_link("业务工作台", "Page", "tongjianyun-workbench", "layout-dashboard", default=1),
-        _section("计划与备餐", "calendar-range"),
-        _sidebar_link("就餐人数", "DocType", ATTENDANCE_DOCTYPE, child=1),
+        _section("园务基础", "school"),
+        _sidebar_link("幼儿档案", "DocType", "Student", child=1),
+        _sidebar_link("监护人", "DocType", "Guardian", child=1),
+        _sidebar_link("班级与分班", "DocType", "Student Group", child=1),
+        _sidebar_link("教职工", "DocType", "Instructor", child=1),
+        _sidebar_link("学年与学期", "DocType", "Academic Year", child=1),
+        _section("到园与就餐", "calendar-check"),
+        _sidebar_link("每日考勤", "DocType", "Student Attendance", child=1),
+        _sidebar_link("请假管理", "DocType", "Student Leave Application", child=1),
+        _sidebar_link("今日就餐确认", "DocType", CONFIRMATION_DOCTYPE, child=1),
+        _sidebar_link("就餐调整记录", "DocType", "Tongjianyun Daily Meal Adjustment", child=1),
+        _section("健康管理", "heart-pulse"),
+        _sidebar_link("幼儿健康档案", "DocType", "Tongjianyun Child Health Profile", child=1),
+        _sidebar_link("生长测量", "DocType", "Tongjianyun Growth Measurement", child=1),
+        _sidebar_link("特殊膳食", "DocType", SPECIAL_DIET_DOCTYPE, child=1),
+        _section("膳食营养", "salad"),
         _sidebar_link("食谱计划", "Page", "tongjianyun-recipe-workbench", child=1),
-        _section("采购与供餐", "shopping-basket"),
-        _sidebar_link("食安采购", "DocType", PURCHASE_DOCTYPE, child=1),
+        _sidebar_link("班级膳食设置", "DocType", "Tongjianyun Class Meal Setting", child=1),
+        _section("食安执行", "shield-check"),
+        _sidebar_link("食材采购", "DocType", PURCHASE_DOCTYPE, child=1),
         _sidebar_link("供应商", "DocType", SUPPLIER_DOCTYPE, child=1),
-        _sidebar_link("留样记录", "DocType", SAMPLE_DOCTYPE, child=1),
-        _section("风险与复盘", "shield-alert"),
+        _sidebar_link("验收与留样", "DocType", SAMPLE_DOCTYPE, child=1),
         _sidebar_link("追溯事件", "DocType", TRACE_DOCTYPE, child=1),
+        _section("统计分析", "chart-no-axes-combined"),
+        _sidebar_link("缺勤统计", "Report", "Absent Student Report", child=1),
+        _sidebar_link("月度出勤", "Report", "Student Monthly Attendance Sheet", child=1),
     ]
 
 
-def _sidebar_link(
-    label: str,
-    link_type: str,
-    link_to: str,
-    icon: str = "",
-    *,
-    child: int = 0,
-    default: int = 0,
-) -> dict[str, Any]:
+def _sidebar_link(label, link_type, link_to, icon="", *, child=0, default=0):
     return {
         "type": "Link",
         "label": label,
@@ -255,7 +275,7 @@ def _sidebar_link(
     }
 
 
-def _section(label: str, icon: str) -> dict[str, Any]:
+def _section(label: str, icon: str):
     return {
         "type": "Section Break",
         "label": label,
@@ -265,7 +285,7 @@ def _section(label: str, icon: str) -> dict[str, Any]:
         "open_in_new_tab": 0,
         "collapsible": 1,
         "indent": 1,
-        "keep_closed": 0,
+        "keep_closed": 1,
         "show_arrow": 1,
     }
 
@@ -273,20 +293,104 @@ def _section(label: str, icon: str) -> dict[str, Any]:
 def _shortcuts() -> list[dict[str, Any]]:
     return [
         {"type": "Page", "link_to": "tongjianyun-workbench", "label": "业务工作台", "color": "Green", "stats_filter": "[]"},
-        {"type": "DocType", "link_to": ATTENDANCE_DOCTYPE, "doc_view": "List", "label": "就餐人数", "color": "Blue", "stats_filter": "[]"},
+        {"type": "DocType", "link_to": CONFIRMATION_DOCTYPE, "doc_view": "List", "label": "今日就餐确认", "color": "Blue", "stats_filter": "[]"},
         {"type": "Page", "link_to": "tongjianyun-recipe-workbench", "label": "食谱计划", "color": "Green", "stats_filter": "[]"},
-        {"type": "DocType", "link_to": PURCHASE_DOCTYPE, "doc_view": "List", "label": "食安采购", "color": "Orange", "stats_filter": "[]"},
+        {"type": "DocType", "link_to": PURCHASE_DOCTYPE, "doc_view": "List", "label": "食材采购", "color": "Orange", "stats_filter": "[]"},
     ]
 
 
 def _workspace_content() -> list[dict[str, Any]]:
     return [
         {"id": "tjyWorkbench", "type": "shortcut", "data": {"shortcut_name": "业务工作台", "col": 3}},
-        {"id": "tjyAttendance", "type": "shortcut", "data": {"shortcut_name": "就餐人数", "col": 3}},
+        {"id": "tjyAttendance", "type": "shortcut", "data": {"shortcut_name": "今日就餐确认", "col": 3}},
         {"id": "tjyRecipe", "type": "shortcut", "data": {"shortcut_name": "食谱计划", "col": 3}},
-        {"id": "tjyPurchase", "type": "shortcut", "data": {"shortcut_name": "食安采购", "col": 3}},
+        {"id": "tjyPurchase", "type": "shortcut", "data": {"shortcut_name": "食材采购", "col": 3}},
         {"id": "tjySpacer", "type": "spacer", "data": {"col": 12}},
-        {"id": "tjyPlanCard", "type": "card", "data": {"card_name": "计划与备餐", "col": 4}},
-        {"id": "tjySupplyCard", "type": "card", "data": {"card_name": "采购与供餐", "col": 4}},
-        {"id": "tjyRiskCard", "type": "card", "data": {"card_name": "风险与复盘", "col": 4}},
+        {"id": "tjySchoolCard", "type": "card", "data": {"card_name": "园务基础", "col": 4}},
+        {"id": "tjyAttendanceCard", "type": "card", "data": {"card_name": "到园与就餐", "col": 4}},
+        {"id": "tjyHealthCard", "type": "card", "data": {"card_name": "健康管理", "col": 4}},
+        {"id": "tjyMealCard", "type": "card", "data": {"card_name": "膳食营养", "col": 4}},
+        {"id": "tjyFoodSafetyCard", "type": "card", "data": {"card_name": "食安执行", "col": 4}},
+        {"id": "tjyReportsCard", "type": "card", "data": {"card_name": "统计分析", "col": 4}},
     ]
+
+
+def _workspace_links() -> list[dict[str, Any]]:
+    groups = [
+        (
+            "园务基础",
+            [
+                ("幼儿档案", "DocType", "Student"),
+                ("监护人", "DocType", "Guardian"),
+                ("班级与分班", "DocType", "Student Group"),
+                ("教职工", "DocType", "Instructor"),
+            ],
+        ),
+        (
+            "到园与就餐",
+            [
+                ("每日考勤", "DocType", "Student Attendance"),
+                ("请假管理", "DocType", "Student Leave Application"),
+                ("今日就餐确认", "DocType", CONFIRMATION_DOCTYPE),
+                ("就餐调整记录", "DocType", "Tongjianyun Daily Meal Adjustment"),
+            ],
+        ),
+        (
+            "健康管理",
+            [
+                ("幼儿健康档案", "DocType", "Tongjianyun Child Health Profile"),
+                ("生长测量", "DocType", "Tongjianyun Growth Measurement"),
+                ("特殊膳食", "DocType", SPECIAL_DIET_DOCTYPE),
+            ],
+        ),
+        (
+            "膳食营养",
+            [
+                ("食谱计划", "Page", "tongjianyun-recipe-workbench"),
+                ("班级膳食设置", "DocType", "Tongjianyun Class Meal Setting"),
+            ],
+        ),
+        (
+            "食安执行",
+            [
+                ("食材采购", "DocType", PURCHASE_DOCTYPE),
+                ("供应商", "DocType", SUPPLIER_DOCTYPE),
+                ("验收与留样", "DocType", SAMPLE_DOCTYPE),
+                ("追溯事件", "DocType", TRACE_DOCTYPE),
+            ],
+        ),
+        (
+            "统计分析",
+            [
+                ("缺勤统计", "Report", "Absent Student Report"),
+                ("月度出勤", "Report", "Student Monthly Attendance Sheet"),
+            ],
+        ),
+    ]
+    links = []
+    for label, items in groups:
+        links.append(
+            {
+                "type": "Card Break",
+                "label": label,
+                "link_type": "DocType",
+                "link_count": len(items),
+                "hidden": 0,
+                "onboard": 0,
+                "is_query_report": 0,
+            }
+        )
+        for item_label, link_type, link_to in items:
+            links.append(
+                {
+                    "type": "Link",
+                    "label": item_label,
+                    "link_type": link_type,
+                    "link_to": link_to,
+                    "hidden": 0,
+                    "link_count": 0,
+                    "onboard": 0,
+                    "is_query_report": int(link_type == "Report"),
+                }
+            )
+    return links

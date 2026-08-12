@@ -1,0 +1,54 @@
+Student,幼儿
+Students,幼儿
+Student Name,幼儿姓名
+Student Email Address,幼儿邮箱
+Student Mobile Number,联系电话
+Joining Date,入园日期
+Date of Birth,出生日期
+Blood Group,血型
+Gender,性别
+Guardian,监护人
+Guardians,监护人
+Guardian Name,监护人姓名
+Mobile Number,手机号码
+Alternate Number,备用电话
+Relation,与幼儿关系
+Student Group,班级
+Student Group Name,班级名称
+Student Groups,班级
+Max Strength,班级容量
+Academic Year,学年
+Academic Term,学期
+Program,年级
+Student Batch,分班批次
+Student Category,幼儿类别
+Instructor,教职工
+Instructor Name,教职工姓名
+Department,部门
+Student Attendance,每日考勤
+Student Leave Application,请假申请
+Attendance,考勤
+Present,到园
+Absent,缺勤
+Leave,请假
+Status,状态
+From Date,开始日期
+To Date,结束日期
+Reason,原因
+Course Schedule,课程安排
+Program Enrollment,入园与升班
+Enrollment Date,入园日期
+Student Log,幼儿记录
+Medical,健康
+General,日常
+Enabled,启用
+Disabled,停用
+Active,在园
+Admissions,招生入园
+Student Applicant,入园申请
+Student Admission,招生计划
+Student Management,幼儿管理
+Academics,园务设置
+Attendance Reports,出勤统计
+Absent Student Report,缺勤统计
+Student Monthly Attendance Sheet,月度出勤表

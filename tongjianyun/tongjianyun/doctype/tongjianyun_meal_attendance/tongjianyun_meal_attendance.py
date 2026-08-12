@@ -8,19 +8,27 @@ from frappe.model.document import Document
 from frappe.utils import cint, getdate, nowdate
 
 
-CLASS_DOCTYPE = "Tongjianyun Class"
+CLASS_DOCTYPE = "Student Group"
 ATTENDANCE_DOCTYPE = "Tongjianyun Meal Attendance"
 
 
 def _active_classes() -> list[dict]:
 	if not frappe.db.table_exists(CLASS_DOCTYPE):
 		return []
-	return frappe.get_all(
+	rows = frappe.get_all(
 		CLASS_DOCTYPE,
-		filters={"status": "active"},
-		fields=["class_id", "class_name", "sort_order"],
-		order_by="sort_order asc, class_name asc",
+		filters={"disabled": 0},
+		fields=["name", "student_group_name"],
+		order_by="student_group_name asc",
 	)
+	return [
+		{
+			"class_id": row.name,
+			"class_name": row.student_group_name or row.name,
+			"sort_order": index * 10,
+		}
+		for index, row in enumerate(rows, start=1)
+	]
 
 
 def _as_non_negative_int(value, label: str) -> int:

@@ -1,0 +1,42 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:DIET-{YYYY}-{#####}",
+ "creation": "2026-08-12 16:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["student","student_name","diet_type","status","column_break_diet","effective_from","effective_to","allergens","restrictions","replacement_plan","meal_slots","approved_by","remark"],
+ "fields": [
+  {"fieldname":"student","fieldtype":"Link","in_list_view":1,"in_standard_filter":1,"label":"幼儿","options":"Student","reqd":1},
+  {"fetch_from":"student.student_name","fieldname":"student_name","fieldtype":"Data","in_list_view":1,"label":"姓名","read_only":1},
+  {"fieldname":"diet_type","fieldtype":"Select","in_list_view":1,"in_standard_filter":1,"label":"膳食类型","options":"食物过敏\n疾病膳食\n宗教饮食\n临时忌口\n其他","reqd":1},
+  {"default":"生效中","fieldname":"status","fieldtype":"Select","in_list_view":1,"in_standard_filter":1,"label":"状态","options":"草稿\n生效中\n已结束","reqd":1},
+  {"fieldname":"column_break_diet","fieldtype":"Column Break"},
+  {"default":"Today","fieldname":"effective_from","fieldtype":"Date","label":"生效日期","reqd":1},
+  {"fieldname":"effective_to","fieldtype":"Date","label":"结束日期"},
+  {"fieldname":"allergens","fieldtype":"Small Text","label":"过敏原"},
+  {"fieldname":"restrictions","fieldtype":"Small Text","label":"禁忌食材"},
+  {"fieldname":"replacement_plan","fieldtype":"Text","label":"替代餐方案"},
+  {"fieldname":"meal_slots","fieldtype":"Small Text","label":"涉及餐次","description":"例如：早餐、午餐、午点"},
+  {"fieldname":"approved_by","fieldtype":"Link","label":"审核人","options":"User"},
+  {"fieldname":"remark","fieldtype":"Small Text","label":"备注"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Special Diet",
+ "naming_rule": "Expression",
+ "permissions": [
+  {"create":1,"delete":1,"email":1,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","share":1,"write":1},
+  {"create":1,"delete":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Health","write":1},
+  {"create":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Nutrition","write":1},
+  {"print":1,"read":1,"report":1,"role":"Tongjianyun Director"},
+  {"read":1,"role":"Tongjianyun Kitchen"}
+ ],
+ "search_fields": "student_name,allergens,restrictions",
+ "sort_field": "effective_from",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "student_name",
+ "track_changes": 1
+}

@@ -16,9 +16,10 @@
  "fields": [
   {
    "fieldname": "class_id",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "hidden": 1,
-   "label": "班级编号"
+   "label": "班级",
+   "options": "Student Group"
   },
   {
    "fieldname": "class_name",
