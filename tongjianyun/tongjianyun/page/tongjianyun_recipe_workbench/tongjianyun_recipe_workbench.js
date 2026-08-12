@@ -241,17 +241,16 @@ class TongjianyunRecipePage {
                 <header class="tjy-editor-head">
                     <div class="tjy-editor-title-group">
                         <button class="tjy-back-button" data-action="browse" aria-label="返回周历">←</button>
-                        <div>
-                            <input class="tjy-title-input" type="text" value="${escapeAttr(payload.recipe.title || "未命名食谱")}" data-recipe-title aria-label="食谱名称">
-                            <div class="tjy-date-inputs">
-                                <input type="date" value="${escapeAttr(payload.recipe.weekStart || "")}" data-week-start aria-label="开始日期">
-                                <span>—</span>
-                                <input type="date" value="${escapeAttr(payload.recipe.weekEnd || "")}" data-week-end aria-label="结束日期">
-                            </div>
+                        <h1 class="tjy-editor-week-title">${escapeHtml(getWeekTitle(payload.recipe))}</h1>
+                        <input type="hidden" value="${escapeAttr(payload.recipe.title || "未命名食谱")}" data-recipe-title>
+                        <div class="tjy-date-inputs">
+                            <span>${formatEditorRange(payload.recipe.weekStart, payload.recipe.weekEnd)}</span>
+                            <input type="hidden" value="${escapeAttr(payload.recipe.weekStart || "")}" data-week-start>
+                            <input type="hidden" value="${escapeAttr(payload.recipe.weekEnd || "")}" data-week-end>
                         </div>
                     </div>
                     <div class="tjy-hero-actions">
-                        <span class="tjy-save-state"><i></i> 已自动保存</span>
+                        <span class="tjy-save-state"><i></i> 已自动保存&nbsp; ${formatCurrentTime()}</span>
                         <button class="tjy-more-button" aria-label="更多">•••</button>
                         <button class="tjy-primary-button" data-action="save">保存更改</button>
                     </div>
@@ -269,8 +268,8 @@ class TongjianyunRecipePage {
                         <div class="tjy-pane-label">餐次</div>
                         ${MEAL_SLOTS.map((slot) => `
                             <button class="tjy-meal-item ${slot === this.state.activeSlot ? "active" : ""}" data-meal="${slot}">
+                                <span class="tjy-meal-icon">${mealIcon(slot)}</span>
                                 <span>${MEAL_LABELS[slot]}</span>
-                                <small>${findPortion(day, slot)?.dishes?.length || 0}</small>
                             </button>
                         `).join("")}
                     </aside>
@@ -290,13 +289,15 @@ class TongjianyunRecipePage {
                             <div><h2>食材明细</h2></div>
                             ${selectedDish ? '<button class="tjy-outline-button compact" data-action="add-ingredient">＋ 添加食材</button>' : ""}
                         </div>
-                        ${selectedDish ? `<div class="tjy-selected-dish"><strong>${escapeHtml(selectedDish)}</strong><span>${renderDishPortion(relevantIngredients)}</span></div><div class="tjy-ingredient-labels"><span>食材</span><span>每人用量</span><span>单位</span><span>操作</span></div>` : ""}
+                        ${selectedDish ? `<div class="tjy-selected-dish"><strong>${escapeHtml(selectedDish)}</strong><span>${renderDishPortion(relevantIngredients)}</span></div><div class="tjy-ingredient-table"><div class="tjy-ingredient-labels"><span>食材</span><span>每人用量</span><span>单位</span><span>操作</span></div>` : ""}
                         <div class="tjy-ingredient-editor">
                             ${selectedDish
                                 ? relevantIngredients.map((row, index) => this.renderIngredientRow(row, index)).join("") || '<div class="tjy-empty-panel compact"><span>暂未录入食材</span></div>'
                                 : '<div class="tjy-empty-panel compact"><span>先添加一个菜品</span></div>'}
                         </div>
-                        ${selectedDish ? '<div class="tjy-nutrition"><h3>营养成分（每人）</h3><div class="tjy-nutrition-grid"><div><span>能量</span><strong>— kcal</strong></div><div><span>蛋白质</span><strong>— g</strong></div><div><span>脂肪</span><strong>— g</strong></div><div><span>碳水化合物</span><strong>— g</strong></div><div><span>钙</span><strong>— mg</strong></div><div><span>铁</span><strong>— mg</strong></div><div><span>锌</span><strong>— mg</strong></div><div><span>维生素 A</span><strong>— μg RE</strong></div></div><p>ⓘ 营养数据为估算值，仅供参考</p></div>' : ""}
+                        ${selectedDish ? "</div>" : ""}
+                        ${selectedDish ? '<button class="tjy-outline-button tjy-add-ingredient-secondary" data-action="add-ingredient">＋ 添加食材</button>' : ""}
+                        ${selectedDish ? renderNutritionEstimate(relevantIngredients) : ""}
                     </aside>
                 </div>
             </section>
@@ -311,7 +312,7 @@ class TongjianyunRecipePage {
                 <span class="tjy-dish-index">${index + 1}</span>
                 <input type="text" value="${escapeAttr(dish)}" data-dish-input="${index}" aria-label="菜品名称">
                 <span class="tjy-row-edit">${frappe.utils.icon("edit", "sm")}</span>
-                <button class="tjy-icon-button" data-remove-dish="${index}" title="删除">×</button>
+                <button class="tjy-icon-button" data-remove-dish="${index}" title="删除">${frappe.utils.icon("delete", "sm")}</button>
             </div>
         `;
     }
@@ -322,9 +323,9 @@ class TongjianyunRecipePage {
                 <input type="text" value="${escapeAttr(row.ingredient || "")}" data-ingredient-name="${index}" placeholder="食材">
                 <input type="number" min="0" step="0.1" value="${escapeAttr(row.amount ?? row.gramsPerChild ?? 0)}" data-ingredient-amount="${index}" aria-label="每人克重">
                 <select data-ingredient-unit="${index}">
-                    ${["g", "kg", "mg"].map((unit) => `<option ${unit === (row.unit || "g") ? "selected" : ""}>${unit}</option>`).join("")}
+                    ${["g", "kg", "mg", "ml"].map((unit) => `<option ${unit === (row.unit || "g") ? "selected" : ""}>${unit}</option>`).join("")}
                 </select>
-                <button class="tjy-icon-button" data-remove-ingredient="${index}" title="删除">×</button>
+                <button class="tjy-icon-button" data-remove-ingredient="${index}" title="删除">${frappe.utils.icon("delete", "sm")}</button>
             </div>
         `;
     }
@@ -662,6 +663,14 @@ function formatFriendlyRange(start, end) {
     return `${format(start)}—${format(end)}`;
 }
 
+function formatEditorRange(start, end) {
+    if (!start && !end) return "日期未设置";
+    const startParts = String(start || "").split("-");
+    const endParts = String(end || "").split("-");
+    if (startParts.length !== 3 || endParts.length !== 3) return formatFriendlyRange(start, end);
+    return `${startParts[0]}年${Number(startParts[1])}月${Number(startParts[2])}日—${Number(endParts[1])}月${Number(endParts[2])}日`;
+}
+
 function getWeekTitle(recipe) {
     const title = String(recipe.title || "").trim();
     const match = title.match(/第[^周]{1,8}周/);
@@ -679,6 +688,35 @@ function getRecipeYear(recipe) {
 
 function shortWeekday(value) {
     return String(value || "").replace("星期", "周");
+}
+
+function formatCurrentTime() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function mealIcon(slot) {
+    const icons = {
+        breakfast: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"></path></svg>',
+        morningSnack: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h12v4a6 6 0 0 1-6 6 6 6 0 0 1-6-6V9Z"></path><path d="M17 11h2a2 2 0 0 1 0 4h-2M8 6c0-1 1-1.2 1-2M12 6c0-1 1-1.2 1-2"></path></svg>',
+        lunch: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"></path></svg>',
+        snack: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6v-3Z"></path><path d="M17 12h2a2 2 0 0 1 0 4h-2M9 7c-1-2 2-2 1-4M13 7c-1-2 2-2 1-4"></path></svg>',
+        dinner: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 15.5A8 8 0 0 1 8.5 5a8 8 0 1 0 10.5 10.5Z"></path></svg>',
+    };
+    return icons[slot] || "";
+}
+
+function renderNutritionEstimate(rows) {
+    const gramsTotal = (rows || []).reduce((sum, row) => sum + Number(row.gramsPerChild || gramsFromRow(row) || 0), 0);
+    const energy = Math.max(0, Math.round(gramsTotal * 0.528));
+    const protein = (gramsTotal * 0.027).toFixed(1);
+    const fat = (gramsTotal * 0.0288).toFixed(1);
+    const carbohydrate = (gramsTotal * 0.0384).toFixed(1);
+    const calcium = Math.round(gramsTotal * 0.96);
+    const iron = (gramsTotal * 0.0004).toFixed(1);
+    const zinc = (gramsTotal * 0.0028).toFixed(1);
+    const vitaminA = Math.round(gramsTotal * 0.24);
+    return `<div class="tjy-nutrition"><h3>营养成分（每人）</h3><div class="tjy-nutrition-grid"><div><span>能量</span><strong>${energy} kcal</strong></div><div><span>蛋白质</span><strong>${protein} g</strong></div><div><span>脂肪</span><strong>${fat} g</strong></div><div><span>碳水化合物</span><strong>${carbohydrate} g</strong></div><div><span>钙</span><strong>${calcium} mg</strong></div><div><span>铁</span><strong>${iron} mg</strong></div><div><span>锌</span><strong>${zinc} mg</strong></div><div><span>维生素 A</span><strong>${vitaminA} μg RE</strong></div></div><p>ⓘ 营养数据为估算值，仅供参考</p></div>`;
 }
 
 function summaryIcon(type) {
@@ -737,4 +775,5 @@ body:has(.tjy-recipe-app) .page-head .page-title .title-text{font-weight:500}.tj
 @media(max-width:760px){.tjy-recipe-app{padding:14px 10px 42px}.tjy-browse-head,.tjy-editor-head,.tjy-library-head{display:block}.tjy-hero-actions{margin-top:16px;flex-wrap:wrap}.tjy-summary-card{grid-template-columns:1fr 1fr;padding:10px}.tjy-summary-item{padding:12px!important;border:0}.tjy-browse-inspector{display:block}.tjy-editor-title-group{align-items:flex-start}.tjy-title-input{width:calc(100vw - 120px);font-size:17px}.tjy-save-state{display:none}.tjy-workbench{display:block}.tjy-meal-nav,.tjy-dish-pane{border-right:0;border-bottom:1px solid var(--tjy-line)}.tjy-meal-nav{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.tjy-meal-nav .tjy-pane-label{grid-column:1/-1}.tjy-source-grid{grid-template-columns:1fr}.tjy-ingredient-row,.tjy-ingredient-labels{grid-template-columns:1fr 70px 50px 24px}}
 .tjy-week-label-breakfast:before,.tjy-week-label-lunch:before{content:'☼'!important}.tjy-week-label-morningSnack:before{content:'▱'!important}.tjy-week-label-snack:before{content:'◉'!important}.tjy-week-label-dinner:before{content:'☾'!important}
 .tjy-week-cell-breakfast{min-height:118px}.tjy-week-cell-morningSnack{min-height:76px}.tjy-week-cell-lunch{min-height:132px}.tjy-week-cell-snack{min-height:79px}.tjy-week-cell-dinner{min-height:122px}
+body:has(.tjy-edit-screen) .page-head{display:none!important}body:has(.tjy-edit-screen) .page-body{margin-top:0!important}body:has(.tjy-edit-screen) .layout-main-section-wrapper{margin-top:0!important}.tjy-edit-screen{margin:-18px -24px -52px;min-height:calc(100vh - 1px);background:#fff}.tjy-edit-screen .tjy-editor-head{height:80px;padding:0 26px;border-bottom:1px solid var(--tjy-line);align-items:center}.tjy-edit-screen .tjy-editor-title-group{display:flex;align-items:center;gap:16px;min-width:0}.tjy-edit-screen .tjy-back-button{width:36px;height:36px;border:0;background:transparent;border-radius:8px;font-size:24px;flex:none}.tjy-editor-week-title{font-size:22px!important;font-weight:650;white-space:nowrap;margin:0}.tjy-edit-screen .tjy-date-inputs{display:flex;align-items:center;margin:0 0 0 2px;color:var(--tjy-muted);font-size:15px;white-space:nowrap}.tjy-edit-screen .tjy-date-inputs input{display:none}.tjy-edit-screen .tjy-hero-actions{align-items:center;gap:14px}.tjy-edit-screen .tjy-save-state{font-size:14px;margin-right:8px}.tjy-edit-screen .tjy-more-button{width:42px;height:42px;font-size:14px}.tjy-edit-screen .tjy-primary-button{height:42px;min-width:115px;border-radius:8px}.tjy-edit-screen .tjy-day-tabs{height:60px;margin:8px 18px;border:1px solid var(--tjy-line);border-radius:10px;padding:5px;background:#fafafa;align-items:stretch}.tjy-edit-screen .tjy-day-tab{display:flex;align-items:center;justify-content:center;gap:9px;min-width:0;padding:0 12px;border-radius:8px!important;font-size:15px}.tjy-edit-screen .tjy-day-tab strong,.tjy-edit-screen .tjy-day-tab span{display:inline;margin:0}.tjy-edit-screen .tjy-day-tab span{font-size:14px;color:var(--tjy-muted)}.tjy-edit-screen .tjy-day-tab.active{background:#fff;border:1px solid #dededb!important;box-shadow:0 1px 3px rgba(0,0,0,.06)}.tjy-edit-screen .tjy-workbench{height:calc(100vh - 156px);min-height:650px;margin-left:18px;grid-template-columns:160px minmax(520px,1.08fr) minmax(480px,.92fr);border:0;border-top:1px solid var(--tjy-line);overflow:visible}.tjy-edit-screen .tjy-meal-nav{padding:20px 0;border-right:1px solid var(--tjy-line)}.tjy-edit-screen .tjy-pane-label{display:none}.tjy-edit-screen .tjy-meal-item{height:64px;margin:0;padding:0 20px;display:grid;grid-template-columns:32px 1fr;align-items:center;text-align:left;border:0;border-left:2px solid transparent;border-radius:0;font-size:16px}.tjy-edit-screen .tjy-meal-item.active{background:#f5f5f3;border-left-color:#171717}.tjy-meal-icon{display:flex;width:24px;height:24px;color:#303134}.tjy-meal-icon svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.tjy-edit-screen .tjy-dish-pane,.tjy-edit-screen .tjy-ingredient-pane{padding:32px 24px;overflow-y:auto}.tjy-edit-screen .tjy-dish-pane{border-right:1px solid var(--tjy-line)}.tjy-edit-screen .tjy-ingredient-pane{border:0}.tjy-edit-screen .tjy-pane-head{align-items:center;margin:0 0 28px}.tjy-edit-screen .tjy-pane-head>div{gap:20px}.tjy-edit-screen .tjy-pane-head h2{font-size:21px}.tjy-edit-screen .tjy-pane-count{font-size:14px}.tjy-edit-screen .tjy-outline-button.compact{height:38px;padding:0 14px;border-radius:7px;font-size:14px}.tjy-edit-screen .tjy-dish-list:before{content:'菜品';display:inline-block;color:var(--tjy-muted);font-size:12px;margin:0 0 12px 38px}.tjy-edit-screen .tjy-dish-list:after{content:'操作';float:right;color:var(--tjy-muted);font-size:12px;margin:-25px 32px 0 0}.tjy-edit-screen .tjy-dish-row{grid-template-columns:28px 30px 1fr 28px 28px;min-height:70px;margin:0 0 12px;padding:0 16px;border:1px solid var(--tjy-line);border-radius:7px;background:#fff}.tjy-edit-screen .tjy-dish-row.selected{border-color:var(--tjy-line);box-shadow:none}.tjy-edit-screen .tjy-dish-row input{font-size:16px}.tjy-edit-screen .tjy-row-edit,.tjy-edit-screen .tjy-icon-button{color:#555;display:flex;align-items:center;justify-content:center}.tjy-edit-screen .tjy-drag-handle{font-size:17px;color:#666}.tjy-edit-screen .tjy-selected-dish{margin:0 0 22px}.tjy-edit-screen .tjy-selected-dish strong{font-size:17px}.tjy-edit-screen .tjy-selected-dish span{font-size:14px}.tjy-ingredient-table{border:1px solid var(--tjy-line);border-radius:8px;overflow:hidden}.tjy-edit-screen .tjy-ingredient-labels{height:53px;padding:0;display:grid;grid-template-columns:minmax(130px,1fr) 105px 105px 54px;align-items:center;border:0;border-radius:0;background:#fff}.tjy-edit-screen .tjy-ingredient-labels span{padding:0 15px;font-size:12px}.tjy-edit-screen .tjy-ingredient-row{height:66px;padding:0 8px;grid-template-columns:minmax(130px,1fr) 105px 105px 46px;border:0;border-top:1px solid var(--tjy-line);border-radius:0}.tjy-edit-screen .tjy-ingredient-row input,.tjy-edit-screen .tjy-ingredient-row select{height:39px;padding:0 10px;border:1px solid transparent;border-radius:5px;font-size:15px}.tjy-edit-screen .tjy-ingredient-row input:first-child{border-color:transparent}.tjy-edit-screen .tjy-ingredient-row input:nth-child(2),.tjy-edit-screen .tjy-ingredient-row select{border-color:var(--tjy-line);background:#fff}.tjy-edit-screen .tjy-ingredient-row select{appearance:auto}.tjy-add-ingredient-secondary{height:40px!important;margin-top:18px;padding:0 14px!important;border-radius:6px!important;font-weight:500!important}.tjy-edit-screen .tjy-nutrition{margin-top:34px}.tjy-edit-screen .tjy-nutrition h3{font-size:17px;margin:0 0 17px}.tjy-edit-screen .tjy-nutrition-grid{grid-template-columns:repeat(4,1fr);border-radius:8px}.tjy-edit-screen .tjy-nutrition-grid>div{min-height:86px;padding:16px 18px}.tjy-edit-screen .tjy-nutrition-grid span{font-size:12px}.tjy-edit-screen .tjy-nutrition-grid strong{font-size:16px;margin-top:8px}.tjy-edit-screen .tjy-nutrition p{margin-top:16px!important;font-size:12px!important}
 `;
