@@ -142,7 +142,6 @@ def install() -> None:
 
     _configure_student_master()
     _install_roles_and_permissions()
-    _migrate_legacy_master_data()
     _remove_legacy_doctypes()
     frappe.clear_cache()
 
@@ -202,46 +201,6 @@ def _ensure_permission(doctype: str, role: str, access: str) -> None:
     }
     for property_name, enabled in properties.items():
         update_permission_property(doctype, role, 0, property_name, int(enabled))
-
-
-def _migrate_legacy_master_data() -> None:
-    """Move legacy kindergarten masters into Education before dropping them.
-
-    Existing child sites currently have no legacy records, but this keeps future
-    upgrades lossless if another site still contains data.
-    """
-    if frappe.db.exists("DocType", "Tongjianyun Class"):
-        for row in frappe.get_all(
-            "Tongjianyun Class", fields=["name", "class_name", "status"]
-        ):
-            if frappe.db.exists("Student Group", row.name):
-                continue
-            frappe.get_doc(
-                {
-                    "doctype": "Student Group",
-                    "name": row.name,
-                    "student_group_name": row.class_name or row.name,
-                    "group_based_on": "Activity",
-                    "disabled": 0 if row.status == "active" else 1,
-                }
-            ).insert(ignore_permissions=True, set_name=row.name)
-
-    if frappe.db.exists("DocType", "Tongjianyun Child"):
-        for row in frappe.get_all(
-            "Tongjianyun Child",
-            fields=["name", "child_name", "gender", "birthday"],
-        ):
-            if frappe.db.exists("Student", row.name):
-                continue
-            frappe.get_doc(
-                {
-                    "doctype": "Student",
-                    "name": row.name,
-                    "first_name": row.child_name or row.name,
-                    "gender": row.gender,
-                    "date_of_birth": row.birthday,
-                }
-            ).insert(ignore_permissions=True, set_name=row.name)
 
 
 def _remove_legacy_doctypes() -> None:
