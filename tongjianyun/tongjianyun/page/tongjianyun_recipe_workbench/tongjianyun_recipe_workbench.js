@@ -5,6 +5,7 @@ frappe.pages["tongjianyun-recipe-workbench"].on_page_load = function (wrapper) {
         single_column: true,
     });
     wrapper.tongjianyun_recipe_page = new TongjianyunRecipePage(page, wrapper);
+    bindRecipeLibrarySidebarLink(wrapper.tongjianyun_recipe_page);
 };
 
 frappe.pages["tongjianyun-recipe-workbench"].on_page_show = function (wrapper) {
@@ -13,6 +14,27 @@ frappe.pages["tongjianyun-recipe-workbench"].on_page_show = function (wrapper) {
         controller.showLibrary();
     }
 };
+
+function bindRecipeLibrarySidebarLink(controller) {
+    if (window.tongjianyunRecipeLibraryClickHandler) {
+        document.removeEventListener("click", window.tongjianyunRecipeLibraryClickHandler, true);
+    }
+
+    window.tongjianyunRecipeLibraryClickHandler = (event) => {
+        const link = event.target.closest('a[href="/desk/tongjianyun-recipe-workbench"]');
+        if (!link) return;
+
+        const currentPath = window.location.pathname.replace(/\/$/, "");
+        if (currentPath !== "/desk/tongjianyun-recipe-workbench") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        frappe.route_options = null;
+        controller.showLibrary();
+    };
+
+    document.addEventListener("click", window.tongjianyunRecipeLibraryClickHandler, true);
+}
 
 class TongjianyunRecipePage {
     constructor(page, wrapper) {
