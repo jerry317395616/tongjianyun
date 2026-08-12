@@ -6,7 +6,7 @@ app_email = "admin@example.com"
 app_license = "mit"
 use_json_request_body = True
 
-app_home = "/desk/\u7ae5\u5065\u4e91"
+app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
 
 add_to_apps_screen = [
@@ -21,4 +21,5 @@ add_to_apps_screen = [
 after_migrate = [
     "tongjianyun.meal_attendance_setup.install",
     "tongjianyun.recipe_storage.install",
+    "tongjianyun.workbench.install",
 ]

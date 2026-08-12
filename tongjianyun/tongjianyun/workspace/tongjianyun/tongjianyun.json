@@ -1,7 +1,7 @@
 {
  "app": "tongjianyun",
  "charts": [],
- "content": "[{\"id\":\"tjy5MtCePB\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食谱\",\"col\":3}},{\"id\":\"tjy63dsmyb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食安采购\",\"col\":3}},{\"id\":\"tjyVR0nZao\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjygEMJTm3\",\"type\":\"card\",\"data\":{\"card_name\":\"主数据\",\"col\":4}},{\"id\":\"tjyDlSyXYL\",\"type\":\"card\",\"data\":{\"card_name\":\"膳食营养\",\"col\":4}},{\"id\":\"tjyZYkEZyU\",\"type\":\"card\",\"data\":{\"card_name\":\"食安采购\",\"col\":4}}]",
+ "content": "[{\"id\":\"tjyWorkbench\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"业务工作台\",\"col\":3}},{\"id\":\"tjyAttendance\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"就餐人数\",\"col\":3}},{\"id\":\"tjyRecipe\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食谱计划\",\"col\":3}},{\"id\":\"tjyPurchase\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食安采购\",\"col\":3}},{\"id\":\"tjySpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyPlanCard\",\"type\":\"card\",\"data\":{\"card_name\":\"计划与备餐\",\"col\":4}},{\"id\":\"tjySupplyCard\",\"type\":\"card\",\"data\":{\"card_name\":\"采购与供餐\",\"col\":4}},{\"id\":\"tjyRiskCard\",\"type\":\"card\",\"data\":{\"card_name\":\"风险与复盘\",\"col\":4}}]",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -14,35 +14,26 @@
  "links": [
   {
    "type": "Card Break",
-   "label": "主数据",
+   "label": "计划与备餐",
    "hidden": 0,
    "link_type": "DocType",
-   "link_count": 1,
+   "link_count": 2,
    "onboard": 0,
    "is_query_report": 0
   },
   {
    "type": "Link",
-   "label": "数据记录",
+   "label": "就餐人数",
    "hidden": 0,
    "link_type": "DocType",
-   "link_to": "Tongjianyun Data Record",
+   "link_to": "Tongjianyun Meal Attendance",
    "link_count": 0,
    "onboard": 0,
    "is_query_report": 0
   },
   {
-   "type": "Card Break",
-   "label": "膳食营养",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_count": 1,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
    "type": "Link",
-   "label": "食谱",
+   "label": "食谱计划",
    "hidden": 0,
    "link_type": "Page",
    "link_to": "tongjianyun-recipe-workbench",
@@ -52,10 +43,10 @@
   },
   {
    "type": "Card Break",
-   "label": "食安采购",
+   "label": "采购与供餐",
    "hidden": 0,
    "link_type": "DocType",
-   "link_count": 4,
+   "link_count": 3,
    "onboard": 0,
    "is_query_report": 0
   },
@@ -90,6 +81,15 @@
    "is_query_report": 0
   },
   {
+   "type": "Card Break",
+   "label": "风险与复盘",
+   "hidden": 0,
+   "link_type": "DocType",
+   "link_count": 1,
+   "onboard": 0,
+   "is_query_report": 0
+  },
+  {
    "type": "Link",
    "label": "追溯事件",
    "hidden": 0,
@@ -112,9 +112,25 @@
  "shortcuts": [
   {
    "type": "Page",
+   "link_to": "tongjianyun-workbench",
+   "doc_view": "",
+   "label": "业务工作台",
+   "color": "Green",
+   "stats_filter": "[]"
+  },
+  {
+   "type": "DocType",
+   "link_to": "Tongjianyun Meal Attendance",
+   "doc_view": "List",
+   "label": "就餐人数",
+   "color": "Blue",
+   "stats_filter": "[]"
+  },
+  {
+   "type": "Page",
    "link_to": "tongjianyun-recipe-workbench",
    "doc_view": "",
-   "label": "食谱",
+   "label": "食谱计划",
    "color": "Green",
    "stats_filter": "[]"
   },
@@ -130,11 +146,11 @@
  "sidebar_items": [
   {
    "type": "Link",
-   "label": "食谱",
+   "label": "业务工作台",
    "link_type": "Page",
-   "link_to": "tongjianyun-recipe-workbench",
-   "icon": "calendar-days",
-   "default_workspace": 0,
+   "link_to": "tongjianyun-workbench",
+   "icon": "layout-dashboard",
+   "default_workspace": 1,
    "child": 0,
    "open_in_new_tab": 0,
    "collapsible": 1,
@@ -143,13 +159,122 @@
    "show_arrow": 0
   },
   {
+   "type": "Section Break",
+   "label": "计划与备餐",
+   "link_type": "DocType",
+   "icon": "calendar-range",
+   "default_workspace": 0,
+   "child": 0,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 1,
+   "keep_closed": 0,
+   "show_arrow": 1
+  },
+  {
+   "type": "Link",
+   "label": "就餐人数",
+   "link_type": "DocType",
+   "link_to": "Tongjianyun Meal Attendance",
+   "icon": "",
+   "default_workspace": 0,
+   "child": 1,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "show_arrow": 0
+  },
+  {
+   "type": "Link",
+   "label": "食谱计划",
+   "link_type": "Page",
+   "link_to": "tongjianyun-recipe-workbench",
+   "icon": "",
+   "default_workspace": 0,
+   "child": 1,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "show_arrow": 0
+  },
+  {
+   "type": "Section Break",
+   "label": "采购与供餐",
+   "link_type": "DocType",
+   "icon": "shopping-basket",
+   "default_workspace": 0,
+   "child": 0,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 1,
+   "keep_closed": 0,
+   "show_arrow": 1
+  },
+  {
    "type": "Link",
    "label": "食安采购",
    "link_type": "DocType",
    "link_to": "Tongjianyun Food Purchase",
-   "icon": "circle-dot",
+   "icon": "",
+   "default_workspace": 0,
+   "child": 1,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "show_arrow": 0
+  },
+  {
+   "type": "Link",
+   "label": "供应商",
+   "link_type": "DocType",
+   "link_to": "Tongjianyun Food Supplier",
+   "icon": "",
+   "default_workspace": 0,
+   "child": 1,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "show_arrow": 0
+  },
+  {
+   "type": "Link",
+   "label": "留样记录",
+   "link_type": "DocType",
+   "link_to": "Tongjianyun Food Sample",
+   "icon": "",
+   "default_workspace": 0,
+   "child": 1,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
+   "show_arrow": 0
+  },
+  {
+   "type": "Section Break",
+   "label": "风险与复盘",
+   "link_type": "DocType",
+   "icon": "shield-alert",
    "default_workspace": 0,
    "child": 0,
+   "open_in_new_tab": 0,
+   "collapsible": 1,
+   "indent": 1,
+   "keep_closed": 0,
+   "show_arrow": 1
+  },
+  {
+   "type": "Link",
+   "label": "追溯事件",
+   "link_type": "DocType",
+   "link_to": "Tongjianyun Food Trace Event",
+   "icon": "",
+   "default_workspace": 0,
+   "child": 1,
    "open_in_new_tab": 0,
    "collapsible": 1,
    "indent": 0,

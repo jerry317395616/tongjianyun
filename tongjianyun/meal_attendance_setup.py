@@ -196,6 +196,10 @@ def install_print_format():
 def install_workspace_entry():
 	if not frappe.db.exists("Workspace", WORKSPACE_NAME):
 		return
+	# The workflow workbench owns the complete authored sidebar on current installs.
+	# Keep this migration focused on the attendance form and print format.
+	if frappe.db.exists("Page", "tongjianyun-workbench"):
+		return
 
 	workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
 	changed = False
