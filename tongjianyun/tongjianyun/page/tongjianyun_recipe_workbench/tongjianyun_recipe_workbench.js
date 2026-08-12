@@ -52,6 +52,7 @@ class TongjianyunRecipePage {
             librarySearch: "",
             libraryStatus: "全部",
             includeTestRecipes: false,
+            recycleBin: false,
         };
         this.mount();
         this.bindPageActions();
@@ -550,6 +551,7 @@ class TongjianyunRecipePage {
                     search: this.state.librarySearch,
                     status: this.state.libraryStatus,
                     include_test: this.state.includeTestRecipes ? 1 : 0,
+                    recycle_bin: this.state.recycleBin ? 1 : 0,
                     page_length: 100,
                 },
             });
@@ -576,9 +578,10 @@ class TongjianyunRecipePage {
                     <div class="tjy-search-wrap">${frappe.utils.icon("search", "sm")}<input type="search" value="${escapeAttr(this.state.librarySearch)}" placeholder="搜索食谱名称或周次"></div>
                     <div class="tjy-library-filters">
                         <div class="tjy-status-tabs">
-                            ${["全部", "草稿", "待审核", "已发布", "已归档"].map((status) => `<button class="${this.state.libraryStatus === status ? "active" : ""}" data-library-status="${status}">${status}</button>`).join("")}
+                            ${["全部", "草稿", "待审核", "已发布", "已归档", "回收站"].map((status) => `<button class="${this.state.libraryStatus === status ? "active" : ""}" data-library-status="${status}">${status}</button>`).join("")}
                         </div>
                         <label class="tjy-test-toggle"><input type="checkbox" data-include-test ${this.state.includeTestRecipes ? "checked" : ""}> 显示测试/演示</label>
+                        ${this.state.includeTestRecipes && !this.state.recycleBin ? '<button class="tjy-clean-test-button" data-action="clean-tests">清理测试数据</button>' : ''}
                         <span>${items.length} 份食谱</span>
                     </div>
                 </div>
@@ -590,12 +593,20 @@ class TongjianyunRecipePage {
                                 <tr data-library-recipe="${escapeAttr(item.name)}">
                                     <td><strong>${escapeHtml(item.title || "未命名食谱")}</strong><span>${escapeHtml(item.recipe_id || "")}</span></td>
                                     <td>${formatDateRange(item.week_start, item.week_end)}</td>
-                                    <td><span class="tjy-status ${item.status}">${escapeHtml(item.workflow_status || "草稿")}</span></td>
+                                    <td><span class="tjy-status ${item.status}">${escapeHtml(item.display_status || item.workflow_status || "草稿")}</span></td>
                                     <td class="tjy-groups-cell">${renderStudentGroups(item.student_groups)}</td>
                                     <td>${item.dish_count || 0}</td>
                                     <td>${item.ingredient_count || 0}</td>
                                     <td>${frappe.datetime.prettyDate(item.modified)}</td>
-                                    <td><button class="tjy-row-open">打开 →</button></td>
+                                    <td class="tjy-row-actions">
+                                        <button class="tjy-row-open" data-row-action="open">打开 →</button>
+                                        <div class="tjy-action-menu-wrap">
+                                            <button class="tjy-row-more" data-row-action="menu" aria-label="更多操作">···</button>
+                                            <div class="tjy-action-menu">
+                                                ${renderRecipeActions(item)}
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
                             `).join("") : '<tr><td colspan="8"><div class="tjy-empty-panel"><strong>暂无匹配的食谱</strong><span>请调整搜索或状态筛选，也可新建、导入食谱</span></div></td></tr>'}
                         </tbody>
@@ -606,7 +617,26 @@ class TongjianyunRecipePage {
         this.main.find('[data-action="new"]').on("click", () => this.createRecipe());
         this.main.find('[data-action="import"]').on("click", () => this.openImport());
         this.main.find('[data-action="copy-latest"]').on("click", () => this.copyLatestRecipe());
-        this.main.find("[data-library-recipe]").on("click", (event) => this.loadRecipe($(event.currentTarget).attr("data-library-recipe")));
+        this.main.find('[data-action="clean-tests"]').on("click", () => this.cleanTestRecipes());
+        this.main.find("[data-library-recipe]").on("click", (event) => {
+            if ($(event.target).closest("[data-row-action],[data-recipe-action]").length) return;
+            this.loadRecipe($(event.currentTarget).attr("data-library-recipe"));
+        });
+        this.main.find('[data-row-action="open"]').on("click", (event) => {
+            event.stopPropagation();
+            this.loadRecipe($(event.currentTarget).closest("tr").attr("data-library-recipe"));
+        });
+        this.main.find('[data-row-action="menu"]').on("click", (event) => {
+            event.stopPropagation();
+            const menu = $(event.currentTarget).siblings(".tjy-action-menu");
+            this.main.find(".tjy-action-menu.open").not(menu).removeClass("open");
+            menu.toggleClass("open");
+        });
+        this.main.find("[data-recipe-action]").on("click", (event) => {
+            event.stopPropagation();
+            const button = $(event.currentTarget);
+            this.handleRecipeAction(button.closest("tr").attr("data-library-recipe"), button.attr("data-recipe-action"));
+        });
         let timer;
         this.main.find('input[type="search"]').on("input", (event) => {
             clearTimeout(timer);
@@ -617,11 +647,52 @@ class TongjianyunRecipePage {
         });
         this.main.find("[data-library-status]").on("click", (event) => {
             this.state.libraryStatus = $(event.currentTarget).attr("data-library-status");
+            this.state.recycleBin = this.state.libraryStatus === "回收站";
             this.showLibrary();
         });
         this.main.find("[data-include-test]").on("change", (event) => {
             this.state.includeTestRecipes = $(event.currentTarget).is(":checked");
             this.showLibrary();
+        });
+    }
+
+    async handleRecipeAction(recipe, action) {
+        if (action === "copy") {
+            await this.loadRecipe(recipe);
+            const payload = normalizePayload(this.state.payload);
+            payload.recipe.recipeId = `RECIPE-${Date.now()}`;
+            payload.recipe.title = `${payload.recipe.title || "周食谱"}（副本）`;
+            payload.recipe.workflowStatus = "草稿";
+            this.state.payload = payload;
+            this.state.selectedRecipe = null;
+            this.enterEdit();
+            return;
+        }
+        const labels = { withdraw: "撤回为草稿", archive: "归档", delete: "移入回收站", restore: "恢复" };
+        frappe.confirm(`确认${labels[action] || action}这份食谱吗？`, async () => {
+            try {
+                const response = await frappe.call({
+                    method: "tongjianyun.recipe_storage.update_recipe_lifecycle",
+                    args: { recipe, action },
+                    freeze: true,
+                });
+                frappe.show_alert({ message: response.message?.message || "操作成功", indicator: "green" });
+                await this.showLibrary();
+            } catch (error) {
+                this.showError("食谱操作失败", error);
+            }
+        });
+    }
+
+    cleanTestRecipes() {
+        frappe.confirm("确认将所有无业务关联的测试/演示食谱移入回收站吗？", async () => {
+            const response = await frappe.call({
+                method: "tongjianyun.recipe_storage.delete_test_recipes",
+                freeze: true,
+            });
+            const result = response.message || {};
+            frappe.msgprint(`已移入回收站 ${result.moved || 0} 份；因业务关联保留 ${result.blocked?.length || 0} 份。`);
+            await this.showLibrary();
         });
     }
 
@@ -936,8 +1007,21 @@ function escapeAttr(value) {
     return escapeHtml(value).replaceAll('"', "&quot;");
 }
 
+function renderRecipeActions(item) {
+    const actions = item.actions || {};
+    const rows = ['<button data-recipe-action="copy">复制</button>'];
+    if (actions.can_withdraw) rows.push('<button data-recipe-action="withdraw">撤回为草稿</button>');
+    if (actions.can_archive) rows.push('<button data-recipe-action="archive">归档</button>');
+    if (actions.can_delete) rows.push('<button class="danger" data-recipe-action="delete">删除</button>');
+    if (actions.can_restore) rows.push('<button data-recipe-action="restore">恢复</button>');
+    if (!actions.can_delete && actions.business_links?.length) {
+        rows.push(`<span class="tjy-action-disabled">已有${actions.business_links.map((row) => escapeHtml(row.label)).join("、")}数据</span>`);
+    }
+    return rows.join("");
+}
+
 const RECIPE_STYLES = `
-.tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-groups-cell{max-width:230px}.tjy-scope-pill{display:inline-flex;align-items:center;max-width:100px;padding:3px 8px;margin:2px 4px 2px 0;border-radius:999px;background:#f1f2f0;color:#555;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tjy-scope-more,.tjy-muted-value{font-size:12px;color:#6f7073}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}
+.tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-clean-test-button{border:0;background:transparent;color:#b42318;font-size:12px}.tjy-groups-cell{max-width:230px}.tjy-scope-pill{display:inline-flex;align-items:center;max-width:100px;padding:3px 8px;margin:2px 4px 2px 0;border-radius:999px;background:#f1f2f0;color:#555;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tjy-scope-more,.tjy-muted-value{font-size:12px;color:#6f7073}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status.deleted{background:#fce8e6;color:#b42318}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}.tjy-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;white-space:nowrap}.tjy-action-menu-wrap{position:relative}.tjy-row-more{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#555;font-weight:700}.tjy-row-more:hover{background:#f1f1ef}.tjy-action-menu{display:none;position:absolute;z-index:20;right:0;top:34px;min-width:150px;padding:5px;background:#fff;border:1px solid #dededb;border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.13)}.tjy-action-menu.open{display:block}.tjy-action-menu button,.tjy-action-disabled{display:block;width:100%;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px;color:#202123;white-space:nowrap}.tjy-action-menu button:hover{background:#f4f4f2}.tjy-action-menu button.danger{color:#b42318}.tjy-action-disabled{color:#8a8a8a;font-size:11px;white-space:normal}
 .tjy-recipe-app{--tjy-ink:#202123;--tjy-muted:#6f7073;--tjy-line:#e4e4e2;--tjy-soft:#f7f7f5;--tjy-green:#23884b;width:100%;max-width:none;margin:0;padding:18px 24px 52px;color:var(--tjy-ink)}
 body:has(.tjy-recipe-app) .layout-main-section{background:#fff}body:has(.tjy-recipe-app) .page-body{background:#fff}
 body:has(.tjy-recipe-app) .page-head .page-title .title-text{font-weight:500}.tjy-screen button{font-family:inherit}

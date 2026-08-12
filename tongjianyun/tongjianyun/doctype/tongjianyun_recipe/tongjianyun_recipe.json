@@ -10,6 +10,10 @@
   "recipe_id",
   "title",
   "workflow_status",
+  "is_deleted",
+  "status_before_delete",
+  "deleted_at",
+  "deleted_by",
   "column_break_period",
   "week_start",
   "week_end",
@@ -55,6 +59,36 @@
    "label": "\u72b6\u6001",
    "options": "\u8349\u7a3f\n\u5f85\u5ba1\u6838\n\u5df2\u53d1\u5e03\n\u5df2\u5f52\u6863",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_deleted",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "\u5df2\u79fb\u5165\u56de\u6536\u7ad9",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_before_delete",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "\u5220\u9664\u524d\u72b6\u6001",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deleted_at",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "\u5220\u9664\u65f6\u95f4",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deleted_by",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "\u5220\u9664\u4eba",
+   "options": "User",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_period",

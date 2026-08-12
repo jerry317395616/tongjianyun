@@ -14,6 +14,13 @@ DISH_DOCTYPE = "Tongjianyun Recipe Dish"
 INGREDIENT_DOCTYPE = "Tongjianyun Recipe Ingredient"
 LEGACY_DOCTYPE = "Tongjianyun Meal Nutrition"
 
+RECIPE_EXECUTION_DOCTYPES = (
+    ("Tongjianyun Food Purchase", "食安采购"),
+    ("Tongjianyun Meal Nutrition", "营养分析"),
+    ("Tongjianyun Food Sample", "留样记录"),
+    ("Tongjianyun Food Trace Event", "追溯事件"),
+)
+
 MEAL_SLOTS = ("breakfast", "morningSnack", "lunch", "snack", "dinner")
 MEAL_LABELS = {
     "breakfast": "\u65e9\u9910",
@@ -27,6 +34,21 @@ MEAL_LABELS = {
 def _require_login() -> None:
     if frappe.session.user == "Guest":
         frappe.throw(_("Not logged in."), frappe.AuthenticationError)
+
+
+def _require_recipe_write() -> None:
+    _require_login()
+    if not frappe.has_permission(RECIPE_DOCTYPE, ptype="write"):
+        frappe.throw(_("Not permitted."), frappe.PermissionError)
+
+
+def _can_restore_recipe() -> bool:
+    return frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles(frappe.session.user)
+
+
+def _is_test_recipe(doc) -> bool:
+    title = _clean(doc.title)
+    return "测试" in title or "【演示】" in title
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -85,6 +107,89 @@ def _delete_recipe_rows(recipe_name: str) -> None:
     frappe.db.delete(DISH_DOCTYPE, {"recipe": recipe_name})
 
 
+def _get_recipe_name(recipe: str) -> str:
+    recipe_name = frappe.db.exists(RECIPE_DOCTYPE, recipe) or frappe.db.exists(
+        RECIPE_DOCTYPE,
+        {"recipe_id": recipe},
+    )
+    if not recipe_name:
+        frappe.throw(_("Recipe not found."), frappe.DoesNotExistError)
+    return recipe_name
+
+
+def _recipe_business_links(recipe_doc) -> list[dict[str, Any]]:
+    """Return downstream business records that overlap or identify this recipe."""
+
+    recipe_tokens = tuple(
+        str(token)
+        for token in (
+            recipe_doc.name,
+            recipe_doc.recipe_id,
+            recipe_doc.title,
+            recipe_doc.week_start,
+            recipe_doc.week_end,
+        )
+        if _clean(token)
+    )
+    links: list[dict[str, Any]] = []
+    for doctype, label in RECIPE_EXECUTION_DOCTYPES:
+        if not frappe.db.table_exists(doctype):
+            continue
+        clauses: list[str] = []
+        values: list[Any] = []
+        for fieldname in ("record_id", "parent_id", "source", "record_json"):
+            if not frappe.db.has_column(doctype, fieldname):
+                continue
+            for token in recipe_tokens:
+                clauses.append(f"`{fieldname}` like %s")
+                values.append(f"%{token}%")
+        if not clauses:
+            continue
+        count = cint(
+            frappe.db.sql(
+                f"select count(*) from `tab{doctype}` where {' or '.join(clauses)}",
+                tuple(values),
+            )[0][0]
+        )
+        if count:
+            links.append({"doctype": doctype, "label": label, "count": count})
+
+    if recipe_doc.week_start and recipe_doc.week_end:
+        for doctype, label, date_field in (
+            ("Tongjianyun Daily Meal Confirmation", "就餐确认", "meal_date"),
+            ("Tongjianyun Daily Meal Adjustment", "就餐调整", "meal_date"),
+        ):
+            if not frappe.db.table_exists(doctype) or not frappe.db.has_column(doctype, date_field):
+                continue
+            count = frappe.db.count(
+                doctype,
+                {date_field: ["between", [recipe_doc.week_start, recipe_doc.week_end]]},
+            )
+            if count:
+                links.append({"doctype": doctype, "label": label, "count": count})
+    return links
+
+
+def _recipe_actions(doc, links: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    status = doc.workflow_status or "草稿"
+    links = links if links is not None else _recipe_business_links(doc)
+    return {
+        "can_delete": not doc.is_deleted and (status == "草稿" or _is_test_recipe(doc)) and not links,
+        "can_withdraw": not doc.is_deleted and status == "待审核",
+        "can_archive": not doc.is_deleted and status == "已发布",
+        "can_restore": bool(doc.is_deleted) and _can_restore_recipe(),
+        "is_test": _is_test_recipe(doc),
+        "business_links": links,
+    }
+
+
+def _move_recipe_to_recycle_bin(doc) -> None:
+    doc.status_before_delete = doc.workflow_status or "草稿"
+    doc.is_deleted = 1
+    doc.deleted_at = now_datetime()
+    doc.deleted_by = frappe.session.user
+
+
 def _recipe_payload(doc) -> dict[str, Any]:
     student_groups = [row.student_group for row in (doc.applicable_student_groups or []) if row.student_group]
     return {
@@ -99,6 +204,7 @@ def _recipe_payload(doc) -> dict[str, Any]:
         "workflowStatus": doc.workflow_status or "草稿",
         "allStudentGroups": bool(doc.all_student_groups),
         "studentGroups": student_groups,
+        "isDeleted": bool(doc.is_deleted),
     }
 
 
@@ -110,6 +216,8 @@ def _save_current_recipe(payload: Any, *, commit: bool) -> dict[str, Any]:
 
     existing = frappe.db.exists(RECIPE_DOCTYPE, {"recipe_id": recipe_id})
     recipe = frappe.get_doc(RECIPE_DOCTYPE, existing) if existing else frappe.new_doc(RECIPE_DOCTYPE)
+    if recipe.get("is_deleted"):
+        frappe.throw("该食谱已在回收站中，请先恢复后再编辑。")
     recipe.recipe_id = recipe_id
     recipe.title = (_clean(recipe_data.get("title")) or "\u5f53\u524d\u5468\u98df\u8c31")[:140]
     recipe.week_start = recipe_data.get("weekStart") or None
@@ -336,16 +444,21 @@ def _current_recipe_payload(recipe) -> dict[str, Any]:
 @frappe.whitelist()
 def get_current_recipe() -> dict[str, Any] | None:
     _require_login()
-    name = frappe.db.get_value(RECIPE_DOCTYPE, {"recipe_id": "current"}, "name")
+    name = frappe.db.get_value(RECIPE_DOCTYPE, {"recipe_id": "current", "is_deleted": 0}, "name")
     if not name:
         name = frappe.db.get_value(
             RECIPE_DOCTYPE,
-            {"week_start": ["<=", nowdate()], "week_end": [">=", nowdate()]},
+            {"week_start": ["<=", nowdate()], "week_end": [">=", nowdate()], "is_deleted": 0},
             "name",
             order_by="modified desc",
         )
     if not name:
-        name = frappe.db.get_value(RECIPE_DOCTYPE, {}, "name", order_by="week_start desc, modified desc")
+        name = frappe.db.get_value(
+            RECIPE_DOCTYPE,
+            {"is_deleted": 0},
+            "name",
+            order_by="week_start desc, modified desc",
+        )
     if not name:
         return None
     return _current_recipe_payload(frappe.get_doc(RECIPE_DOCTYPE, name))
@@ -354,12 +467,7 @@ def get_current_recipe() -> dict[str, Any] | None:
 @frappe.whitelist()
 def get_recipe_detail(recipe: str) -> dict[str, Any]:
     _require_login()
-    recipe_name = frappe.db.exists(RECIPE_DOCTYPE, recipe) or frappe.db.exists(
-        RECIPE_DOCTYPE,
-        {"recipe_id": recipe},
-    )
-    if not recipe_name:
-        frappe.throw(_("Recipe not found."), frappe.DoesNotExistError)
+    recipe_name = _get_recipe_name(recipe)
     return _current_recipe_payload(frappe.get_doc(RECIPE_DOCTYPE, recipe_name))
 
 
@@ -368,6 +476,7 @@ def get_recipe_library(
     search: str | None = None,
     status: str | None = None,
     include_test: int = 0,
+    recycle_bin: int = 0,
     start: int = 0,
     page_length: int = 50,
 ) -> dict[str, Any]:
@@ -387,9 +496,10 @@ def get_recipe_library(
             ]
         )
     status_text = _clean(status)
-    if status_text and status_text != "全部":
+    filters.append([RECIPE_DOCTYPE, "is_deleted", "=", 1 if cint(recycle_bin) else 0])
+    if status_text and status_text not in {"全部", "回收站"}:
         filters.append([RECIPE_DOCTYPE, "workflow_status", "=", status_text])
-    if not cint(include_test):
+    if not cint(include_test) and not cint(recycle_bin):
         filters.extend(
             [
                 [RECIPE_DOCTYPE, "title", "not like", "%测试%"],
@@ -415,6 +525,10 @@ def get_recipe_library(
             "modified_by",
             "workflow_status",
             "all_student_groups",
+            "is_deleted",
+            "status_before_delete",
+            "deleted_at",
+            "deleted_by",
         ],
         order_by="week_start desc, modified desc",
         start=start,
@@ -448,6 +562,8 @@ def get_recipe_library(
     for row in recipes:
         item = dict(row)
         item.update(counts[row.name])
+        recipe_doc = frappe.get_doc(RECIPE_DOCTYPE, row.name)
+        links = _recipe_business_links(recipe_doc)
         item["workflow_status"] = item.get("workflow_status") or ("已发布" if item["dish_count"] else "草稿")
         item["status"] = {
             "草稿": "draft",
@@ -455,6 +571,9 @@ def get_recipe_library(
             "已发布": "published",
             "已归档": "archived",
         }.get(item["workflow_status"], "draft")
+        item["display_status"] = "回收站" if item.get("is_deleted") else item["workflow_status"]
+        if item.get("is_deleted"):
+            item["status"] = "deleted"
         item["student_groups"] = (
             ["全部班级"]
             if item.get("all_student_groups")
@@ -465,6 +584,7 @@ def get_recipe_library(
                 order_by="idx asc",
             )
         )
+        item["actions"] = _recipe_actions(recipe_doc, links)
         items.append(item)
 
     return {
@@ -473,6 +593,92 @@ def get_recipe_library(
         "page_length": page_length,
         "has_more": len(items) == page_length,
     }
+
+
+@frappe.whitelist()
+def get_recipe_actions(recipe: str) -> dict[str, Any]:
+    _require_login()
+    doc = frappe.get_doc(RECIPE_DOCTYPE, _get_recipe_name(recipe))
+    return _recipe_actions(doc)
+
+
+@frappe.whitelist()
+def update_recipe_lifecycle(recipe: str, action: str) -> dict[str, Any]:
+    _require_recipe_write()
+    doc = frappe.get_doc(RECIPE_DOCTYPE, _get_recipe_name(recipe))
+    action = _clean(action)
+    status = doc.workflow_status or "草稿"
+
+    if action == "withdraw":
+        if doc.is_deleted or status != "待审核":
+            frappe.throw(_("Only recipes awaiting review can be withdrawn."))
+        doc.workflow_status = "草稿"
+        message = "食谱已撤回为草稿"
+    elif action == "archive":
+        if doc.is_deleted or status != "已发布":
+            frappe.throw(_("Only published recipes can be archived."))
+        doc.workflow_status = "已归档"
+        message = "食谱已归档"
+    elif action == "delete":
+        if doc.is_deleted:
+            frappe.throw(_("Recipe is already in the recycle bin."))
+        if status == "待审核" and not _is_test_recipe(doc):
+            frappe.throw("待审核食谱请先撤回为草稿，再删除。")
+        if status in {"已发布", "已归档"} and not _is_test_recipe(doc):
+            frappe.throw("已发布或已归档食谱不能删除，请保留业务历史。")
+        links = _recipe_business_links(doc)
+        if links:
+            details = "、".join(f"{row['label']} {row['count']} 条" for row in links)
+            frappe.throw(f"该食谱已有下游业务数据（{details}），不能删除。")
+        _move_recipe_to_recycle_bin(doc)
+        message = "食谱已移入回收站"
+    elif action == "restore":
+        if not _can_restore_recipe():
+            frappe.throw("只有系统管理员可以从回收站恢复食谱。", frappe.PermissionError)
+        if not doc.is_deleted:
+            frappe.throw(_("Recipe is not in the recycle bin."))
+        doc.workflow_status = doc.status_before_delete or "草稿"
+        doc.is_deleted = 0
+        doc.status_before_delete = ""
+        doc.deleted_at = None
+        doc.deleted_by = ""
+        message = "食谱已恢复"
+    else:
+        frappe.throw(_("Unsupported recipe action."))
+
+    doc.flags.ignore_permissions = True
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {
+        "name": doc.name,
+        "workflow_status": doc.workflow_status,
+        "is_deleted": bool(doc.is_deleted),
+        "message": message,
+        "actions": _recipe_actions(doc),
+    }
+
+
+@frappe.whitelist()
+def delete_test_recipes() -> dict[str, Any]:
+    """Move deletable test/demo recipes to the recycle bin in one operation."""
+
+    _require_recipe_write()
+    moved: list[str] = []
+    blocked: list[dict[str, Any]] = []
+    for name in frappe.get_all(RECIPE_DOCTYPE, filters={"is_deleted": 0}, pluck="name", limit_page_length=0):
+        doc = frappe.get_doc(RECIPE_DOCTYPE, name)
+        if not _is_test_recipe(doc):
+            continue
+        links = _recipe_business_links(doc)
+        if links:
+            blocked.append({"name": doc.name, "title": doc.title, "business_links": links})
+            continue
+        _move_recipe_to_recycle_bin(doc)
+        doc.flags.ignore_permissions = True
+        doc.save(ignore_permissions=True)
+        moved.append(doc.name)
+    frappe.db.commit()
+    return {"moved": len(moved), "names": moved, "blocked": blocked}
 
 
 @frappe.whitelist()
