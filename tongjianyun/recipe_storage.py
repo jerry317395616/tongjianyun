@@ -86,6 +86,7 @@ def _delete_recipe_rows(recipe_name: str) -> None:
 
 
 def _recipe_payload(doc) -> dict[str, Any]:
+    student_groups = [row.student_group for row in (doc.applicable_student_groups or []) if row.student_group]
     return {
         "recipeId": doc.recipe_id,
         "title": doc.title or "",
@@ -95,6 +96,9 @@ def _recipe_payload(doc) -> dict[str, Any]:
         "parser": doc.parser or "",
         "relationSource": doc.relation_source or "",
         "importedAt": str(doc.imported_at or ""),
+        "workflowStatus": doc.workflow_status or "草稿",
+        "allStudentGroups": bool(doc.all_student_groups),
+        "studentGroups": student_groups,
     }
 
 
@@ -114,6 +118,14 @@ def _save_current_recipe(payload: Any, *, commit: bool) -> dict[str, Any]:
     recipe.parser = _clean(recipe_data.get("parser"))[:140]
     recipe.relation_source = _clean(recipe_data.get("relationSource"))[:140]
     recipe.imported_at = recipe_data.get("importedAt") or now_datetime()
+    recipe.workflow_status = _clean(recipe_data.get("workflowStatus")) or "草稿"
+    all_student_groups = recipe_data.get("allStudentGroups")
+    recipe.all_student_groups = 1 if all_student_groups is None else cint(all_student_groups)
+    recipe.set("applicable_student_groups", [])
+    if not recipe.all_student_groups:
+        for student_group in dict.fromkeys(_clean(value) for value in _as_list(recipe_data.get("studentGroups"))):
+            if student_group:
+                recipe.append("applicable_student_groups", {"student_group": student_group})
     _save_doc(recipe)
 
     _delete_recipe_rows(recipe.name)
@@ -354,6 +366,8 @@ def get_recipe_detail(recipe: str) -> dict[str, Any]:
 @frappe.whitelist()
 def get_recipe_library(
     search: str | None = None,
+    status: str | None = None,
+    include_test: int = 0,
     start: int = 0,
     page_length: int = 50,
 ) -> dict[str, Any]:
@@ -370,6 +384,16 @@ def get_recipe_library(
             [
                 [RECIPE_DOCTYPE, "title", "like", f"%{search_text}%"],
                 [RECIPE_DOCTYPE, "recipe_id", "like", f"%{search_text}%"],
+            ]
+        )
+    status_text = _clean(status)
+    if status_text and status_text != "全部":
+        filters.append([RECIPE_DOCTYPE, "workflow_status", "=", status_text])
+    if not cint(include_test):
+        filters.extend(
+            [
+                [RECIPE_DOCTYPE, "title", "not like", "%测试%"],
+                [RECIPE_DOCTYPE, "title", "not like", "%【演示】%"],
             ]
         )
 
@@ -389,6 +413,8 @@ def get_recipe_library(
             "imported_at",
             "modified",
             "modified_by",
+            "workflow_status",
+            "all_student_groups",
         ],
         order_by="week_start desc, modified desc",
         start=start,
@@ -422,7 +448,23 @@ def get_recipe_library(
     for row in recipes:
         item = dict(row)
         item.update(counts[row.name])
-        item["status"] = "complete" if item["dish_count"] else "draft"
+        item["workflow_status"] = item.get("workflow_status") or ("已发布" if item["dish_count"] else "草稿")
+        item["status"] = {
+            "草稿": "draft",
+            "待审核": "review",
+            "已发布": "published",
+            "已归档": "archived",
+        }.get(item["workflow_status"], "draft")
+        item["student_groups"] = (
+            ["全部班级"]
+            if item.get("all_student_groups")
+            else frappe.get_all(
+                "Tongjianyun Recipe Student Group",
+                filters={"parent": row.name, "parenttype": RECIPE_DOCTYPE},
+                pluck="student_group",
+                order_by="idx asc",
+            )
+        )
         items.append(item)
 
     return {

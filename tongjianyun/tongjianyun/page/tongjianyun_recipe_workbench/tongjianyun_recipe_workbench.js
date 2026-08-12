@@ -4,7 +4,14 @@ frappe.pages["tongjianyun-recipe-workbench"].on_page_load = function (wrapper) {
         title: "食谱",
         single_column: true,
     });
-    new TongjianyunRecipePage(page, wrapper);
+    wrapper.tongjianyun_recipe_page = new TongjianyunRecipePage(page, wrapper);
+};
+
+frappe.pages["tongjianyun-recipe-workbench"].on_page_show = function (wrapper) {
+    const controller = wrapper.tongjianyun_recipe_page;
+    if (controller && controller.state.screen !== "library" && !frappe.route_options?.recipe) {
+        controller.showLibrary();
+    }
 };
 
 class TongjianyunRecipePage {
@@ -21,6 +28,8 @@ class TongjianyunRecipePage {
             selectedBrowseCell: null,
             library: [],
             librarySearch: "",
+            libraryStatus: "全部",
+            includeTestRecipes: false,
         };
         this.mount();
         this.bindPageActions();
@@ -46,15 +55,6 @@ class TongjianyunRecipePage {
             const requested = routeOptions.recipe || this.getRecipeFromUrl();
             if (requested) {
                 await this.loadRecipe(requested);
-                return;
-            }
-            const current = await frappe.call({
-                method: "tongjianyun.recipe_storage.get_current_recipe",
-            });
-            if (current.message) {
-                this.state.payload = normalizePayload(current.message);
-                this.state.selectedRecipe = current.message.recipe?.recipeId || "current";
-                this.showBrowse();
                 return;
             }
             await this.showLibrary();
@@ -107,8 +107,9 @@ class TongjianyunRecipePage {
                 <header class="tjy-browse-head">
                     <div>
                         <div class="tjy-title-line">
+                            <button class="tjy-back-button" data-action="library" aria-label="返回食谱计划">←</button>
                             <h1>${escapeHtml(getWeekTitle(recipe))}</h1>
-                            <span class="tjy-draft-pill">草稿</span>
+                            <span class="tjy-draft-pill tjy-status ${recipeStatusClass(recipe.workflowStatus)}">${escapeHtml(recipe.workflowStatus || "草稿")}</span>
                         </div>
                         <div class="tjy-week-switcher">
                             <button class="tjy-square-button" data-action="previous" aria-label="上一份食谱">‹</button>
@@ -120,7 +121,7 @@ class TongjianyunRecipePage {
                     </div>
                     <div class="tjy-hero-actions">
                         <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入食谱</span></button>
-                        <button class="tjy-primary-button" data-action="edit">保存</button>
+                        <button class="tjy-primary-button" data-action="edit">${["已发布", "已归档"].includes(recipe.workflowStatus) ? "创建修订版" : "编辑食谱"}</button>
                     </div>
                 </header>
                 <div class="tjy-browse-layout">
@@ -250,6 +251,10 @@ class TongjianyunRecipePage {
                         </div>
                     </div>
                     <div class="tjy-hero-actions">
+                        <button class="tjy-outline-button" data-action="scope">适用班级：${escapeHtml(formatStudentGroupScope(payload.recipe))}</button>
+                        <select class="tjy-status-select" data-workflow-status aria-label="食谱状态">
+                            ${["草稿", "待审核", "已发布", "已归档"].map((status) => `<option ${status === (payload.recipe.workflowStatus || "草稿") ? "selected" : ""}>${status}</option>`).join("")}
+                        </select>
                         <span class="tjy-save-state"><i></i> 已自动保存&nbsp; ${formatCurrentTime()}</span>
                         <button class="tjy-more-button" aria-label="更多">•••</button>
                         <button class="tjy-primary-button" data-action="save">保存更改</button>
@@ -333,6 +338,7 @@ class TongjianyunRecipePage {
 
     bindEditorActions(day, portion, selectedDish) {
         this.bindCommonActions();
+        this.main.find('[data-action="scope"]').on("click", () => this.openStudentGroupDialog());
         this.main.find("[data-day-tab]").on("click", (event) => {
             this.captureEditor(day, portion, selectedDish);
             this.state.activeDay = Number($(event.currentTarget).attr("data-day-tab"));
@@ -403,6 +409,8 @@ class TongjianyunRecipePage {
         const weekEnd = this.main.find("[data-week-end]").val();
         if (weekStart !== undefined) this.state.payload.recipe.weekStart = weekStart || "";
         if (weekEnd !== undefined) this.state.payload.recipe.weekEnd = weekEnd || "";
+        const workflowStatus = this.main.find("[data-workflow-status]").val();
+        if (workflowStatus !== undefined) this.state.payload.recipe.workflowStatus = workflowStatus || "草稿";
         const oldDishes = [...portion.dishes];
         const selectedOldName = oldDishes[this.state.activeDish] || selectedDish;
         this.main.find("[data-dish-input]").each((_, input) => {
@@ -428,6 +436,50 @@ class TongjianyunRecipePage {
             row.gramsPerChild = grams(row.amount, row.unit);
             row.dishName = currentDish;
         });
+    }
+
+    openStudentGroupDialog() {
+        const recipe = this.state.payload.recipe;
+        const dialog = new frappe.ui.Dialog({
+            title: "设置适用班级",
+            fields: [
+                {
+                    fieldname: "all_student_groups",
+                    fieldtype: "Check",
+                    label: "适用全部班级",
+                    default: recipe.allStudentGroups === false ? 0 : 1,
+                },
+                {
+                    fieldname: "student_groups",
+                    fieldtype: "MultiSelectList",
+                    label: "指定班级",
+                    depends_on: "eval:!doc.all_student_groups",
+                    default: recipe.studentGroups || [],
+                    get_data: async (text) => {
+                        const rows = await frappe.db.get_list("Student Group", {
+                            fields: ["name", "student_group_name"],
+                            filters: text ? [["name", "like", `%${text}%`]] : [],
+                            order_by: "student_group_name asc",
+                            limit: 50,
+                        });
+                        return rows.map((row) => ({ value: row.name, description: row.student_group_name || row.name }));
+                    },
+                },
+            ],
+            primary_action_label: "确定",
+            primary_action: (values) => {
+                const groups = Array.isArray(values.student_groups) ? values.student_groups : [];
+                if (!values.all_student_groups && !groups.length) {
+                    frappe.msgprint("请选择至少一个适用班级。");
+                    return;
+                }
+                recipe.allStudentGroups = Boolean(values.all_student_groups);
+                recipe.studentGroups = recipe.allStudentGroups ? [] : groups;
+                dialog.hide();
+                this.renderEditor();
+            },
+        });
+        dialog.show();
     }
 
     async saveRecipe() {
@@ -466,13 +518,18 @@ class TongjianyunRecipePage {
 
     async showLibrary() {
         this.state.screen = "library";
-        this.page.set_title("食谱库");
+        this.page.set_title("食谱计划");
         this.clearPagePrimaryAction();
         this.showLoading("正在加载食谱库...");
         try {
             const response = await frappe.call({
                 method: "tongjianyun.recipe_storage.get_recipe_library",
-                args: { search: this.state.librarySearch, page_length: 100 },
+                args: {
+                    search: this.state.librarySearch,
+                    status: this.state.libraryStatus,
+                    include_test: this.state.includeTestRecipes ? 1 : 0,
+                    page_length: 100,
+                },
             });
             this.state.library = response.message?.items || [];
             this.renderLibrary();
@@ -486,34 +543,47 @@ class TongjianyunRecipePage {
         this.main.html(`
             <section class="tjy-screen tjy-library-screen">
                 <header class="tjy-library-head">
-                    <div><div class="tjy-eyebrow">童健云</div><h1>食谱库</h1><p>查找、查看和管理所有历史食谱</p></div>
-                    <div class="tjy-hero-actions"><button class="btn btn-primary btn-sm" data-action="new">＋ 新建食谱</button></div>
+                    <div><div class="tjy-eyebrow">童健云</div><h1>食谱计划</h1><p>创建、审核和管理每周食谱</p></div>
+                    <div class="tjy-create-wrap">
+                        <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入文件</span></button>
+                        <button class="tjy-outline-button" data-action="copy-latest">${frappe.utils.icon("duplicate", "sm")}<span>复制上一周</span></button>
+                        <button class="tjy-primary-button" data-action="new">＋ 空白新建</button>
+                    </div>
                 </header>
                 <div class="tjy-library-tools">
                     <div class="tjy-search-wrap">${frappe.utils.icon("search", "sm")}<input type="search" value="${escapeAttr(this.state.librarySearch)}" placeholder="搜索食谱名称或周次"></div>
-                    <span>${items.length} 份食谱</span>
+                    <div class="tjy-library-filters">
+                        <div class="tjy-status-tabs">
+                            ${["全部", "草稿", "待审核", "已发布", "已归档"].map((status) => `<button class="${this.state.libraryStatus === status ? "active" : ""}" data-library-status="${status}">${status}</button>`).join("")}
+                        </div>
+                        <label class="tjy-test-toggle"><input type="checkbox" data-include-test ${this.state.includeTestRecipes ? "checked" : ""}> 显示测试/演示</label>
+                        <span>${items.length} 份食谱</span>
+                    </div>
                 </div>
                 <div class="tjy-library-table-wrap">
                     <table class="tjy-library-table">
-                        <thead><tr><th>食谱</th><th>日期范围</th><th>状态</th><th>菜品</th><th>食材明细</th><th>最后更新</th><th></th></tr></thead>
+                        <thead><tr><th>食谱</th><th>日期范围</th><th>状态</th><th>适用班级</th><th>菜品</th><th>食材明细</th><th>最后更新</th><th></th></tr></thead>
                         <tbody>
                             ${items.length ? items.map((item) => `
                                 <tr data-library-recipe="${escapeAttr(item.name)}">
                                     <td><strong>${escapeHtml(item.title || "未命名食谱")}</strong><span>${escapeHtml(item.recipe_id || "")}</span></td>
                                     <td>${formatDateRange(item.week_start, item.week_end)}</td>
-                                    <td><span class="tjy-status ${item.status}">${item.status === "complete" ? "已完成" : "草稿"}</span></td>
+                                    <td><span class="tjy-status ${item.status}">${escapeHtml(item.workflow_status || "草稿")}</span></td>
+                                    <td class="tjy-groups-cell">${renderStudentGroups(item.student_groups)}</td>
                                     <td>${item.dish_count || 0}</td>
                                     <td>${item.ingredient_count || 0}</td>
                                     <td>${frappe.datetime.prettyDate(item.modified)}</td>
                                     <td><button class="tjy-row-open">打开 →</button></td>
                                 </tr>
-                            `).join("") : '<tr><td colspan="7"><div class="tjy-empty-panel"><strong>暂无食谱</strong><span>新建或导入一份食谱后会显示在这里</span></div></td></tr>'}
+                            `).join("") : '<tr><td colspan="8"><div class="tjy-empty-panel"><strong>暂无匹配的食谱</strong><span>请调整搜索或状态筛选，也可新建、导入食谱</span></div></td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </section>
         `);
         this.main.find('[data-action="new"]').on("click", () => this.createRecipe());
+        this.main.find('[data-action="import"]').on("click", () => this.openImport());
+        this.main.find('[data-action="copy-latest"]').on("click", () => this.copyLatestRecipe());
         this.main.find("[data-library-recipe]").on("click", (event) => this.loadRecipe($(event.currentTarget).attr("data-library-recipe")));
         let timer;
         this.main.find('input[type="search"]').on("input", (event) => {
@@ -523,6 +593,34 @@ class TongjianyunRecipePage {
                 this.showLibrary();
             }, 300);
         });
+        this.main.find("[data-library-status]").on("click", (event) => {
+            this.state.libraryStatus = $(event.currentTarget).attr("data-library-status");
+            this.showLibrary();
+        });
+        this.main.find("[data-include-test]").on("change", (event) => {
+            this.state.includeTestRecipes = $(event.currentTarget).is(":checked");
+            this.showLibrary();
+        });
+    }
+
+    async copyLatestRecipe() {
+        const source = this.state.library[0];
+        if (!source) {
+            frappe.msgprint("暂无可复制的食谱。");
+            return;
+        }
+        await this.loadRecipe(source.name);
+        const payload = normalizePayload(this.state.payload);
+        const start = frappe.datetime.add_days(payload.recipe.weekStart || frappe.datetime.get_today(), 7);
+        payload.recipe.recipeId = `RECIPE-${String(start).replaceAll("-", "")}-${Date.now().toString().slice(-6)}`;
+        payload.recipe.title = `${getWeekTitle(payload.recipe)}（副本）`;
+        payload.recipe.weekStart = start;
+        payload.recipe.weekEnd = frappe.datetime.add_days(payload.recipe.weekEnd || start, 7);
+        payload.recipe.workflowStatus = "草稿";
+        payload.days.forEach((day) => { day.date = frappe.datetime.add_days(day.date, 7); });
+        this.state.payload = payload;
+        this.state.selectedRecipe = null;
+        this.enterEdit();
     }
 
     createRecipe() {
@@ -534,6 +632,9 @@ class TongjianyunRecipePage {
                 title: "新建周食谱",
                 weekStart: start,
                 weekEnd: frappe.datetime.add_days(start, 4),
+                workflowStatus: "草稿",
+                allStudentGroups: true,
+                studentGroups: [],
             },
             days: Array.from({ length: 5 }, (_, index) => ({
                 id: `DAY-${index + 1}`,
@@ -559,7 +660,7 @@ class TongjianyunRecipePage {
 
     bindCommonActions() {
         this.main.find('[data-action="library"]').on("click", () => this.showLibrary());
-        this.main.find('[data-action="edit"]').on("click", () => this.enterEdit());
+        this.main.find('[data-action="edit"]').on("click", () => this.editRecipe());
         this.main.find('[data-action="browse"]').on("click", () => this.showBrowse());
         this.main.find('[data-action="save"]').on("click", () => this.saveRecipe());
         this.main.find('[data-action="import"]').on("click", () => this.openImport());
@@ -570,6 +671,21 @@ class TongjianyunRecipePage {
 
     clearPagePrimaryAction() {
         if (typeof this.page.clear_primary_action === "function") this.page.clear_primary_action();
+    }
+
+    editRecipe() {
+        const recipe = this.state.payload?.recipe;
+        if (!recipe) return;
+        if (["已发布", "已归档"].includes(recipe.workflowStatus)) {
+            const payload = normalizePayload(this.state.payload);
+            payload.recipe.recipeId = `${recipe.recipeId || "RECIPE"}-REV-${Date.now().toString().slice(-6)}`;
+            payload.recipe.title = `${String(recipe.title || "周食谱").replace(/（修订版）$/, "")}（修订版）`;
+            payload.recipe.workflowStatus = "草稿";
+            this.state.payload = payload;
+            this.state.selectedRecipe = null;
+            frappe.show_alert({ message: "已根据发布版创建草稿修订版", indicator: "blue" });
+        }
+        this.enterEdit();
     }
 
     openImport() {
@@ -613,6 +729,9 @@ const MEAL_LABELS = { breakfast: "早餐", morningSnack: "早点", lunch: "午�
 function normalizePayload(payload) {
     const result = payload && typeof payload === "object" ? JSON.parse(JSON.stringify(payload)) : {};
     result.recipe = result.recipe || {};
+    result.recipe.workflowStatus = result.recipe.workflowStatus || "草稿";
+    result.recipe.allStudentGroups = result.recipe.allStudentGroups !== false;
+    result.recipe.studentGroups = Array.isArray(result.recipe.studentGroups) ? result.recipe.studentGroups : [];
     result.days = Array.isArray(result.days) ? result.days : [];
     result.days.forEach((day, index) => {
         day.id = day.id || `DAY-${index + 1}`;
@@ -624,6 +743,24 @@ function normalizePayload(payload) {
         });
     });
     return result;
+}
+
+function recipeStatusClass(status) {
+    return { "草稿": "draft", "待审核": "review", "已发布": "published", "已归档": "archived" }[status] || "draft";
+}
+
+function formatStudentGroupScope(recipe) {
+    if (recipe?.allStudentGroups !== false) return "全部班级";
+    const groups = recipe?.studentGroups || [];
+    return groups.length ? `${groups.length} 个班级` : "未设置";
+}
+
+function renderStudentGroups(groups) {
+    const values = Array.isArray(groups) ? groups.filter(Boolean) : [];
+    if (!values.length) return '<span class="tjy-muted-value">未设置</span>';
+    if (values[0] === "全部班级") return '<span class="tjy-scope-pill">全部班级</span>';
+    const visible = values.slice(0, 2).map((value) => `<span class="tjy-scope-pill">${escapeHtml(value)}</span>`).join("");
+    return `${visible}${values.length > 2 ? `<span class="tjy-scope-more">+${values.length - 2}</span>` : ""}`;
 }
 
 function ensurePortion(day, slot) {
@@ -778,6 +915,7 @@ function escapeAttr(value) {
 }
 
 const RECIPE_STYLES = `
+.tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-groups-cell{max-width:230px}.tjy-scope-pill{display:inline-flex;align-items:center;max-width:100px;padding:3px 8px;margin:2px 4px 2px 0;border-radius:999px;background:#f1f2f0;color:#555;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tjy-scope-more,.tjy-muted-value{font-size:12px;color:#6f7073}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}
 .tjy-recipe-app{--tjy-ink:#202123;--tjy-muted:#6f7073;--tjy-line:#e4e4e2;--tjy-soft:#f7f7f5;--tjy-green:#23884b;width:100%;max-width:none;margin:0;padding:18px 24px 52px;color:var(--tjy-ink)}
 body:has(.tjy-recipe-app) .layout-main-section{background:#fff}body:has(.tjy-recipe-app) .page-body{background:#fff}
 body:has(.tjy-recipe-app) .page-head .page-title .title-text{font-weight:500}.tjy-screen button{font-family:inherit}

@@ -9,9 +9,13 @@
   "identity_section",
   "recipe_id",
   "title",
+  "workflow_status",
   "column_break_period",
   "week_start",
   "week_end",
+  "scope_section",
+  "all_student_groups",
+  "applicable_student_groups",
   "source_section",
   "source_file_name",
   "parser",
@@ -43,6 +47,16 @@
    "reqd": 1
   },
   {
+   "default": "\u8349\u7a3f",
+   "fieldname": "workflow_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "\u72b6\u6001",
+   "options": "\u8349\u7a3f\n\u5f85\u5ba1\u6838\n\u5df2\u53d1\u5e03\n\u5df2\u5f52\u6863",
+   "reqd": 1
+  },
+  {
    "fieldname": "column_break_period",
    "fieldtype": "Column Break"
   },
@@ -57,6 +71,24 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "\u7ed3\u675f\u65e5\u671f"
+  },
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "\u9002\u7528\u73ed\u7ea7"
+  },
+  {
+   "default": "1",
+   "fieldname": "all_student_groups",
+   "fieldtype": "Check",
+   "label": "\u9002\u7528\u5168\u90e8\u73ed\u7ea7"
+  },
+  {
+   "depends_on": "eval:!doc.all_student_groups",
+   "fieldname": "applicable_student_groups",
+   "fieldtype": "Table MultiSelect",
+   "label": "\u6307\u5b9a\u73ed\u7ea7",
+   "options": "Tongjianyun Recipe Student Group"
   },
   {
    "fieldname": "source_section",
