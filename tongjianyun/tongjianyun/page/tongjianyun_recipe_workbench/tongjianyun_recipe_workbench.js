@@ -49,9 +49,9 @@ class TongjianyunRecipePage {
             activeDish: 0,
             selectedBrowseCell: null,
             library: [],
+            selectedLibraryRecipes: new Set(),
             librarySearch: "",
             libraryStatus: "全部",
-            includeTestRecipes: false,
             recycleBin: false,
         };
         this.mount();
@@ -550,12 +550,15 @@ class TongjianyunRecipePage {
                 args: {
                     search: this.state.librarySearch,
                     status: this.state.libraryStatus,
-                    include_test: this.state.includeTestRecipes ? 1 : 0,
                     recycle_bin: this.state.recycleBin ? 1 : 0,
                     page_length: 100,
                 },
             });
             this.state.library = response.message?.items || [];
+            const visibleNames = new Set(this.state.library.map((item) => item.name));
+            this.state.selectedLibraryRecipes = new Set(
+                [...this.state.selectedLibraryRecipes].filter((name) => visibleNames.has(name)),
+            );
             this.renderLibrary();
         } catch (error) {
             this.showError("食谱库加载失败", error);
@@ -580,17 +583,17 @@ class TongjianyunRecipePage {
                         <div class="tjy-status-tabs">
                             ${["全部", "草稿", "待审核", "已发布", "已归档", "回收站"].map((status) => `<button class="${this.state.libraryStatus === status ? "active" : ""}" data-library-status="${status}">${status}</button>`).join("")}
                         </div>
-                        <label class="tjy-test-toggle"><input type="checkbox" data-include-test ${this.state.includeTestRecipes ? "checked" : ""}> 显示测试/演示</label>
-                        ${this.state.includeTestRecipes && !this.state.recycleBin ? '<button class="tjy-clean-test-button" data-action="clean-tests">清理测试数据</button>' : ''}
+                        ${!this.state.recycleBin ? `<button class="tjy-bulk-delete" data-action="bulk-delete" ${this.state.selectedLibraryRecipes.size ? "" : "disabled"}>删除选中（${this.state.selectedLibraryRecipes.size}）</button>` : ""}
                         <span>${items.length} 份食谱</span>
                     </div>
                 </div>
                 <div class="tjy-library-table-wrap">
                     <table class="tjy-library-table">
-                        <thead><tr><th>食谱</th><th>日期范围</th><th>状态</th><th>适用班级</th><th>菜品</th><th>食材明细</th><th>最后更新</th><th></th></tr></thead>
+                        <thead><tr><th class="tjy-select-cell"><input type="checkbox" data-select-all aria-label="全选可删除食谱"></th><th>食谱</th><th>日期范围</th><th>状态</th><th>适用班级</th><th>菜品</th><th>食材明细</th><th>最后更新</th><th></th></tr></thead>
                         <tbody>
                             ${items.length ? items.map((item) => `
                                 <tr data-library-recipe="${escapeAttr(item.name)}">
+                                    <td class="tjy-select-cell"><input type="checkbox" data-select-recipe="${escapeAttr(item.name)}" ${this.state.selectedLibraryRecipes.has(item.name) ? "checked" : ""} ${item.actions?.can_delete ? "" : "disabled"} aria-label="选择${escapeAttr(item.title || item.name)}"></td>
                                     <td><strong>${escapeHtml(item.title || "未命名食谱")}</strong><span>${escapeHtml(item.recipe_id || "")}</span></td>
                                     <td>${formatDateRange(item.week_start, item.week_end)}</td>
                                     <td><span class="tjy-status ${item.status}">${escapeHtml(item.display_status || item.workflow_status || "草稿")}</span></td>
@@ -609,7 +612,7 @@ class TongjianyunRecipePage {
                                         </div>
                                     </td>
                                 </tr>
-                            `).join("") : '<tr><td colspan="8"><div class="tjy-empty-panel"><strong>暂无匹配的食谱</strong><span>请调整搜索或状态筛选，也可新建、导入食谱</span></div></td></tr>'}
+                            `).join("") : '<tr><td colspan="9"><div class="tjy-empty-panel"><strong>暂无匹配的食谱</strong><span>请调整搜索或状态筛选，也可新建、导入食谱</span></div></td></tr>'}
                         </tbody>
                     </table>
                 </div>
@@ -618,7 +621,7 @@ class TongjianyunRecipePage {
         this.main.find('[data-action="new"]').on("click", () => this.createRecipe());
         this.main.find('[data-action="import"]').on("click", () => this.openImport());
         this.main.find('[data-action="copy-latest"]').on("click", () => this.copyLatestRecipe());
-        this.main.find('[data-action="clean-tests"]').on("click", () => this.cleanTestRecipes());
+        this.main.find('[data-action="bulk-delete"]').on("click", () => this.bulkDeleteRecipes());
         this.main.find("[data-library-recipe]").on("click", (event) => {
             if ($(event.target).closest("[data-row-action],[data-recipe-action]").length) return;
             this.loadRecipe($(event.currentTarget).attr("data-library-recipe"));
@@ -638,6 +641,25 @@ class TongjianyunRecipePage {
             const button = $(event.currentTarget);
             this.handleRecipeAction(button.closest("tr").attr("data-library-recipe"), button.attr("data-recipe-action"));
         });
+        this.main.find("[data-select-recipe]").on("click", (event) => event.stopPropagation());
+        this.main.find("[data-select-recipe]").on("change", (event) => {
+            const name = $(event.currentTarget).attr("data-select-recipe");
+            if ($(event.currentTarget).is(":checked")) this.state.selectedLibraryRecipes.add(name);
+            else this.state.selectedLibraryRecipes.delete(name);
+            this.renderLibrary();
+        });
+        const selectable = this.main.find("[data-select-recipe]:not(:disabled)");
+        const selectedVisible = selectable.filter(":checked").length;
+        this.main.find("[data-select-all]").prop("disabled", !selectable.length).prop("checked", Boolean(selectable.length) && selectedVisible === selectable.length);
+        this.main.find("[data-select-all]").on("change", (event) => {
+            const checked = $(event.currentTarget).is(":checked");
+            this.main.find("[data-select-recipe]:not(:disabled)").each((_, input) => {
+                const name = $(input).attr("data-select-recipe");
+                if (checked) this.state.selectedLibraryRecipes.add(name);
+                else this.state.selectedLibraryRecipes.delete(name);
+            });
+            this.renderLibrary();
+        });
         let timer;
         this.main.find('input[type="search"]').on("input", (event) => {
             clearTimeout(timer);
@@ -649,10 +671,6 @@ class TongjianyunRecipePage {
         this.main.find("[data-library-status]").on("click", (event) => {
             this.state.libraryStatus = $(event.currentTarget).attr("data-library-status");
             this.state.recycleBin = this.state.libraryStatus === "回收站";
-            this.showLibrary();
-        });
-        this.main.find("[data-include-test]").on("change", (event) => {
-            this.state.includeTestRecipes = $(event.currentTarget).is(":checked");
             this.showLibrary();
         });
     }
@@ -685,15 +703,33 @@ class TongjianyunRecipePage {
         });
     }
 
-    cleanTestRecipes() {
-        frappe.confirm("确认将所有无业务关联的测试/演示食谱移入回收站吗？", async () => {
-            const response = await frappe.call({
-                method: "tongjianyun.recipe_storage.delete_test_recipes",
-                freeze: true,
-            });
-            const result = response.message || {};
-            frappe.msgprint(`已移入回收站 ${result.moved || 0} 份；因业务关联保留 ${result.blocked?.length || 0} 份。`);
-            await this.showLibrary();
+    bulkDeleteRecipes() {
+        const selected = [...this.state.selectedLibraryRecipes];
+        if (!selected.length) return;
+        frappe.confirm(`确认将选中的 ${selected.length} 份食谱移入回收站吗？`, async () => {
+            try {
+                const response = await frappe.call({
+                    method: "tongjianyun.recipe_storage.bulk_delete_recipes",
+                    args: { recipes: selected },
+                    freeze: true,
+                    freeze_message: "正在删除选中的食谱...",
+                });
+                const result = response.message || {};
+                this.state.selectedLibraryRecipes.clear();
+                const blocked = result.blocked || [];
+                if (blocked.length) {
+                    frappe.msgprint({
+                        title: "批量删除完成",
+                        indicator: "orange",
+                        message: `已移入回收站 ${result.moved || 0} 份；未删除 ${blocked.length} 份。<br>${blocked.map((row) => `${escapeHtml(row.name)}：${escapeHtml(row.reason)}`).join("<br>")}`,
+                    });
+                } else {
+                    frappe.show_alert({ message: `已删除 ${result.moved || 0} 份食谱`, indicator: "green" });
+                }
+                await this.showLibrary();
+            } catch (error) {
+                this.showError("批量删除失败", error);
+            }
         });
     }
 
@@ -1022,6 +1058,7 @@ function renderRecipeActions(item, options = {}) {
 }
 
 const RECIPE_STYLES = `
+.tjy-bulk-delete{height:34px;padding:0 12px;border:1px solid #e2b8b4;border-radius:7px;background:#fff;color:#b42318}.tjy-bulk-delete:disabled{border-color:#e4e4e2;color:#aaa;cursor:not-allowed}.tjy-select-cell{width:42px!important;text-align:center!important;padding-left:12px!important;padding-right:6px!important}.tjy-select-cell input{width:16px;height:16px;accent-color:#202123}
 .tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-clean-test-button{border:0;background:transparent;color:#b42318;font-size:12px}.tjy-groups-cell{max-width:230px}.tjy-scope-pill{display:inline-flex;align-items:center;max-width:100px;padding:3px 8px;margin:2px 4px 2px 0;border-radius:999px;background:#f1f2f0;color:#555;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tjy-scope-more,.tjy-muted-value{font-size:12px;color:#6f7073}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status.deleted{background:#fce8e6;color:#b42318}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}.tjy-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;white-space:nowrap}.tjy-row-delete{border:0;background:transparent;color:#b42318;padding:0;cursor:pointer}.tjy-row-delete:hover{text-decoration:underline}.tjy-action-menu-wrap{position:relative}.tjy-row-more{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#555;font-weight:700}.tjy-row-more:hover{background:#f1f1ef}.tjy-action-menu{display:none;position:absolute;z-index:20;right:0;top:34px;min-width:150px;padding:5px;background:#fff;border:1px solid #dededb;border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.13)}.tjy-action-menu.open{display:block}.tjy-action-menu button,.tjy-action-disabled{display:block;width:100%;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px;color:#202123;white-space:nowrap}.tjy-action-menu button:hover{background:#f4f4f2}.tjy-action-menu button.danger{color:#b42318}.tjy-action-disabled{color:#8a8a8a;font-size:11px;white-space:normal}
 .tjy-recipe-app{--tjy-ink:#202123;--tjy-muted:#6f7073;--tjy-line:#e4e4e2;--tjy-soft:#f7f7f5;--tjy-green:#23884b;width:100%;max-width:none;margin:0;padding:18px 24px 52px;color:var(--tjy-ink)}
 body:has(.tjy-recipe-app) .layout-main-section{background:#fff}body:has(.tjy-recipe-app) .page-body{background:#fff}

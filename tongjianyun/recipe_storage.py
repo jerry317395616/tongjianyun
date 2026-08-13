@@ -46,11 +46,6 @@ def _can_restore_recipe() -> bool:
     return frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles(frappe.session.user)
 
 
-def _is_test_recipe(doc) -> bool:
-    title = _clean(doc.title)
-    return "测试" in title or "【演示】" in title
-
-
 def _as_dict(value: Any) -> dict[str, Any]:
     if value is None:
         return {}
@@ -174,11 +169,10 @@ def _recipe_actions(doc, links: list[dict[str, Any]] | None = None) -> dict[str,
     status = doc.workflow_status or "草稿"
     links = links if links is not None else _recipe_business_links(doc)
     return {
-        "can_delete": not doc.is_deleted and (status == "草稿" or _is_test_recipe(doc)) and not links,
+        "can_delete": not doc.is_deleted and not links,
         "can_withdraw": not doc.is_deleted and status == "待审核",
         "can_archive": not doc.is_deleted and status == "已发布",
         "can_restore": bool(doc.is_deleted) and _can_restore_recipe(),
-        "is_test": _is_test_recipe(doc),
         "business_links": links,
     }
 
@@ -475,12 +469,12 @@ def get_recipe_detail(recipe: str) -> dict[str, Any]:
 def get_recipe_library(
     search: str | None = None,
     status: str | None = None,
-    include_test: int = 0,
+    include_test: int | None = None,
     recycle_bin: int = 0,
     start: int = 0,
     page_length: int = 50,
 ) -> dict[str, Any]:
-    """Return the lightweight recipe-library projection used by the desk page."""
+    """Return the recipe-library projection; ``include_test`` is kept for old clients."""
 
     _require_login()
     start = max(0, cint(start))
@@ -499,14 +493,6 @@ def get_recipe_library(
     filters.append([RECIPE_DOCTYPE, "is_deleted", "=", 1 if cint(recycle_bin) else 0])
     if status_text and status_text not in {"全部", "回收站"}:
         filters.append([RECIPE_DOCTYPE, "workflow_status", "=", status_text])
-    if not cint(include_test) and not cint(recycle_bin):
-        filters.extend(
-            [
-                [RECIPE_DOCTYPE, "title", "not like", "%测试%"],
-                [RECIPE_DOCTYPE, "title", "not like", "%【演示】%"],
-            ]
-        )
-
     recipes = frappe.get_list(
         RECIPE_DOCTYPE,
         filters=filters,
@@ -622,10 +608,6 @@ def update_recipe_lifecycle(recipe: str, action: str) -> dict[str, Any]:
     elif action == "delete":
         if doc.is_deleted:
             frappe.throw(_("Recipe is already in the recycle bin."))
-        if status == "待审核" and not _is_test_recipe(doc):
-            frappe.throw("待审核食谱请先撤回为草稿，再删除。")
-        if status in {"已发布", "已归档"} and not _is_test_recipe(doc):
-            frappe.throw("已发布或已归档食谱不能删除，请保留业务历史。")
         links = _recipe_business_links(doc)
         if links:
             details = "、".join(f"{row['label']} {row['count']} 条" for row in links)
@@ -659,24 +641,27 @@ def update_recipe_lifecycle(recipe: str, action: str) -> dict[str, Any]:
 
 
 @frappe.whitelist()
-def delete_test_recipes() -> dict[str, Any]:
-    """Move deletable test/demo recipes to the recycle bin in one operation."""
+def bulk_delete_recipes(recipes: Any) -> dict[str, Any]:
+    """Move selected recipes to the recycle bin using the normal lifecycle policy."""
 
     _require_recipe_write()
+    selected = list(dict.fromkeys(_clean(value) for value in _as_list(recipes) if _clean(value)))
+    if not selected:
+        frappe.throw("请至少选择一份食谱。")
+    if len(selected) > 100:
+        frappe.throw("单次最多删除 100 份食谱。")
+
     moved: list[str] = []
     blocked: list[dict[str, Any]] = []
-    for name in frappe.get_all(RECIPE_DOCTYPE, filters={"is_deleted": 0}, pluck="name", limit_page_length=0):
-        doc = frappe.get_doc(RECIPE_DOCTYPE, name)
-        if not _is_test_recipe(doc):
-            continue
-        links = _recipe_business_links(doc)
-        if links:
-            blocked.append({"name": doc.name, "title": doc.title, "business_links": links})
-            continue
-        _move_recipe_to_recycle_bin(doc)
-        doc.flags.ignore_permissions = True
-        doc.save(ignore_permissions=True)
-        moved.append(doc.name)
+    for value in selected:
+        try:
+            recipe_name = _get_recipe_name(value)
+            result = update_recipe_lifecycle(recipe_name, "delete")
+            moved.append(result["name"])
+        except Exception as exc:
+            blocked.append({"name": value, "reason": _clean(getattr(exc, "message", None) or exc)})
+            frappe.db.rollback()
+
     frappe.db.commit()
     return {"moved": len(moved), "names": moved, "blocked": blocked}
 
