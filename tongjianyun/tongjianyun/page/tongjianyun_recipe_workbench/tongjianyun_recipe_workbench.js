@@ -600,10 +600,11 @@ class TongjianyunRecipePage {
                                     <td>${frappe.datetime.prettyDate(item.modified)}</td>
                                     <td class="tjy-row-actions">
                                         <button class="tjy-row-open" data-row-action="open">打开 →</button>
+                                        ${item.actions?.can_delete ? '<button class="tjy-row-delete" data-recipe-action="delete">删除</button>' : ''}
                                         <div class="tjy-action-menu-wrap">
                                             <button class="tjy-row-more" data-row-action="menu" aria-label="更多操作">···</button>
                                             <div class="tjy-action-menu">
-                                                ${renderRecipeActions(item)}
+                                                ${renderRecipeActions(item, { includeDelete: false })}
                                             </div>
                                         </div>
                                     </td>
@@ -1007,12 +1008,12 @@ function escapeAttr(value) {
     return escapeHtml(value).replaceAll('"', "&quot;");
 }
 
-function renderRecipeActions(item) {
+function renderRecipeActions(item, options = {}) {
     const actions = item.actions || {};
     const rows = ['<button data-recipe-action="copy">复制</button>'];
     if (actions.can_withdraw) rows.push('<button data-recipe-action="withdraw">撤回为草稿</button>');
     if (actions.can_archive) rows.push('<button data-recipe-action="archive">归档</button>');
-    if (actions.can_delete) rows.push('<button class="danger" data-recipe-action="delete">删除</button>');
+    if (actions.can_delete && options.includeDelete !== false) rows.push('<button class="danger" data-recipe-action="delete">删除</button>');
     if (actions.can_restore) rows.push('<button data-recipe-action="restore">恢复</button>');
     if (!actions.can_delete && actions.business_links?.length) {
         rows.push(`<span class="tjy-action-disabled">已有${actions.business_links.map((row) => escapeHtml(row.label)).join("、")}数据</span>`);
@@ -1021,7 +1022,7 @@ function renderRecipeActions(item) {
 }
 
 const RECIPE_STYLES = `
-.tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-clean-test-button{border:0;background:transparent;color:#b42318;font-size:12px}.tjy-groups-cell{max-width:230px}.tjy-scope-pill{display:inline-flex;align-items:center;max-width:100px;padding:3px 8px;margin:2px 4px 2px 0;border-radius:999px;background:#f1f2f0;color:#555;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tjy-scope-more,.tjy-muted-value{font-size:12px;color:#6f7073}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status.deleted{background:#fce8e6;color:#b42318}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}.tjy-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;white-space:nowrap}.tjy-action-menu-wrap{position:relative}.tjy-row-more{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#555;font-weight:700}.tjy-row-more:hover{background:#f1f1ef}.tjy-action-menu{display:none;position:absolute;z-index:20;right:0;top:34px;min-width:150px;padding:5px;background:#fff;border:1px solid #dededb;border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.13)}.tjy-action-menu.open{display:block}.tjy-action-menu button,.tjy-action-disabled{display:block;width:100%;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px;color:#202123;white-space:nowrap}.tjy-action-menu button:hover{background:#f4f4f2}.tjy-action-menu button.danger{color:#b42318}.tjy-action-disabled{color:#8a8a8a;font-size:11px;white-space:normal}
+.tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-clean-test-button{border:0;background:transparent;color:#b42318;font-size:12px}.tjy-groups-cell{max-width:230px}.tjy-scope-pill{display:inline-flex;align-items:center;max-width:100px;padding:3px 8px;margin:2px 4px 2px 0;border-radius:999px;background:#f1f2f0;color:#555;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tjy-scope-more,.tjy-muted-value{font-size:12px;color:#6f7073}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status.deleted{background:#fce8e6;color:#b42318}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}.tjy-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;white-space:nowrap}.tjy-row-delete{border:0;background:transparent;color:#b42318;padding:0;cursor:pointer}.tjy-row-delete:hover{text-decoration:underline}.tjy-action-menu-wrap{position:relative}.tjy-row-more{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#555;font-weight:700}.tjy-row-more:hover{background:#f1f1ef}.tjy-action-menu{display:none;position:absolute;z-index:20;right:0;top:34px;min-width:150px;padding:5px;background:#fff;border:1px solid #dededb;border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.13)}.tjy-action-menu.open{display:block}.tjy-action-menu button,.tjy-action-disabled{display:block;width:100%;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px;color:#202123;white-space:nowrap}.tjy-action-menu button:hover{background:#f4f4f2}.tjy-action-menu button.danger{color:#b42318}.tjy-action-disabled{color:#8a8a8a;font-size:11px;white-space:normal}
 .tjy-recipe-app{--tjy-ink:#202123;--tjy-muted:#6f7073;--tjy-line:#e4e4e2;--tjy-soft:#f7f7f5;--tjy-green:#23884b;width:100%;max-width:none;margin:0;padding:18px 24px 52px;color:var(--tjy-ink)}
 body:has(.tjy-recipe-app) .layout-main-section{background:#fff}body:has(.tjy-recipe-app) .page-body{background:#fff}
 body:has(.tjy-recipe-app) .page-head .page-title .title-text{font-weight:500}.tjy-screen button{font-family:inherit}
