@@ -221,9 +221,8 @@ def remove_removed_doctypes() -> None:
                 ignore_permissions=True,
                 ignore_missing=True,
             )
-        table_name = f"tab{doctype}"
-        if frappe.db.table_exists(table_name):
-            frappe.db.sql_ddl(f"DROP TABLE IF EXISTS `{table_name}`")
+        if frappe.db.table_exists(doctype, cached=False):
+            frappe.db.sql_ddl(f"DROP TABLE IF EXISTS `tab{doctype}`")
 
 
 def get_student_dashboard(data=None) -> dict:
