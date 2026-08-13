@@ -114,8 +114,8 @@ def get_overview() -> dict[str, Any]:
         {
             "id": "attendance",
             "number": "01",
-            "title": "完成考勤并确认就餐",
-            "description": "Education 考勤和请假自动生成各班餐次人数，只需核对例外调整。",
+            "title": "确认今日就餐人数",
+            "description": "系统自动读取教育管理中的班级、考勤和请假数据，在此核对就餐人数与例外调整。",
             "status": attendance_status[0],
             "status_label": attendance_status[1],
             "action_label": "确认今日人数",
@@ -229,15 +229,7 @@ def install() -> None:
 def _sidebar_items() -> list[dict[str, Any]]:
     return [
         _sidebar_link("业务工作台", "Page", "tongjianyun-workbench", "layout-dashboard", default=1),
-        _section("园务基础", "school"),
-        _sidebar_link("幼儿档案", "DocType", "Student", child=1),
-        _sidebar_link("监护人", "DocType", "Guardian", child=1),
-        _sidebar_link("班级与分班", "DocType", "Student Group", child=1),
-        _sidebar_link("教职工", "DocType", "Instructor", child=1),
-        _sidebar_link("学年与学期", "DocType", "Academic Year", child=1),
-        _section("到园与就餐", "calendar-check"),
-        _sidebar_link("每日考勤", "DocType", "Student Attendance", child=1),
-        _sidebar_link("请假管理", "DocType", "Student Leave Application", child=1),
+        _section("就餐管理", "calendar-check"),
         _sidebar_link("今日就餐确认", "DocType", CONFIRMATION_DOCTYPE, child=1),
         _sidebar_link("就餐调整记录", "DocType", "Tongjianyun Daily Meal Adjustment", child=1),
         _section("健康管理", "heart-pulse"),
@@ -252,9 +244,6 @@ def _sidebar_items() -> list[dict[str, Any]]:
         _sidebar_link("供应商", "DocType", SUPPLIER_DOCTYPE, child=1),
         _sidebar_link("验收与留样", "DocType", SAMPLE_DOCTYPE, child=1),
         _sidebar_link("追溯事件", "DocType", TRACE_DOCTYPE, child=1),
-        _section("统计分析", "chart-no-axes-combined"),
-        _sidebar_link("缺勤统计", "Report", "Absent Student Report", child=1),
-        _sidebar_link("月度出勤", "Report", "Student Monthly Attendance Sheet", child=1),
     ]
 
 
@@ -306,31 +295,18 @@ def _workspace_content() -> list[dict[str, Any]]:
         {"id": "tjyRecipe", "type": "shortcut", "data": {"shortcut_name": "食谱计划", "col": 3}},
         {"id": "tjyPurchase", "type": "shortcut", "data": {"shortcut_name": "食材采购", "col": 3}},
         {"id": "tjySpacer", "type": "spacer", "data": {"col": 12}},
-        {"id": "tjySchoolCard", "type": "card", "data": {"card_name": "园务基础", "col": 4}},
-        {"id": "tjyAttendanceCard", "type": "card", "data": {"card_name": "到园与就餐", "col": 4}},
+        {"id": "tjyAttendanceCard", "type": "card", "data": {"card_name": "就餐管理", "col": 4}},
         {"id": "tjyHealthCard", "type": "card", "data": {"card_name": "健康管理", "col": 4}},
         {"id": "tjyMealCard", "type": "card", "data": {"card_name": "膳食营养", "col": 4}},
         {"id": "tjyFoodSafetyCard", "type": "card", "data": {"card_name": "食安执行", "col": 4}},
-        {"id": "tjyReportsCard", "type": "card", "data": {"card_name": "统计分析", "col": 4}},
     ]
 
 
 def _workspace_links() -> list[dict[str, Any]]:
     groups = [
         (
-            "园务基础",
+            "就餐管理",
             [
-                ("幼儿档案", "DocType", "Student"),
-                ("监护人", "DocType", "Guardian"),
-                ("班级与分班", "DocType", "Student Group"),
-                ("教职工", "DocType", "Instructor"),
-            ],
-        ),
-        (
-            "到园与就餐",
-            [
-                ("每日考勤", "DocType", "Student Attendance"),
-                ("请假管理", "DocType", "Student Leave Application"),
                 ("今日就餐确认", "DocType", CONFIRMATION_DOCTYPE),
                 ("就餐调整记录", "DocType", "Tongjianyun Daily Meal Adjustment"),
             ],
@@ -357,13 +333,6 @@ def _workspace_links() -> list[dict[str, Any]]:
                 ("供应商", "DocType", SUPPLIER_DOCTYPE),
                 ("验收与留样", "DocType", SAMPLE_DOCTYPE),
                 ("追溯事件", "DocType", TRACE_DOCTYPE),
-            ],
-        ),
-        (
-            "统计分析",
-            [
-                ("缺勤统计", "Report", "Absent Student Report"),
-                ("月度出勤", "Report", "Student Monthly Attendance Sheet"),
             ],
         ),
     ]

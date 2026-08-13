@@ -9,7 +9,7 @@ required_apps = ["education"]
 
 app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260813-2"]
+app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260813-3"]
 
 add_to_apps_screen = [
     {
