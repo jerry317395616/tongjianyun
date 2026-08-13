@@ -244,7 +244,6 @@ def _sidebar_items() -> list[dict[str, Any]]:
         _sidebar_link("特殊膳食", "DocType", SPECIAL_DIET_DOCTYPE, child=1),
         _section("膳食营养", "salad"),
         _sidebar_link("食谱计划", "Page", "tongjianyun-recipe-workbench", child=1),
-        _sidebar_link("班级膳食设置", "DocType", "Tongjianyun Class Meal Setting", child=1),
         _section("食安执行", "shield-check"),
         _sidebar_link("食材采购", "DocType", PURCHASE_DOCTYPE, child=1),
         _sidebar_link("供应商", "DocType", SUPPLIER_DOCTYPE, child=1),
@@ -329,7 +328,6 @@ def _workspace_links() -> list[dict[str, Any]]:
             "膳食营养",
             [
                 ("食谱计划", "Page", "tongjianyun-recipe-workbench"),
-                ("班级膳食设置", "DocType", "Tongjianyun Class Meal Setting"),
             ],
         ),
         (

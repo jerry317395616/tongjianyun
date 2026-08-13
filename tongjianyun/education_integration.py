@@ -5,7 +5,17 @@ from education.education.doctype.student.student import Student
 from frappe.permissions import add_permission, update_permission_property
 
 
-LEGACY_DOCTYPES = ("Tongjianyun Child", "Tongjianyun Class")
+REMOVED_DOCTYPES = (
+    "Tongjianyun Child",
+    "Tongjianyun Class",
+    "Tongjianyun Data Record",
+    "Tongjianyun Dish Catalog",
+    "Tongjianyun Ingredient Spec",
+    "Tongjianyun Food Category",
+    "Tongjianyun Food Category Mapping",
+    "Tongjianyun Nutrition Standard",
+    "Tongjianyun Class Meal Setting",
+)
 
 ROLE_PERMISSIONS = {
     "Tongjianyun Director": {
@@ -64,7 +74,6 @@ TONGJIANYUN_ROLE_PERMISSIONS = {
         "Tongjianyun Child Health Profile": "r",
         "Tongjianyun Growth Measurement": "r",
         "Tongjianyun Special Diet": "r",
-        "Tongjianyun Class Meal Setting": "r",
         "Tongjianyun Daily Meal Confirmation": "r",
         "Tongjianyun Daily Meal Adjustment": "r",
         "Tongjianyun Recipe": "r",
@@ -83,7 +92,6 @@ TONGJIANYUN_ROLE_PERMISSIONS = {
     "Tongjianyun Nutrition": {
         "Tongjianyun Child Health Profile": "r",
         "Tongjianyun Special Diet": "rwc",
-        "Tongjianyun Class Meal Setting": "rwcd",
         "Tongjianyun Daily Meal Confirmation": "rwc",
         "Tongjianyun Daily Meal Adjustment": "rwc",
         "Tongjianyun Recipe": "rwcd",
@@ -142,7 +150,7 @@ def install() -> None:
 
     _configure_student_master()
     _install_roles_and_permissions()
-    _remove_legacy_doctypes()
+    remove_removed_doctypes()
     frappe.clear_cache()
 
 
@@ -203,8 +211,8 @@ def _ensure_permission(doctype: str, role: str, access: str) -> None:
         update_permission_property(doctype, role, 0, property_name, int(enabled))
 
 
-def _remove_legacy_doctypes() -> None:
-    for doctype in LEGACY_DOCTYPES:
+def remove_removed_doctypes() -> None:
+    for doctype in REMOVED_DOCTYPES:
         if not frappe.db.exists("DocType", doctype):
             continue
         frappe.delete_doc(

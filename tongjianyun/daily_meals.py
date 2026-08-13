@@ -10,15 +10,14 @@ from frappe.utils import getdate, nowdate
 
 CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
 ADJUSTMENT_DOCTYPE = "Tongjianyun Daily Meal Adjustment"
-SETTING_DOCTYPE = "Tongjianyun Class Meal Setting"
 SPECIAL_DIET_DOCTYPE = "Tongjianyun Special Diet"
 
-MEAL_FIELDS = (
-    ("breakfast_count", "serves_breakfast"),
-    ("morning_snack_count", "serves_morning_snack"),
-    ("lunch_count", "serves_lunch"),
-    ("afternoon_snack_count", "serves_afternoon_snack"),
-    ("dinner_count", "serves_dinner"),
+DEFAULT_MEAL_SERVICE = (
+    ("breakfast_count", True),
+    ("morning_snack_count", True),
+    ("lunch_count", True),
+    ("afternoon_snack_count", True),
+    ("dinner_count", False),
 )
 
 
@@ -91,26 +90,6 @@ def _special_diet_count(students: list[str], meal_date) -> int:
     )
 
 
-def _group_setting(group: str) -> dict:
-    defaults = {
-        "serves_breakfast": 1,
-        "serves_morning_snack": 1,
-        "serves_lunch": 1,
-        "serves_afternoon_snack": 1,
-        "serves_dinner": 0,
-    }
-    name = frappe.db.exists(SETTING_DOCTYPE, {"student_group": group, "enabled": 1})
-    if not name:
-        return defaults
-    values = frappe.db.get_value(
-        SETTING_DOCTYPE,
-        name,
-        list(defaults),
-        as_dict=True,
-    )
-    return {**defaults, **dict(values or {})}
-
-
 def _adjustments(group: str, meal_date) -> dict[str, int]:
     totals = defaultdict(int)
     rows = frappe.get_all(
@@ -148,7 +127,6 @@ def calculate_rows(meal_date=None) -> list[dict]:
         }
         unavailable = absent_students | leave_students
         present_count = max(len(students) - len(unavailable), 0)
-        setting = _group_setting(group["name"])
         adjustments = _adjustments(group["name"], meal_date)
         row = {
             "student_group": group["name"],
@@ -158,10 +136,10 @@ def calculate_rows(meal_date=None) -> list[dict]:
             "leave_count": len(leave_students - absent_students),
             "special_diet_count": _special_diet_count(students, meal_date),
         }
-        for count_field, setting_field in MEAL_FIELDS:
+        for count_field, is_served in DEFAULT_MEAL_SERVICE:
             delta_field = count_field.replace("_count", "_delta")
             row[count_field] = max(
-                (present_count if setting.get(setting_field) else 0)
+                (present_count if is_served else 0)
                 + adjustments.get(delta_field, 0),
                 0,
             )

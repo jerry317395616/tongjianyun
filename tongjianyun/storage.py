@@ -6,17 +6,10 @@ from typing import Any
 import frappe
 from frappe import _
 
-GENERIC_DOCTYPE = "Tongjianyun Data Record"
-
 RECORD_DOCTYPES = {
     "meal_generation_config": "Tongjianyun Meal Nutrition",
     "meal_draft": "Tongjianyun Meal Nutrition",
     "meal_review_history": "Tongjianyun Meal Nutrition",
-    "dish_catalog": "Tongjianyun Dish Catalog",
-    "ingredient_spec": "Tongjianyun Ingredient Spec",
-    "food_category": "Tongjianyun Food Category",
-    "ingredient_food_category_mapping": "Tongjianyun Food Category Mapping",
-    "nutrition_standard": "Tongjianyun Nutrition Standard",
     "food_purchase": "Tongjianyun Food Purchase",
     "food_supplier": "Tongjianyun Food Supplier",
     "food_sample": "Tongjianyun Food Sample",
@@ -55,7 +48,11 @@ def _clean(value: Any) -> str:
 
 
 def _doctype_for(record_type: str) -> str:
-    return RECORD_DOCTYPES.get(_clean(record_type), GENERIC_DOCTYPE)
+    normalized = _clean(record_type)
+    doctype = RECORD_DOCTYPES.get(normalized)
+    if not doctype:
+        frappe.throw(_("Unsupported Tongjianyun record type: {0}").format(normalized))
+    return doctype
 
 
 def _record_key(record_type: str, record_id: str) -> str:
@@ -104,38 +101,6 @@ def _save_doc(doc) -> None:
         doc.save(ignore_permissions=True)
     else:
         doc.insert(ignore_permissions=True)
-
-
-def _copy_doc_fields(source, target) -> None:
-    for fieldname in [
-        "data_key", "record_type", "record_id", "title", "status", "risk",
-        "category", "parent_id", "source", "sort_order", "record_json",
-    ]:
-        setattr(target, fieldname, getattr(source, fieldname, None))
-
-
-def migrate_generic_records() -> dict[str, int]:
-    """Copy existing generic records into the dedicated DocTypes.
-
-    Kept callable from bench execute; storage reads dedicated DocTypes after this change.
-    """
-    copied = 0
-    skipped = 0
-    if not frappe.db.table_exists(GENERIC_DOCTYPE):
-        return {"copied": 0, "skipped": 0}
-    for row in frappe.get_all(GENERIC_DOCTYPE, fields=["name", "record_type"], limit_page_length=0):
-        target_doctype = _doctype_for(row.record_type)
-        if target_doctype == GENERIC_DOCTYPE or not frappe.db.table_exists(target_doctype):
-            skipped += 1
-            continue
-        source = frappe.get_doc(GENERIC_DOCTYPE, row.name)
-        existing = frappe.db.exists(target_doctype, {"data_key": source.data_key})
-        target = frappe.get_doc(target_doctype, existing) if existing else frappe.new_doc(target_doctype)
-        _copy_doc_fields(source, target)
-        _save_doc(target)
-        copied += 1
-    frappe.db.commit()
-    return {"copied": copied, "skipped": skipped}
 
 
 @frappe.whitelist()
