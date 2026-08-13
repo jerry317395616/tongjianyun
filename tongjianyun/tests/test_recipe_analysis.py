@@ -46,6 +46,15 @@ def _cell_text(xlsx: bytes, ref: str) -> str:
     return "".join(node.text or "" for node in cell.findall(".//m:t", ns)) or str((cell.find("m:v", ns).text if cell.find("m:v", ns) is not None else ""))
 
 
+def _row_height(xlsx: bytes, row_number: int) -> float:
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with ZipFile(BytesIO(xlsx)) as archive:
+        root = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    row = root.find(f".//m:row[@r='{row_number}']", ns)
+    assert row is not None
+    return float(row.attrib["ht"])
+
+
 def test_analyzes_ingredient_weights_and_nutrients_deterministically() -> None:
     analysis = analyze_recipe_payload(sample_payload())
     ingredients = {item["name"]: item for item in analysis["ingredients"]}
@@ -80,3 +89,19 @@ def test_report_food_names_come_only_from_current_recipe() -> None:
     report_names = {_cell_text(output, ref) for ref in name_cells} - {""}
     assert report_names == {"纯牛奶", "鸡蛋", "面粉", "大米", "西兰花", "猪肉", "小米", "苹果"}
     assert "豆腐" not in report_names
+
+
+def test_report_preserves_foods_when_category_exceeds_template_slots() -> None:
+    payload = sample_payload()
+    payload["days"][0]["portions"][0]["dishIngredientRows"] = [
+        {"ingredient": f"测试蔬菜{index:02d}", "amount": index, "unit": "g"}
+        for index in range(1, 27)
+    ]
+
+    output = build_report_xlsx(analyze_recipe_payload(payload))
+    overflow_names = _cell_text(output, "L20").splitlines()
+    overflow_weights = _cell_text(output, "M20").splitlines()
+
+    assert overflow_names == ["测试蔬菜25", "测试蔬菜26"]
+    assert overflow_weights == ["12.5", "13"]
+    assert _row_height(output, 20) == 22

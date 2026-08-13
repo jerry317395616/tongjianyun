@@ -233,6 +233,15 @@ def _set_cell(root: ET.Element, ref: str, value: Any) -> None:
         text.text = str(value)
 
 
+def _set_row_height(root: ET.Element, row_number: int, line_count: int) -> None:
+    ns = {"m": SHEET_NS}
+    row = root.find(f".//m:row[@r='{row_number}']", ns)
+    if row is None:
+        raise ValueError(f"模板缺少第 {row_number} 行")
+    row.set("ht", str(max(11, 11 * line_count)))
+    row.set("customHeight", "1")
+
+
 def _fmt(value: float, digits: int = 1) -> str:
     return f"{value:.{digits}f}".rstrip("0").rstrip(".")
 
@@ -276,12 +285,26 @@ def _populate_sheet(root: ET.Element, analysis: dict[str, Any]) -> None:
             by_category[category].append(item)
     for category, (start, end) in CATEGORY_ROWS.items():
         slots = [(f"{name_col}{row}", f"{weight_col}{row}") for row in range(start, end + 1) for name_col, weight_col in (("D", "E"), ("F", "G"), ("H", "I"), ("J", "K"), ("L", "M"))]
-        if len(by_category[category]) > len(slots):
-            raise ValueError(f"模板中的{category}分类只能容纳 {len(slots)} 种食物，本次食谱有 {len(by_category[category])} 种，请扩展模板后重试")
         for index, (name_cell, weight_cell) in enumerate(slots):
             item = by_category[category][index] if index < len(by_category[category]) else None
             _set_cell(root, name_cell, item["name"] if item else "")
             _set_cell(root, weight_cell, round(item["grams"], 1) if item else "")
+        overflow = by_category[category][len(slots):]
+        if overflow:
+            name_cell, weight_cell = slots[-1]
+            last_item = by_category[category][len(slots) - 1]
+            overflow_items = (last_item, *overflow)
+            _set_cell(
+                root,
+                name_cell,
+                "\n".join(item["name"] for item in overflow_items),
+            )
+            _set_cell(
+                root,
+                weight_cell,
+                "\n".join(_fmt(float(item["grams"])) for item in overflow_items),
+            )
+            _set_row_height(root, end, len(overflow_items))
 
     _set_cell(root, "N4", analysis["person_days"])
     for row, slot in zip(range(6, 11), MEAL_SLOTS):
