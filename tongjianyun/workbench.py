@@ -211,18 +211,24 @@ def get_overview() -> dict[str, Any]:
 def install() -> None:
     if not frappe.db.exists("Workspace", WORKSPACE_NAME):
         return
-    workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
-    workspace.set("sidebar_items", [])
-    for item in _sidebar_items():
-        workspace.append("sidebar_items", item)
-    workspace.set("shortcuts", [])
-    for item in _shortcuts():
-        workspace.append("shortcuts", item)
-    workspace.set("links", [])
-    for item in _workspace_links():
-        workspace.append("links", item)
-    workspace.content = json.dumps(_workspace_content(), ensure_ascii=False, separators=(",", ":"))
-    workspace.save(ignore_permissions=True)
+    previous_patch_flag = frappe.flags.in_patch
+    frappe.flags.in_patch = True
+    try:
+        workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
+        workspace.set("sidebar_items", [])
+        for item in _sidebar_items():
+            workspace.append("sidebar_items", item)
+        workspace.set("shortcuts", [])
+        for item in _shortcuts():
+            workspace.append("shortcuts", item)
+        workspace.set("links", [])
+        for item in _workspace_links():
+            workspace.append("links", item)
+        workspace.content = json.dumps(_workspace_content(), ensure_ascii=False, separators=(",", ":"))
+        workspace.save(ignore_permissions=True)
+        frappe.db.commit()
+    finally:
+        frappe.flags.in_patch = previous_patch_flag
     frappe.clear_cache()
 
 
