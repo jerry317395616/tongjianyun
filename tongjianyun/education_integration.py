@@ -213,15 +213,17 @@ def _ensure_permission(doctype: str, role: str, access: str) -> None:
 
 def remove_removed_doctypes() -> None:
     for doctype in REMOVED_DOCTYPES:
-        if not frappe.db.exists("DocType", doctype):
-            continue
-        frappe.delete_doc(
-            "DocType",
-            doctype,
-            force=True,
-            ignore_permissions=True,
-            ignore_missing=True,
-        )
+        if frappe.db.exists("DocType", doctype):
+            frappe.delete_doc(
+                "DocType",
+                doctype,
+                force=True,
+                ignore_permissions=True,
+                ignore_missing=True,
+            )
+        table_name = f"tab{doctype}"
+        if frappe.db.table_exists(table_name):
+            frappe.db.sql_ddl(f"DROP TABLE IF EXISTS `{table_name}`")
 
 
 def get_student_dashboard(data=None) -> dict:
