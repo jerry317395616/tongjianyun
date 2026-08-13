@@ -49,7 +49,7 @@ def _cell_text(xlsx: bytes, ref: str) -> str:
 def test_analyzes_ingredient_weights_and_nutrients_deterministically() -> None:
     analysis = analyze_recipe_payload(sample_payload())
     ingredients = {item["name"]: item for item in analysis["ingredients"]}
-    assert ingredients["牛奶"]["grams"] == 100
+    assert ingredients["纯牛奶"]["grams"] == 100
     assert ingredients["大米"]["grams"] == 30
     assert analysis["nutrients"]["energy"] > 0
     assert analysis["meal_ratio"]["breakfast"] > 0
@@ -68,3 +68,15 @@ def test_generates_template_preserving_xlsx_with_populated_analysis() -> None:
     ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     merges = {node.attrib["ref"] for node in root.findall(".//m:mergeCells/m:mergeCell", ns)}
     assert {"D2:M2", "P32:V37", "B4:B11"}.issubset(merges)
+
+
+def test_report_food_names_come_only_from_current_recipe() -> None:
+    output = build_report_xlsx(analyze_recipe_payload(sample_payload()))
+    name_cells = [
+        f"{column}{row}"
+        for row in range(4, 38)
+        for column in ("D", "F", "H", "J", "L")
+    ]
+    report_names = {_cell_text(output, ref) for ref in name_cells} - {""}
+    assert report_names == {"纯牛奶", "鸡蛋", "面粉", "大米", "西兰花", "猪肉", "小米", "苹果"}
+    assert "豆腐" not in report_names

@@ -100,12 +100,13 @@ def _profile(values: dict[str, float]) -> dict[str, float]:
 
 
 def classify_ingredient(name: str) -> tuple[str, str]:
-    clean = re.sub(r"[（(].*?[）)]", "", str(name or "")).strip()
-    clean = ALIASES.get(clean, clean)
+    display_name = re.sub(r"\s+", " ", str(name or "")).strip()
+    lookup_name = re.sub(r"[（(].*?[）)]", "", display_name).strip()
+    lookup_name = ALIASES.get(lookup_name, lookup_name)
     for category, words in KEYWORDS:
-        if any(word in clean for word in words):
-            return category, clean
-    return "non_green_veg", clean
+        if any(word in lookup_name for word in words):
+            return category, display_name
+    return "non_green_veg", display_name
 
 
 def _grams(row: dict[str, Any]) -> float:
@@ -275,6 +276,8 @@ def _populate_sheet(root: ET.Element, analysis: dict[str, Any]) -> None:
             by_category[category].append(item)
     for category, (start, end) in CATEGORY_ROWS.items():
         slots = [(f"{name_col}{row}", f"{weight_col}{row}") for row in range(start, end + 1) for name_col, weight_col in (("D", "E"), ("F", "G"), ("H", "I"), ("J", "K"), ("L", "M"))]
+        if len(by_category[category]) > len(slots):
+            raise ValueError(f"模板中的{category}分类只能容纳 {len(slots)} 种食物，本次食谱有 {len(by_category[category])} 种，请扩展模板后重试")
         for index, (name_cell, weight_cell) in enumerate(slots):
             item = by_category[category][index] if index < len(by_category[category]) else None
             _set_cell(root, name_cell, item["name"] if item else "")
