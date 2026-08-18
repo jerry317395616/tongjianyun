@@ -1,7 +1,16 @@
 {
  "app": "tongjianyun",
- "charts": [],
- "content": "[{\"id\":\"tjyWorkbench\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"业务工作台\",\"col\":3}},{\"id\":\"tjyAttendance\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"就餐人数\",\"col\":3}},{\"id\":\"tjyRecipe\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食谱计划\",\"col\":3}},{\"id\":\"tjyPurchase\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食安采购\",\"col\":3}},{\"id\":\"tjySpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyPlanCard\",\"type\":\"card\",\"data\":{\"card_name\":\"计划与备餐\",\"col\":4}},{\"id\":\"tjySupplyCard\",\"type\":\"card\",\"data\":{\"card_name\":\"采购与供餐\",\"col\":4}},{\"id\":\"tjyRiskCard\",\"type\":\"card\",\"data\":{\"card_name\":\"风险与复盘\",\"col\":4}}]",
+ "charts": [
+  {
+   "chart_name": "近30天就餐确认趋势",
+   "label": "近30天就餐确认趋势"
+  },
+  {
+   "chart_name": "食谱状态分布",
+   "label": "食谱状态分布"
+  }
+ ],
+ "content": "[{\"id\":\"tjyOverviewHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>今日运营</b></span>\",\"col\":12}},{\"id\":\"tjyTodayConfirmation\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"今日确认单\",\"col\":3}},{\"id\":\"tjyPendingConfirmation\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"今日待确认\",\"col\":3}},{\"id\":\"tjyActiveRecipes\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"有效食谱\",\"col\":3}},{\"id\":\"tjyMonthlyAdjustments\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"本月就餐调整\",\"col\":3}},{\"id\":\"tjyQuickSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyQuickHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>快捷入口</b></span>\",\"col\":12}},{\"id\":\"tjyWorkbench\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"业务工作台\",\"col\":4}},{\"id\":\"tjyDailyConfirmation\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"今日就餐确认\",\"col\":4}},{\"id\":\"tjyRecipe\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食谱计划\",\"col\":4}},{\"id\":\"tjyNutrition\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"周食谱营养分析\",\"col\":4}},{\"id\":\"tjyPurchase\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"食材采购\",\"col\":4}},{\"id\":\"tjyAttendance\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"月度就餐统计\",\"col\":4}},{\"id\":\"tjyChartSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyChartHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>数据趋势</b></span>\",\"col\":12}},{\"id\":\"tjyConfirmationTrend\",\"type\":\"chart\",\"data\":{\"chart_name\":\"近30天就餐确认趋势\",\"col\":6}},{\"id\":\"tjyRecipeStatus\",\"type\":\"chart\",\"data\":{\"chart_name\":\"食谱状态分布\",\"col\":6}},{\"id\":\"tjyRecentSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyRecentHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>最近业务</b></span>\",\"col\":12}},{\"id\":\"tjyRecentConfirmation\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"近期就餐确认\",\"col\":4}},{\"id\":\"tjyRecentAdjustment\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"本周就餐调整\",\"col\":4}},{\"id\":\"tjyRecentRecipe\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"最近食谱\",\"col\":4}},{\"id\":\"tjyNavSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyNavHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>功能导航</b></span>\",\"col\":12}},{\"id\":\"tjyMealCard\",\"type\":\"card\",\"data\":{\"card_name\":\"就餐管理\",\"col\":4}},{\"id\":\"tjyNutritionCard\",\"type\":\"card\",\"data\":{\"card_name\":\"膳食营养\",\"col\":4}},{\"id\":\"tjySafetyCard\",\"type\":\"card\",\"data\":{\"card_name\":\"食安执行\",\"col\":4}}]",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -9,278 +18,60 @@
  "hide_custom": 0,
  "icon": "heart",
  "idx": 0,
+ "indicator_color": "green",
  "is_hidden": 0,
  "label": "童健云",
  "links": [
-  {
-   "type": "Card Break",
-   "label": "计划与备餐",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_count": 2,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "就餐人数",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Meal Attendance",
-   "link_count": 0,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "食谱计划",
-   "hidden": 0,
-   "link_type": "Page",
-   "link_to": "tongjianyun-recipe-workbench",
-   "link_count": 0,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Card Break",
-   "label": "采购与供餐",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_count": 3,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "食安采购",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Purchase",
-   "link_count": 0,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "供应商",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Supplier",
-   "link_count": 0,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "留样记录",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Sample",
-   "link_count": 0,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Card Break",
-   "label": "风险与复盘",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_count": 1,
-   "onboard": 0,
-   "is_query_report": 0
-  },
-  {
-   "type": "Link",
-   "label": "追溯事件",
-   "hidden": 0,
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Trace Event",
-   "link_count": 0,
-   "onboard": 0,
-   "is_query_report": 0
-  }
+  {"type":"Card Break","label":"就餐管理","hidden":0,"link_type":"DocType","link_count":3,"onboard":0,"is_query_report":0},
+  {"type":"Link","label":"今日就餐确认","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Daily Meal Confirmation","link_count":0,"onboard":0,"is_query_report":0},
+  {"type":"Link","label":"就餐调整记录","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Daily Meal Adjustment","link_count":0,"onboard":0,"is_query_report":0},
+  {"type":"Link","label":"月度就餐统计","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Meal Attendance","link_count":0,"onboard":0,"is_query_report":0},
+  {"type":"Card Break","label":"膳食营养","hidden":0,"link_type":"DocType","link_count":3,"onboard":0,"is_query_report":0},
+  {"type":"Link","label":"食谱计划","hidden":0,"link_type":"Page","link_to":"tongjianyun-recipe-workbench","link_count":0,"onboard":0,"is_query_report":0},
+  {"type":"Link","label":"周食谱营养分析","hidden":0,"link_type":"Page","link_to":"weekly-recipe-nutrition-sheet","link_count":0,"onboard":0,"is_query_report":0},
+  {"type":"Link","label":"食材营养统计","hidden":0,"link_type":"Report","link_to":"Ingredient Nutrition Statistics","link_count":0,"onboard":0,"is_query_report":1},
+  {"type":"Card Break","label":"食安执行","hidden":0,"link_type":"DocType","link_count":1,"onboard":0,"is_query_report":0},
+  {"type":"Link","label":"食材采购","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Food Purchase","link_count":0,"onboard":0,"is_query_report":0}
  ],
  "module": "Tongjianyun",
  "name": "童健云",
- "number_cards": [],
+ "number_cards": [
+  {"label":"今日确认单","number_card_name":"今日确认单"},
+  {"label":"今日待确认","number_card_name":"今日待确认"},
+  {"label":"有效食谱","number_card_name":"有效食谱"},
+  {"label":"本月就餐调整","number_card_name":"本月就餐调整"}
+ ],
  "owner": "Administrator",
  "parent_page": "",
  "public": 1,
- "quick_lists": [],
+ "quick_lists": [
+  {"document_type":"Tongjianyun Daily Meal Confirmation","label":"近期就餐确认","quick_list_filter":"{\"meal_date\":[\"Timespan\",\"this week\"]}"},
+  {"document_type":"Tongjianyun Daily Meal Adjustment","label":"本周就餐调整","quick_list_filter":"{\"meal_date\":[\"Timespan\",\"this week\"]}"},
+  {"document_type":"Tongjianyun Recipe","label":"最近食谱","quick_list_filter":"{\"is_deleted\":0}"}
+ ],
  "roles": [],
  "sequence_id": 1,
  "shortcuts": [
-  {
-   "type": "Page",
-   "link_to": "tongjianyun-workbench",
-   "doc_view": "",
-   "label": "业务工作台",
-   "color": "Green",
-   "stats_filter": "[]"
-  },
-  {
-   "type": "DocType",
-   "link_to": "Tongjianyun Meal Attendance",
-   "doc_view": "List",
-   "label": "就餐人数",
-   "color": "Blue",
-   "stats_filter": "[]"
-  },
-  {
-   "type": "Page",
-   "link_to": "tongjianyun-recipe-workbench",
-   "doc_view": "",
-   "label": "食谱计划",
-   "color": "Green",
-   "stats_filter": "[]"
-  },
-  {
-   "type": "DocType",
-   "link_to": "Tongjianyun Food Purchase",
-   "doc_view": "List",
-   "label": "食安采购",
-   "color": "Orange",
-   "stats_filter": "[]"
-  }
+  {"type":"Page","link_to":"tongjianyun-workbench","doc_view":"","label":"业务工作台","color":"Green","stats_filter":"[]"},
+  {"type":"DocType","link_to":"Tongjianyun Daily Meal Confirmation","doc_view":"List","label":"今日就餐确认","color":"Blue","stats_filter":"[]"},
+  {"type":"Page","link_to":"tongjianyun-recipe-workbench","doc_view":"","label":"食谱计划","color":"Green","stats_filter":"[]"},
+  {"type":"Page","link_to":"weekly-recipe-nutrition-sheet","doc_view":"","label":"周食谱营养分析","color":"Purple","stats_filter":"[]"},
+  {"type":"DocType","link_to":"Tongjianyun Food Purchase","doc_view":"List","label":"食材采购","color":"Orange","stats_filter":"[]"},
+  {"type":"DocType","link_to":"Tongjianyun Meal Attendance","doc_view":"List","label":"月度就餐统计","color":"Cyan","stats_filter":"[]"}
  ],
  "sidebar_items": [
-  {
-   "type": "Link",
-   "label": "业务工作台",
-   "link_type": "Page",
-   "link_to": "tongjianyun-workbench",
-   "icon": "layout-dashboard",
-   "default_workspace": 1,
-   "child": 0,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
-  {
-   "type": "Section Break",
-   "label": "计划与备餐",
-   "link_type": "DocType",
-   "icon": "calendar-range",
-   "default_workspace": 0,
-   "child": 0,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 1,
-   "keep_closed": 0,
-   "show_arrow": 1
-  },
-  {
-   "type": "Link",
-   "label": "就餐人数",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Meal Attendance",
-   "icon": "",
-   "default_workspace": 0,
-   "child": 1,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
-  {
-   "type": "Link",
-   "label": "食谱计划",
-   "link_type": "Page",
-   "link_to": "tongjianyun-recipe-workbench",
-   "icon": "",
-   "default_workspace": 0,
-   "child": 1,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
-  {
-   "type": "Section Break",
-   "label": "采购与供餐",
-   "link_type": "DocType",
-   "icon": "shopping-basket",
-   "default_workspace": 0,
-   "child": 0,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 1,
-   "keep_closed": 0,
-   "show_arrow": 1
-  },
-  {
-   "type": "Link",
-   "label": "食安采购",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Purchase",
-   "icon": "",
-   "default_workspace": 0,
-   "child": 1,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
-  {
-   "type": "Link",
-   "label": "供应商",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Supplier",
-   "icon": "",
-   "default_workspace": 0,
-   "child": 1,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
-  {
-   "type": "Link",
-   "label": "留样记录",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Sample",
-   "icon": "",
-   "default_workspace": 0,
-   "child": 1,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  },
-  {
-   "type": "Section Break",
-   "label": "风险与复盘",
-   "link_type": "DocType",
-   "icon": "shield-alert",
-   "default_workspace": 0,
-   "child": 0,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 1,
-   "keep_closed": 0,
-   "show_arrow": 1
-  },
-  {
-   "type": "Link",
-   "label": "追溯事件",
-   "link_type": "DocType",
-   "link_to": "Tongjianyun Food Trace Event",
-   "icon": "",
-   "default_workspace": 0,
-   "child": 1,
-   "open_in_new_tab": 0,
-   "collapsible": 1,
-   "indent": 0,
-   "keep_closed": 0,
-   "show_arrow": 0
-  }
+  {"type":"Link","label":"首页","link_type":"Workspace","link_to":"童健云","icon":"home","default_workspace":1,"child":0,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Link","label":"业务工作台","link_type":"Page","link_to":"tongjianyun-workbench","icon":"layout-dashboard","default_workspace":0,"child":0,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Section Break","label":"就餐管理","link_type":"DocType","icon":"calendar-check","default_workspace":0,"child":0,"open_in_new_tab":0,"collapsible":1,"indent":1,"keep_closed":0,"show_arrow":1},
+  {"type":"Link","label":"今日就餐确认","link_type":"DocType","link_to":"Tongjianyun Daily Meal Confirmation","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Link","label":"就餐调整记录","link_type":"DocType","link_to":"Tongjianyun Daily Meal Adjustment","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Link","label":"月度就餐统计","link_type":"DocType","link_to":"Tongjianyun Meal Attendance","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Section Break","label":"膳食营养","link_type":"DocType","icon":"salad","default_workspace":0,"child":0,"open_in_new_tab":0,"collapsible":1,"indent":1,"keep_closed":0,"show_arrow":1},
+  {"type":"Link","label":"食谱计划","link_type":"Page","link_to":"tongjianyun-recipe-workbench","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Link","label":"周食谱营养分析","link_type":"Page","link_to":"weekly-recipe-nutrition-sheet","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Link","label":"食材营养统计","link_type":"Report","link_to":"Ingredient Nutrition Statistics","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Section Break","label":"食安执行","link_type":"DocType","icon":"shield-check","default_workspace":0,"child":0,"open_in_new_tab":0,"collapsible":1,"indent":1,"keep_closed":0,"show_arrow":1},
+  {"type":"Link","label":"食材采购","link_type":"DocType","link_to":"Tongjianyun Food Purchase","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0}
  ],
  "standard": 1,
  "title": "童健云",

@@ -1,0 +1,22 @@
+{
+ "chart_name": "食谱状态分布",
+ "chart_type": "Group By",
+ "custom_options": "{\"height\":260,\"truncateLegends\":1,\"maxSlices\":6}",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "document_type": "Tongjianyun Recipe",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Tongjianyun Recipe\",\"is_deleted\",\"=\",0]]",
+ "group_by_based_on": "workflow_status",
+ "group_by_type": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "module": "Tongjianyun",
+ "name": "食谱状态分布",
+ "number_of_groups": 0,
+ "owner": "Administrator",
+ "timeseries": 0,
+ "type": "Donut",
+ "use_report_chart": 0
+}

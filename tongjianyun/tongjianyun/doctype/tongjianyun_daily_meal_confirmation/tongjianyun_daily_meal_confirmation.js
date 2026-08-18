@@ -11,7 +11,7 @@ frappe.ui.form.on("Tongjianyun Daily Meal Confirmation", {
                 type: "POST",
                 args: { name: frm.doc.name },
                 freeze: true,
-                freeze_message: "正在汇总班级、考勤、请假和特殊膳食数据…",
+                freeze_message: "正在汇总班级、考勤和请假数据…",
             });
             frm.sync(response.message);
             frm.refresh();

@@ -1,0 +1,28 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2026-08-17 21:40:00.000000",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 0,
+ "is_standard": "Yes",
+ "modified": "2026-08-17 21:40:00.000000",
+ "modified_by": "Administrator",
+ "module": "Tongjianyun",
+ "name": "Weekly Recipe Nutrition Analysis",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Tongjianyun Recipe",
+ "report_name": "Weekly Recipe Nutrition Analysis",
+ "report_type": "Script Report",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Tongjianyun Administrator"},
+  {"role": "Tongjianyun Director"},
+  {"role": "Tongjianyun Nutrition"}
+ ],
+ "timeout": 0
+}

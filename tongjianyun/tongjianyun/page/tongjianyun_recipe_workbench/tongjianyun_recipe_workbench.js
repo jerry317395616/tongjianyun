@@ -274,7 +274,6 @@ class TongjianyunRecipePage {
                         </div>
                     </div>
                     <div class="tjy-hero-actions">
-                        <button class="tjy-outline-button" data-action="scope">适用班级：${escapeHtml(formatStudentGroupScope(payload.recipe))}</button>
                         <select class="tjy-status-select" data-workflow-status aria-label="食谱状态">
                             ${["草稿", "待审核", "已发布", "已归档"].map((status) => `<option ${status === (payload.recipe.workflowStatus || "草稿") ? "selected" : ""}>${status}</option>`).join("")}
                         </select>
@@ -361,7 +360,6 @@ class TongjianyunRecipePage {
 
     bindEditorActions(day, portion, selectedDish) {
         this.bindCommonActions();
-        this.main.find('[data-action="scope"]').on("click", () => this.openStudentGroupDialog());
         this.main.find("[data-day-tab]").on("click", (event) => {
             this.captureEditor(day, portion, selectedDish);
             this.state.activeDay = Number($(event.currentTarget).attr("data-day-tab"));
@@ -461,50 +459,6 @@ class TongjianyunRecipePage {
         });
     }
 
-    openStudentGroupDialog() {
-        const recipe = this.state.payload.recipe;
-        const dialog = new frappe.ui.Dialog({
-            title: "设置适用班级",
-            fields: [
-                {
-                    fieldname: "all_student_groups",
-                    fieldtype: "Check",
-                    label: "适用全部班级",
-                    default: recipe.allStudentGroups === false ? 0 : 1,
-                },
-                {
-                    fieldname: "student_groups",
-                    fieldtype: "MultiSelectList",
-                    label: "指定班级",
-                    depends_on: "eval:!doc.all_student_groups",
-                    default: recipe.studentGroups || [],
-                    get_data: async (text) => {
-                        const rows = await frappe.db.get_list("Student Group", {
-                            fields: ["name", "student_group_name"],
-                            filters: text ? [["name", "like", `%${text}%`]] : [],
-                            order_by: "student_group_name asc",
-                            limit: 50,
-                        });
-                        return rows.map((row) => ({ value: row.name, description: row.student_group_name || row.name }));
-                    },
-                },
-            ],
-            primary_action_label: "确定",
-            primary_action: (values) => {
-                const groups = Array.isArray(values.student_groups) ? values.student_groups : [];
-                if (!values.all_student_groups && !groups.length) {
-                    frappe.msgprint("请选择至少一个适用班级。");
-                    return;
-                }
-                recipe.allStudentGroups = Boolean(values.all_student_groups);
-                recipe.studentGroups = recipe.allStudentGroups ? [] : groups;
-                dialog.hide();
-                this.renderEditor();
-            },
-        });
-        dialog.show();
-    }
-
     async saveRecipe() {
         const day = this.state.payload.days[this.state.activeDay];
         const portion = ensurePortion(day, this.state.activeSlot);
@@ -572,6 +526,7 @@ class TongjianyunRecipePage {
                 <header class="tjy-library-head">
                     <div><div class="tjy-eyebrow">童健云</div><h1>食谱计划</h1><p>创建、审核和管理每周食谱</p></div>
                     <div class="tjy-create-wrap">
+                        <button class="tjy-outline-button" data-action="nutrition-report">${frappe.utils.icon("chart", "sm")}<span>营养分析报表</span></button>
                         <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入文件</span></button>
                         <button class="tjy-outline-button" data-action="copy-latest">${frappe.utils.icon("duplicate", "sm")}<span>复制上一周</span></button>
                         <button class="tjy-primary-button" data-action="new">＋ 空白新建</button>
@@ -589,7 +544,7 @@ class TongjianyunRecipePage {
                 </div>
                 <div class="tjy-library-table-wrap">
                     <table class="tjy-library-table">
-                        <thead><tr><th class="tjy-select-cell"><input type="checkbox" data-select-all aria-label="全选可删除食谱"></th><th>食谱</th><th>日期范围</th><th>状态</th><th>适用班级</th><th>菜品</th><th>食材明细</th><th>最后更新</th><th></th></tr></thead>
+                        <thead><tr><th class="tjy-select-cell"><input type="checkbox" data-select-all aria-label="全选可删除食谱"></th><th>食谱</th><th>日期范围</th><th>状态</th><th>菜品</th><th>食材明细</th><th>最后更新</th><th></th></tr></thead>
                         <tbody>
                             ${items.length ? items.map((item) => `
                                 <tr data-library-recipe="${escapeAttr(item.name)}">
@@ -597,7 +552,6 @@ class TongjianyunRecipePage {
                                     <td><strong>${escapeHtml(item.title || "未命名食谱")}</strong><span>${escapeHtml(item.recipe_id || "")}</span></td>
                                     <td>${formatDateRange(item.week_start, item.week_end)}</td>
                                     <td><span class="tjy-status ${item.status}">${escapeHtml(item.display_status || item.workflow_status || "草稿")}</span></td>
-                                    <td class="tjy-groups-cell">${renderStudentGroups(item.student_groups)}</td>
                                     <td>${item.dish_count || 0}</td>
                                     <td>${item.ingredient_count || 0}</td>
                                     <td>${frappe.datetime.prettyDate(item.modified)}</td>
@@ -612,13 +566,14 @@ class TongjianyunRecipePage {
                                         </div>
                                     </td>
                                 </tr>
-                            `).join("") : '<tr><td colspan="9"><div class="tjy-empty-panel"><strong>暂无匹配的食谱</strong><span>请调整搜索或状态筛选，也可新建、导入食谱</span></div></td></tr>'}
+                            `).join("") : '<tr><td colspan="8"><div class="tjy-empty-panel"><strong>暂无匹配的食谱</strong><span>请调整搜索或状态筛选，也可新建、导入食谱</span></div></td></tr>'}
                         </tbody>
                     </table>
                 </div>
             </section>
         `);
         this.main.find('[data-action="new"]').on("click", () => this.createRecipe());
+        this.main.find('[data-action="nutrition-report"]').on("click", () => this.openNutritionReport());
         this.main.find('[data-action="import"]').on("click", () => this.openImport());
         this.main.find('[data-action="copy-latest"]').on("click", () => this.copyLatestRecipe());
         this.main.find('[data-action="bulk-delete"]').on("click", () => this.bulkDeleteRecipes());
@@ -673,6 +628,12 @@ class TongjianyunRecipePage {
             this.state.recycleBin = this.state.libraryStatus === "回收站";
             this.showLibrary();
         });
+    }
+
+    openNutritionReport() {
+        const recipe = this.state.selectedRecipe || this.state.library?.[0]?.name;
+        frappe.route_options = recipe ? { recipe } : null;
+        frappe.set_route("weekly-recipe-nutrition-sheet");
     }
 
     async handleRecipeAction(recipe, action) {
@@ -763,8 +724,6 @@ class TongjianyunRecipePage {
                 weekStart: start,
                 weekEnd: frappe.datetime.add_days(start, 4),
                 workflowStatus: "草稿",
-                allStudentGroups: true,
-                studentGroups: [],
             },
             days: Array.from({ length: 5 }, (_, index) => ({
                 id: `DAY-${index + 1}`,
@@ -819,7 +778,156 @@ class TongjianyunRecipePage {
     }
 
     openImport() {
-        frappe.set_route("data-import", "Tongjianyun Recipe");
+        const dialog = new frappe.ui.Dialog({
+            title: "I-ONE Agent 导入食谱",
+            size: "large",
+            fields: [
+                {
+                    fieldname: "import_help",
+                    fieldtype: "HTML",
+                    options: `
+                        <div class="alert alert-info" style="margin-bottom: 12px;">
+                            上传幼儿园周食谱 Excel。I-ONE Agent 会识别合并单元格、餐次、菜品、食材和每生带量，
+                            识别结果将先进入草稿编辑页，由您校对后再保存。
+                        </div>
+                    `,
+                },
+                {
+                    fieldname: "recipe_file",
+                    fieldtype: "Attach",
+                    label: "食谱文件（.xlsx）",
+                    reqd: 1,
+                    options: {
+                        restrictions: {
+                            allowed_file_types: [".xlsx"],
+                            max_file_size: 10 * 1024 * 1024,
+                        },
+                    },
+                },
+                {
+                    fieldname: "import_status",
+                    fieldtype: "HTML",
+                },
+            ],
+            primary_action_label: "开始识别",
+            primary_action: async () => {
+                const fileUrl = String(dialog.get_value("recipe_file") || "").trim();
+                if (!fileUrl) {
+                    frappe.msgprint("请先上传 .xlsx 食谱文件。");
+                    return;
+                }
+                if (!fileUrl.toLowerCase().endsWith(".xlsx")) {
+                    frappe.msgprint("目前仅支持 .xlsx 食谱文件。");
+                    return;
+                }
+
+                const button = dialog.get_primary_btn();
+                button.prop("disabled", true).text("正在提交...");
+                dialog.__recipeImportPolling = true;
+                this.updateImportStatus(dialog, {
+                    progress: 2,
+                    message: "正在创建 I-ONE Agent 识别任务...",
+                });
+                try {
+                    const response = await frappe.call({
+                        method: "tongjianyun.recipe_import.start_recipe_import",
+                        args: { file_url: fileUrl },
+                    });
+                    const importId = response.message?.import_id;
+                    if (!importId) throw new Error("服务器未返回导入任务编号。");
+
+                    while (dialog.__recipeImportPolling) {
+                        await new Promise((resolve) => setTimeout(resolve, 1400));
+                        const statusResponse = await frappe.call({
+                            method: "tongjianyun.recipe_import.get_recipe_import_status",
+                            args: { import_id: importId },
+                        });
+                        const status = statusResponse.message || {};
+                        this.updateImportStatus(dialog, status);
+                        if (status.status === "failed") {
+                            throw new Error(status.message || "识别失败，请重试。");
+                        }
+                        if (status.status !== "completed") continue;
+
+                        const result = status.result || {};
+                        if (!result.payload) throw new Error("识别结果为空，请重试。");
+                        dialog.__recipeImportPolling = false;
+                        this.state.payload = normalizePayload(result.payload);
+                        this.state.selectedRecipe = null;
+                        this.state.activeDay = 0;
+                        this.state.activeSlot = "breakfast";
+                        this.state.activeDish = 0;
+                        dialog.hide();
+                        this.enterEdit();
+
+                        const summary = result.summary || {};
+                        frappe.show_alert({
+                            message: `识别完成：${summary.day_count || 0} 天、${summary.dish_count || 0} 个菜品，请校对后保存`,
+                            indicator: "green",
+                        }, 8);
+                        const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+                        if (warnings.length) {
+                            const escape = frappe.utils.escape_html;
+                            frappe.msgprint({
+                                title: `导入提醒（${warnings.length} 项）`,
+                                indicator: "orange",
+                                message: warnings.slice(0, 20).map((item) => `• ${escape(String(item))}`).join("<br>"),
+                            });
+                        }
+                        return;
+                    }
+                } catch (error) {
+                    dialog.__recipeImportPolling = false;
+                    this.updateImportStatus(dialog, {
+                        status: "failed",
+                        progress: 100,
+                        message: error?.message || "识别失败，请检查文件后重试。",
+                    });
+                    button.prop("disabled", false).text("重新识别");
+                }
+            },
+        });
+        dialog.$wrapper.on("hidden.bs.modal", () => {
+            dialog.__recipeImportPolling = false;
+        });
+        dialog.show();
+        this.updateImportStatus(dialog, {
+            progress: 0,
+            message: "等待上传文件。原表内容仅作为待识别数据处理。",
+        });
+    }
+
+    updateImportStatus(dialog, status) {
+        const progress = Math.max(0, Math.min(100, Number(status.progress || 0)));
+        const failed = status.status === "failed";
+        const completed = status.status === "completed";
+        const color = failed ? "#c92a2a" : (completed ? "#2b8a3e" : "#228be6");
+        const wrapper = dialog.fields_dict.import_status.$wrapper.empty();
+        const card = $("<div>").css({
+            border: "1px solid var(--border-color)",
+            borderRadius: "8px",
+            padding: "12px 14px",
+            marginTop: "10px",
+            background: "var(--subtle-fg)",
+        }).appendTo(wrapper);
+        $("<div>").css({ fontWeight: 600, marginBottom: "8px" })
+            .text(status.message || "正在处理...")
+            .appendTo(card);
+        const track = $("<div>").css({
+            height: "8px",
+            borderRadius: "999px",
+            overflow: "hidden",
+            background: "var(--gray-200)",
+        }).appendTo(card);
+        $("<div>").css({
+            height: "100%",
+            width: `${progress}%`,
+            transition: "width .25s ease",
+            background: color,
+        }).appendTo(track);
+        $("<div>").css({ marginTop: "6px", color: "var(--text-muted)", fontSize: "12px" })
+            .text(`${progress}%`)
+            .appendTo(card);
     }
 
     openAdjacentRecipe(direction) {
@@ -860,8 +968,6 @@ function normalizePayload(payload) {
     const result = payload && typeof payload === "object" ? JSON.parse(JSON.stringify(payload)) : {};
     result.recipe = result.recipe || {};
     result.recipe.workflowStatus = result.recipe.workflowStatus || "草稿";
-    result.recipe.allStudentGroups = result.recipe.allStudentGroups !== false;
-    result.recipe.studentGroups = Array.isArray(result.recipe.studentGroups) ? result.recipe.studentGroups : [];
     result.days = Array.isArray(result.days) ? result.days : [];
     result.days.forEach((day, index) => {
         day.id = day.id || `DAY-${index + 1}`;
@@ -877,20 +983,6 @@ function normalizePayload(payload) {
 
 function recipeStatusClass(status) {
     return { "草稿": "draft", "待审核": "review", "已发布": "published", "已归档": "archived" }[status] || "draft";
-}
-
-function formatStudentGroupScope(recipe) {
-    if (recipe?.allStudentGroups !== false) return "全部班级";
-    const groups = recipe?.studentGroups || [];
-    return groups.length ? `${groups.length} 个班级` : "未设置";
-}
-
-function renderStudentGroups(groups) {
-    const values = Array.isArray(groups) ? groups.filter(Boolean) : [];
-    if (!values.length) return '<span class="tjy-muted-value">未设置</span>';
-    if (values[0] === "全部班级") return '<span class="tjy-scope-pill">全部班级</span>';
-    const visible = values.slice(0, 2).map((value) => `<span class="tjy-scope-pill">${escapeHtml(value)}</span>`).join("");
-    return `${visible}${values.length > 2 ? `<span class="tjy-scope-more">+${values.length - 2}</span>` : ""}`;
 }
 
 function ensurePortion(day, slot) {
@@ -1059,7 +1151,7 @@ function renderRecipeActions(item, options = {}) {
 
 const RECIPE_STYLES = `
 .tjy-bulk-delete{height:34px;padding:0 12px;border:1px solid #e2b8b4;border-radius:7px;background:#fff;color:#b42318}.tjy-bulk-delete:disabled{border-color:#e4e4e2;color:#aaa;cursor:not-allowed}.tjy-select-cell{width:42px!important;text-align:center!important;padding-left:12px!important;padding-right:6px!important}.tjy-select-cell input{width:16px;height:16px;accent-color:#202123}
-.tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-clean-test-button{border:0;background:transparent;color:#b42318;font-size:12px}.tjy-groups-cell{max-width:230px}.tjy-scope-pill{display:inline-flex;align-items:center;max-width:100px;padding:3px 8px;margin:2px 4px 2px 0;border-radius:999px;background:#f1f2f0;color:#555;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tjy-scope-more,.tjy-muted-value{font-size:12px;color:#6f7073}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status.deleted{background:#fce8e6;color:#b42318}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}.tjy-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;white-space:nowrap}.tjy-row-delete{border:0;background:transparent;color:#b42318;padding:0;cursor:pointer}.tjy-row-delete:hover{text-decoration:underline}.tjy-action-menu-wrap{position:relative}.tjy-row-more{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#555;font-weight:700}.tjy-row-more:hover{background:#f1f1ef}.tjy-action-menu{display:none;position:absolute;z-index:20;right:0;top:34px;min-width:150px;padding:5px;background:#fff;border:1px solid #dededb;border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.13)}.tjy-action-menu.open{display:block}.tjy-action-menu button,.tjy-action-disabled{display:block;width:100%;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px;color:#202123;white-space:nowrap}.tjy-action-menu button:hover{background:#f4f4f2}.tjy-action-menu button.danger{color:#b42318}.tjy-action-disabled{color:#8a8a8a;font-size:11px;white-space:normal}
+.tjy-create-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tjy-library-filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end}.tjy-status-tabs{display:flex;gap:3px;padding:3px;border:1px solid #e4e4e2;border-radius:9px;background:#f7f7f5}.tjy-status-tabs button{border:0;background:transparent;color:#6f7073;height:30px;padding:0 11px;border-radius:6px}.tjy-status-tabs button.active{background:#fff;color:#202123;box-shadow:0 1px 2px rgba(0,0,0,.08)}.tjy-test-toggle{display:flex;align-items:center;gap:5px;font-weight:400;margin:0;white-space:nowrap}.tjy-clean-test-button{border:0;background:transparent;color:#b42318;font-size:12px}.tjy-status.review{background:#fff3d6;color:#8a5a00}.tjy-status.published{background:#e8f6ed;color:#18733c}.tjy-status.archived{background:#ececec;color:#616161}.tjy-status.deleted{background:#fce8e6;color:#b42318}.tjy-status-select{height:38px;border:1px solid #e4e4e2;border-radius:7px;background:#fff;padding:0 28px 0 10px;color:#202123}.tjy-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;white-space:nowrap}.tjy-row-delete{border:0;background:transparent;color:#b42318;padding:0;cursor:pointer}.tjy-row-delete:hover{text-decoration:underline}.tjy-action-menu-wrap{position:relative}.tjy-row-more{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#555;font-weight:700}.tjy-row-more:hover{background:#f1f1ef}.tjy-action-menu{display:none;position:absolute;z-index:20;right:0;top:34px;min-width:150px;padding:5px;background:#fff;border:1px solid #dededb;border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.13)}.tjy-action-menu.open{display:block}.tjy-action-menu button,.tjy-action-disabled{display:block;width:100%;border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:6px;color:#202123;white-space:nowrap}.tjy-action-menu button:hover{background:#f4f4f2}.tjy-action-menu button.danger{color:#b42318}.tjy-action-disabled{color:#8a8a8a;font-size:11px;white-space:normal}
 .tjy-recipe-app{--tjy-ink:#202123;--tjy-muted:#6f7073;--tjy-line:#e4e4e2;--tjy-soft:#f7f7f5;--tjy-green:#23884b;width:100%;max-width:none;margin:0;padding:18px 24px 52px;color:var(--tjy-ink)}
 body:has(.tjy-recipe-app) .layout-main-section{background:#fff}body:has(.tjy-recipe-app) .page-body{background:#fff}
 body:has(.tjy-recipe-app) .page-head .page-title .title-text{font-weight:500}.tjy-screen button{font-family:inherit}

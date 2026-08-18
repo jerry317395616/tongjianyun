@@ -9,7 +9,7 @@ required_apps = ["education"]
 
 app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260813-3"]
+app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260818-remove-food-trace-event-1"]
 
 add_to_apps_screen = [
     {
@@ -33,11 +33,13 @@ override_doctype_class = {
     "Student": "tongjianyun.education_integration.TongjianyunStudent",
 }
 
-override_doctype_dashboards = {
-    "Student": "tongjianyun.education_integration.get_student_dashboard",
-}
-
 doc_events = {
+    "Student": {
+        "after_delete": "tongjianyun.education_data_notifications.notify_missing_education_data",
+    },
+    "Student Group": {
+        "after_delete": "tongjianyun.education_data_notifications.notify_missing_education_data",
+    },
     "Student Attendance": {
         "after_insert": "tongjianyun.daily_meals.refresh_confirmation_from_event",
         "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_event",
@@ -55,13 +57,11 @@ doc_events = {
         "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
         "on_trash": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
     },
-    "Tongjianyun Special Diet": {
-        "after_insert": "tongjianyun.daily_meals.refresh_confirmation_from_special_diet",
-        "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_special_diet",
-        "on_trash": "tongjianyun.daily_meals.refresh_confirmation_from_special_diet",
-    },
 }
 
 scheduler_events = {
-    "daily": ["tongjianyun.daily_meals.prepare_today_confirmation"],
+    "daily": [
+        "tongjianyun.daily_meals.prepare_today_confirmation",
+        "tongjianyun.education_data_notifications.notify_missing_education_data",
+    ],
 }

@@ -13,7 +13,6 @@ class TongjianyunDailyMealConfirmation(Document):
             "enrolled_count",
             "absent_count",
             "leave_count",
-            "special_diet_count",
             "breakfast_count",
             "morning_snack_count",
             "lunch_count",

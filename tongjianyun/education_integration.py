@@ -15,6 +15,13 @@ REMOVED_DOCTYPES = (
     "Tongjianyun Food Category Mapping",
     "Tongjianyun Nutrition Standard",
     "Tongjianyun Class Meal Setting",
+    "Tongjianyun Special Diet",
+    "Tongjianyun Growth Measurement",
+    "Tongjianyun Child Health Profile",
+    "Tongjianyun Food Sample",
+    "Tongjianyun Food Supplier",
+    "Tongjianyun Food Trace Event",
+    "Tongjianyun Meal Nutrition",
 )
 
 ROLE_PERMISSIONS = {
@@ -71,27 +78,14 @@ ROLE_PERMISSIONS = {
 
 TONGJIANYUN_ROLE_PERMISSIONS = {
     "Tongjianyun Director": {
-        "Tongjianyun Child Health Profile": "r",
-        "Tongjianyun Growth Measurement": "r",
-        "Tongjianyun Special Diet": "r",
         "Tongjianyun Daily Meal Confirmation": "r",
         "Tongjianyun Daily Meal Adjustment": "r",
         "Tongjianyun Recipe": "r",
         "Tongjianyun Recipe Dish": "r",
         "Tongjianyun Recipe Ingredient": "r",
         "Tongjianyun Food Purchase": "r",
-        "Tongjianyun Food Supplier": "r",
-        "Tongjianyun Food Sample": "r",
-        "Tongjianyun Food Trace Event": "r",
-    },
-    "Tongjianyun Health": {
-        "Tongjianyun Child Health Profile": "rwcd",
-        "Tongjianyun Growth Measurement": "rwcd",
-        "Tongjianyun Special Diet": "rwcd",
     },
     "Tongjianyun Nutrition": {
-        "Tongjianyun Child Health Profile": "r",
-        "Tongjianyun Special Diet": "rwc",
         "Tongjianyun Daily Meal Confirmation": "rwc",
         "Tongjianyun Daily Meal Adjustment": "rwc",
         "Tongjianyun Recipe": "rwcd",
@@ -99,22 +93,16 @@ TONGJIANYUN_ROLE_PERMISSIONS = {
         "Tongjianyun Recipe Ingredient": "rwcd",
     },
     "Tongjianyun Kitchen": {
-        "Tongjianyun Special Diet": "r",
         "Tongjianyun Daily Meal Confirmation": "r",
         "Tongjianyun Recipe": "r",
         "Tongjianyun Recipe Dish": "r",
         "Tongjianyun Recipe Ingredient": "r",
-        "Tongjianyun Food Sample": "rwc",
     },
     "Tongjianyun Procurement": {
         "Tongjianyun Food Purchase": "rwcd",
-        "Tongjianyun Food Supplier": "rwcd",
     },
     "Tongjianyun Food Safety": {
         "Tongjianyun Food Purchase": "r",
-        "Tongjianyun Food Supplier": "r",
-        "Tongjianyun Food Sample": "rwcd",
-        "Tongjianyun Food Trace Event": "rwcd",
     },
 }
 
@@ -223,20 +211,3 @@ def remove_removed_doctypes() -> None:
             )
         if frappe.db.table_exists(doctype, cached=False):
             frappe.db.sql_ddl(f"DROP TABLE IF EXISTS `tab{doctype}`")
-
-
-def get_student_dashboard(data=None) -> dict:
-    data = data or {"fieldname": "student", "transactions": []}
-    data.setdefault("fieldname", "student")
-    data.setdefault("transactions", [])
-    data["transactions"].append(
-        {
-            "label": "童健云健康",
-            "items": [
-                "Tongjianyun Child Health Profile",
-                "Tongjianyun Growth Measurement",
-                "Tongjianyun Special Diet",
-            ],
-        }
-    )
-    return data

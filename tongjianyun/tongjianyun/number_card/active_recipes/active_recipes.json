@@ -1,0 +1,21 @@
+{
+ "aggregate_function_based_on": "",
+ "currency": "",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "Tongjianyun Recipe",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Tongjianyun Recipe\",\"is_deleted\",\"=\",0]]",
+ "function": "Count",
+ "idx": 0,
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "有效食谱",
+ "module": "Tongjianyun",
+ "name": "有效食谱",
+ "owner": "Administrator",
+ "show_full_number": 1,
+ "show_percentage_stats": 0,
+ "stats_time_interval": "Weekly",
+ "type": "Document Type"
+}

@@ -12,13 +12,9 @@ from frappe.utils import cint, flt, now_datetime, nowdate
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
 DISH_DOCTYPE = "Tongjianyun Recipe Dish"
 INGREDIENT_DOCTYPE = "Tongjianyun Recipe Ingredient"
-LEGACY_DOCTYPE = "Tongjianyun Meal Nutrition"
 
 RECIPE_EXECUTION_DOCTYPES = (
     ("Tongjianyun Food Purchase", "食安采购"),
-    ("Tongjianyun Meal Nutrition", "营养分析"),
-    ("Tongjianyun Food Sample", "留样记录"),
-    ("Tongjianyun Food Trace Event", "追溯事件"),
 )
 
 MEAL_SLOTS = ("breakfast", "morningSnack", "lunch", "snack", "dinner")
@@ -185,7 +181,6 @@ def _move_recipe_to_recycle_bin(doc) -> None:
 
 
 def _recipe_payload(doc) -> dict[str, Any]:
-    student_groups = [row.student_group for row in (doc.applicable_student_groups or []) if row.student_group]
     return {
         "recipeId": doc.recipe_id,
         "title": doc.title or "",
@@ -196,8 +191,6 @@ def _recipe_payload(doc) -> dict[str, Any]:
         "relationSource": doc.relation_source or "",
         "importedAt": str(doc.imported_at or ""),
         "workflowStatus": doc.workflow_status or "草稿",
-        "allStudentGroups": bool(doc.all_student_groups),
-        "studentGroups": student_groups,
         "isDeleted": bool(doc.is_deleted),
     }
 
@@ -221,13 +214,6 @@ def _save_current_recipe(payload: Any, *, commit: bool) -> dict[str, Any]:
     recipe.relation_source = _clean(recipe_data.get("relationSource"))[:140]
     recipe.imported_at = recipe_data.get("importedAt") or now_datetime()
     recipe.workflow_status = _clean(recipe_data.get("workflowStatus")) or "草稿"
-    all_student_groups = recipe_data.get("allStudentGroups")
-    recipe.all_student_groups = 1 if all_student_groups is None else cint(all_student_groups)
-    recipe.set("applicable_student_groups", [])
-    if not recipe.all_student_groups:
-        for student_group in dict.fromkeys(_clean(value) for value in _as_list(recipe_data.get("studentGroups"))):
-            if student_group:
-                recipe.append("applicable_student_groups", {"student_group": student_group})
     _save_doc(recipe)
 
     _delete_recipe_rows(recipe.name)
@@ -510,7 +496,6 @@ def get_recipe_library(
             "modified",
             "modified_by",
             "workflow_status",
-            "all_student_groups",
             "is_deleted",
             "status_before_delete",
             "deleted_at",
@@ -560,16 +545,6 @@ def get_recipe_library(
         item["display_status"] = "回收站" if item.get("is_deleted") else item["workflow_status"]
         if item.get("is_deleted"):
             item["status"] = "deleted"
-        item["student_groups"] = (
-            ["全部班级"]
-            if item.get("all_student_groups")
-            else frappe.get_all(
-                "Tongjianyun Recipe Student Group",
-                filters={"parent": row.name, "parenttype": RECIPE_DOCTYPE},
-                pluck="student_group",
-                order_by="idx asc",
-            )
-        )
         item["actions"] = _recipe_actions(recipe_doc, links)
         items.append(item)
 
@@ -705,43 +680,7 @@ def delete_current_recipe() -> dict[str, int]:
     return {"deleted": 0, "moved_to_recycle_bin": len(names)}
 
 
-def migrate_legacy_current_recipe() -> dict[str, int]:
-    if frappe.db.exists(RECIPE_DOCTYPE, {"recipe_id": "current"}):
-        return {"migrated": 0}
-    if not frappe.db.table_exists(LEGACY_DOCTYPE):
-        return {"migrated": 0}
-    legacy_name = frappe.db.exists(LEGACY_DOCTYPE, {"data_key": "meal_draft::current"})
-    if not legacy_name:
-        return {"migrated": 0}
-    legacy = frappe.get_doc(LEGACY_DOCTYPE, legacy_name)
-    try:
-        result = json.loads(legacy.record_json or "{}")
-    except Exception:
-        return {"migrated": 0}
-    config = _as_dict(result.get("config"))
-    summary = _as_dict(result.get("summary"))
-    days = _as_list(result.get("mealPlan"))
-    if not days:
-        return {"migrated": 0}
-    _save_current_recipe(
-        {
-            "recipe": {
-                "recipeId": "current",
-                "title": summary.get("cycle") or "\u5f53\u524d\u5468\u98df\u8c31",
-                "weekStart": config.get("weekStart"),
-                "weekEnd": config.get("weekEnd"),
-                "relationSource": "legacy-migration",
-            },
-            "days": days,
-        },
-        commit=False,
-    )
-    frappe.delete_doc(LEGACY_DOCTYPE, legacy_name, ignore_permissions=True)
-    return {"migrated": 1}
-
-
 def install() -> None:
-    migrate_legacy_current_recipe()
     table_columns = set(frappe.db.get_table_columns(RECIPE_DOCTYPE))
     for fieldname in (
         "is_current",

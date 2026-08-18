@@ -10,8 +10,6 @@ from frappe.utils import getdate, nowdate
 
 CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
 ADJUSTMENT_DOCTYPE = "Tongjianyun Daily Meal Adjustment"
-SPECIAL_DIET_DOCTYPE = "Tongjianyun Special Diet"
-
 DEFAULT_MEAL_SERVICE = (
     ("breakfast_count", True),
     ("morning_snack_count", True),
@@ -69,27 +67,6 @@ def _leave_students(group: str, students: list[str], meal_date) -> set[str]:
     return set(rows)
 
 
-def _special_diet_count(students: list[str], meal_date) -> int:
-    if not students:
-        return 0
-    rows = frappe.get_all(
-        SPECIAL_DIET_DOCTYPE,
-        filters={
-            "student": ["in", students],
-            "status": "生效中",
-            "effective_from": ["<=", meal_date],
-        },
-        fields=["student", "effective_to"],
-    )
-    return len(
-        {
-            row.student
-            for row in rows
-            if not row.effective_to or getdate(row.effective_to) >= meal_date
-        }
-    )
-
-
 def _adjustments(group: str, meal_date) -> dict[str, int]:
     totals = defaultdict(int)
     rows = frappe.get_all(
@@ -134,7 +111,6 @@ def calculate_rows(meal_date=None) -> list[dict]:
             "enrolled_count": len(students),
             "absent_count": len(absent_students),
             "leave_count": len(leave_students - absent_students),
-            "special_diet_count": _special_diet_count(students, meal_date),
         }
         for count_field, is_served in DEFAULT_MEAL_SERVICE:
             delta_field = count_field.replace("_count", "_delta")
@@ -186,14 +162,6 @@ def refresh_confirmations_from_leave(doc, method=None):
 def refresh_confirmation_from_adjustment(doc, method=None):
     if getattr(doc, "meal_date", None):
         refresh_confirmation(doc.meal_date)
-
-
-def refresh_confirmation_from_special_diet(doc, method=None):
-    today = getdate(nowdate())
-    starts = not doc.effective_from or getdate(doc.effective_from) <= today
-    ends = not doc.effective_to or getdate(doc.effective_to) >= today
-    if starts and ends and frappe.db.exists(CONFIRMATION_DOCTYPE, {"meal_date": today}):
-        refresh_confirmation(today)
 
 
 def prepare_today_confirmation():

@@ -7,13 +7,7 @@ import frappe
 from frappe import _
 
 RECORD_DOCTYPES = {
-    "meal_generation_config": "Tongjianyun Meal Nutrition",
-    "meal_draft": "Tongjianyun Meal Nutrition",
-    "meal_review_history": "Tongjianyun Meal Nutrition",
     "food_purchase": "Tongjianyun Food Purchase",
-    "food_supplier": "Tongjianyun Food Supplier",
-    "food_sample": "Tongjianyun Food Sample",
-    "food_trace_event": "Tongjianyun Food Trace Event",
 }
 
 

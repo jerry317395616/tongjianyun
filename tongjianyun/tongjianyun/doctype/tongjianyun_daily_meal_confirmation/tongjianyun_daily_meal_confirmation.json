@@ -5,7 +5,7 @@
  "creation": "2026-08-12 16:30:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["meal_date","status","source","column_break_meta","confirmed_by","confirmed_at","summary_section","total_enrolled_count","total_absent_count","total_leave_count","total_special_diet_count","column_break_summary","total_breakfast_count","total_morning_snack_count","total_lunch_count","total_afternoon_snack_count","total_dinner_count","details_section","details","remark"],
+ "field_order": ["meal_date","status","source","column_break_meta","confirmed_by","confirmed_at","summary_section","total_enrolled_count","total_absent_count","total_leave_count","column_break_summary","total_breakfast_count","total_morning_snack_count","total_lunch_count","total_afternoon_snack_count","total_dinner_count","details_section","details","remark"],
  "fields": [
   {"default":"Today","fieldname":"meal_date","fieldtype":"Date","in_list_view":1,"in_standard_filter":1,"label":"就餐日期","reqd":1,"unique":1},
   {"default":"待确认","fieldname":"status","fieldtype":"Select","in_list_view":1,"in_standard_filter":1,"label":"状态","options":"待确认\n已确认\n已锁定","reqd":1},
@@ -17,7 +17,6 @@
   {"fieldname":"total_enrolled_count","fieldtype":"Int","label":"在册总数","read_only":1},
   {"fieldname":"total_absent_count","fieldtype":"Int","label":"缺勤总数","read_only":1},
   {"fieldname":"total_leave_count","fieldtype":"Int","label":"请假总数","read_only":1},
-  {"fieldname":"total_special_diet_count","fieldtype":"Int","label":"特殊膳食人数","read_only":1},
   {"fieldname":"column_break_summary","fieldtype":"Column Break"},
   {"fieldname":"total_breakfast_count","fieldtype":"Int","label":"早餐人数","read_only":1},
   {"fieldname":"total_morning_snack_count","fieldtype":"Int","label":"早点人数","read_only":1},
