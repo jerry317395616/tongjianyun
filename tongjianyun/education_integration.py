@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 from education.education.doctype.student.student import Student
 from frappe.permissions import add_permission, update_permission_property
+from frappe.utils import cint
 
 
 REMOVED_DOCTYPES = (
@@ -129,6 +130,48 @@ class TongjianyunStudent(Student):
             self.user = None
             return
         super().validate_user()
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def fetch_students_for_group(doctype, txt, searchfield, start, page_len, filters):
+    """Let kindergarten classes select enabled students directly.
+
+    The standard Education query only returns submitted Program Enrollment
+    records. Tongjianyun treats the Student Group itself as the class roster,
+    so requiring a separate enrollment record makes initial class setup
+    impossible after importing students.
+    """
+    frappe.has_permission("Student", "read", throw=True)
+
+    filters = frappe._dict(frappe.parse_json(filters) or {})
+    current_students = []
+    if filters.get("student_group"):
+        current_students = frappe.get_all(
+            "Student Group Student",
+            filters={"parent": filters.student_group},
+            pluck="student",
+        )
+
+    student = frappe.qb.DocType("Student")
+    search_text = f"%{txt or ''}%"
+    query = (
+        frappe.qb.from_(student)
+        .select(student.name, student.student_name)
+        .where(student.enabled == 1)
+        .where(
+            (student.name.like(search_text))
+            | (student.student_name.like(search_text))
+        )
+        .orderby(student.student_name)
+        .orderby(student.name)
+        .limit(cint(page_len) or 20)
+        .offset(cint(start))
+    )
+    if current_students:
+        query = query.where(student.name.notin(current_students))
+
+    return query.run()
 
 
 def before_migrate() -> None:

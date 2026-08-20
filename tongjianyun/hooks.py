@@ -33,6 +33,10 @@ override_doctype_class = {
     "Student": "tongjianyun.education_integration.TongjianyunStudent",
 }
 
+override_whitelisted_methods = {
+    "education.education.doctype.student_group.student_group.fetch_students": "tongjianyun.education_integration.fetch_students_for_group",
+}
+
 doc_events = {
     "Student": {
         "after_delete": "tongjianyun.education_data_notifications.notify_missing_education_data",
