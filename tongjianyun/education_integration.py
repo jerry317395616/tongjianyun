@@ -25,6 +25,9 @@ REMOVED_DOCTYPES = (
 )
 
 ROLE_PERMISSIONS = {
+    "Tongjianyun Administrator": {
+        "Data Import": "rwc",
+    },
     "Tongjianyun Director": {
         "Student": "rwc",
         "Guardian": "rwc",
@@ -74,6 +77,10 @@ ROLE_PERMISSIONS = {
     "Tongjianyun Food Safety": {
         "Student Group": "r",
     },
+}
+
+OWNER_SCOPED_PERMISSIONS = {
+    ("Tongjianyun Administrator", "Data Import"),
 }
 
 TONGJIANYUN_ROLE_PERMISSIONS = {
@@ -179,10 +186,17 @@ def _install_roles_and_permissions() -> None:
         for doctype, access in permissions.items():
             if not frappe.db.exists("DocType", doctype):
                 continue
-            _ensure_permission(doctype, role_name, access)
+            _ensure_permission(
+                doctype,
+                role_name,
+                access,
+                if_owner=(role_name, doctype) in OWNER_SCOPED_PERMISSIONS,
+            )
 
 
-def _ensure_permission(doctype: str, role: str, access: str) -> None:
+def _ensure_permission(
+    doctype: str, role: str, access: str, *, if_owner: bool = False
+) -> None:
     filters = {"parent": doctype, "role": role, "permlevel": 0}
     if not frappe.db.exists("Custom DocPerm", filters):
         add_permission(doctype, role, 0)
@@ -194,6 +208,7 @@ def _ensure_permission(doctype: str, role: str, access: str) -> None:
         "print": "r" in access,
         "report": "r" in access,
         "export": "r" in access,
+        "if_owner": if_owner,
     }
     for property_name, enabled in properties.items():
         update_permission_property(doctype, role, 0, property_name, int(enabled))
