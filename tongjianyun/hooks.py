@@ -33,8 +33,8 @@ override_doctype_class = {
     "Student": "tongjianyun.education_integration.TongjianyunStudent",
 }
 
-override_whitelisted_methods = {
-    "education.education.doctype.student_group.student_group.fetch_students": "tongjianyun.education_integration.fetch_students_for_group",
+doctype_js = {
+    "Student Group": "public/js/student_group.js",
 }
 
 doc_events = {
