@@ -37,6 +37,12 @@ doctype_js = {
     "Student Group": "public/js/student_group.js",
 }
 
+override_whitelisted_methods = {
+    "education.education.doctype.student_group.student_group.get_students": (
+        "tongjianyun.education_integration.get_unassigned_students_for_group"
+    ),
+}
+
 doc_events = {
     "Student": {
         "after_delete": "tongjianyun.education_data_notifications.notify_missing_education_data",

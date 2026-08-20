@@ -174,6 +174,59 @@ def fetch_students_for_group(doctype, txt, searchfield, start, page_len, filters
     return query.run()
 
 
+@frappe.whitelist()
+def get_unassigned_students_for_group(
+    academic_year,
+    group_based_on=None,
+    academic_term=None,
+    program=None,
+    batch=None,
+    student_category=None,
+    course=None,
+):
+    """Return enabled students not assigned to another active class this year.
+
+    Education's standard bulk action only returns students from submitted
+    Program Enrollment documents. Kindergarten classes use Student Group as
+    the roster itself, so the Tongjianyun action deliberately works from the
+    enabled Student master instead.
+    """
+    frappe.has_permission("Student", "read", throw=True)
+    frappe.has_permission("Student Group", "write", throw=True)
+
+    active_groups = frappe.get_all(
+        "Student Group",
+        filters={"academic_year": academic_year, "disabled": 0},
+        pluck="name",
+    )
+    assigned_students = set()
+    if active_groups:
+        assigned_students = set(
+            frappe.get_all(
+                "Student Group Student",
+                filters={
+                    "parent": ["in", active_groups],
+                    "parenttype": "Student Group",
+                    "active": 1,
+                },
+                pluck="student",
+            )
+        )
+
+    students = frappe.get_list(
+        "Student",
+        filters={"enabled": 1},
+        fields=["name as student", "student_name"],
+        order_by="student_name asc, name asc",
+        limit_page_length=0,
+    )
+    return [
+        {**student, "active": 1}
+        for student in students
+        if student.student not in assigned_students
+    ]
+
+
 def before_migrate() -> None:
     for role_name in set(ROLE_PERMISSIONS) | set(TONGJIANYUN_ROLE_PERMISSIONS):
         if not frappe.db.exists("Role", role_name):
