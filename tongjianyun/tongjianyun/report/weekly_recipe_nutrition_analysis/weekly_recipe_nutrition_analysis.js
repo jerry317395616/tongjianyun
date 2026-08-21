@@ -16,7 +16,7 @@ frappe.query_reports["Weekly Recipe Nutrition Analysis"] = {
         },
         {
             fieldname: "student_groups",
-            label: "统计班级（不选则全部）",
+            label: "统计班级（不选则全园）",
             fieldtype: "MultiSelectList",
             get_data: (txt) => frappe.db.get_link_options("Student Group", txt, { disabled: 0 }),
         },

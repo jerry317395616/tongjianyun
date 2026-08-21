@@ -59,8 +59,24 @@ def _allowed_groups(requested_groups: Any = None) -> list[dict[str, str]]:
 	return [dict(group) for group in groups]
 
 
-def _population_rows(groups: list[dict[str, str]]) -> list[dict[str, Any]]:
+def _population_rows(
+	groups: list[dict[str, str]],
+	*,
+	include_all_enabled_students: bool = False,
+) -> list[dict[str, Any]]:
 	frappe.has_permission("Student", "read", throw=True)
+	if include_all_enabled_students:
+		students = frappe.get_list(
+			"Student",
+			filters={"enabled": 1},
+			fields=["name", "gender", "date_of_birth"],
+			order_by="name asc",
+			limit_page_length=0,
+		)
+		if not students:
+			frappe.throw("当前没有启用学生，无法计算营养标准。")
+		return [dict(row) for row in students]
+
 	group_names = [group["name"] for group in groups]
 	memberships = frappe.get_all(
 		"Student Group Student",
@@ -111,8 +127,9 @@ def _quality_error(total: int, missing_birth: int, missing_gender: int, unsuppor
 
 def build_population_standard(recipe, student_groups: Any = None) -> dict[str, Any]:
 	"""Build a full-day standard by averaging every student's official row."""
-	groups = _allowed_groups(student_groups)
-	students = _population_rows(groups)
+	requested_groups = parse_student_groups(student_groups)
+	groups = _allowed_groups(requested_groups) if requested_groups else []
+	students = _population_rows(groups, include_all_enabled_students=not requested_groups)
 	reference_date = _reference_date(recipe)
 	valid_population: list[dict[str, Any]] = []
 	missing_birth = 0
@@ -137,16 +154,20 @@ def build_population_standard(recipe, student_groups: Any = None) -> dict[str, A
 	_quality_error(len(students), missing_birth, missing_gender, unsupported_ages)
 	standard, composition = weighted_standard(valid_population)
 	group_labels = [group.get("student_group_name") or group["name"] for group in groups]
+	scope_label = f"{len(group_labels)}个班级" if requested_groups else "全园启用学生"
+	if not group_labels:
+		group_labels = ["全园启用学生"]
 	composition_rows = [{"label": label, "count": count} for label, count in composition.items()]
 	composition_text = "、".join(f"{label}×{count}" for label, count in composition.items())
 	return {
 		"values": standard,
-		"profile": f"自动计算·{len(group_labels)}个班级·{len(valid_population)}名学生",
+		"profile": f"自动计算·{scope_label}·{len(valid_population)}名学生",
 		"source": OFFICIAL_SOURCE,
 		"population": {
 			"reference_date": str(reference_date),
 			"student_count": len(valid_population),
-			"group_count": len(group_labels),
+			"group_count": len(groups),
+			"scope": scope_label,
 			"groups": group_labels,
 			"group_labels": group_labels,
 			"composition": composition_rows,
@@ -158,7 +179,7 @@ def build_population_standard(recipe, student_groups: Any = None) -> dict[str, A
 
 def snapshot_key(student_groups: Any = None) -> str:
 	groups = parse_student_groups(student_groups)
-	return ",".join(sorted(groups)) if groups else "__all_active_groups__"
+	return ",".join(sorted(groups)) if groups else "__all_enabled_students__"
 
 
 def read_snapshot(recipe, student_groups: Any = None) -> dict[str, Any] | None:
