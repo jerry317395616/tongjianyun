@@ -75,7 +75,14 @@ def completed_years(date_of_birth: date, reference_date: date) -> int:
 
 def standard_profile(age_group: str, gender: str) -> tuple[dict[str, float], str]:
 	"""Return the legacy manual-estimation profile for users without roster data."""
-	ages = ["4", "5"] if age_group == "4–5岁平均" else ["4" if str(age_group).startswith("4") else "5"]
+	age_groups = {
+		"4–6岁平均": ["4", "5", "6"],
+		"4–5岁平均": ["4", "5"],  # Preserve existing saved manual filters.
+		"4岁": ["4"],
+		"5岁": ["5"],
+		"6岁": ["6"],
+	}
+	ages = age_groups.get(age_group, age_groups["4–6岁平均"])
 	genders = ["男", "女"] if gender == "男女平均" else [gender if gender in {"男", "女"} else "男"]
 	selected = [FULL_DAY_REFERENCE[age][selected_gender] for age in ages for selected_gender in genders]
 	standard = {

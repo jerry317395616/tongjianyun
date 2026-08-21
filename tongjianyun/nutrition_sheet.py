@@ -109,7 +109,7 @@ def get_nutrition_sheet(
     recipe: str | None = None,
     standard_mode: str = AUTO_MODE,
     student_groups: Any = None,
-    age_group: str = "4–5岁平均",
+    age_group: str = "4–6岁平均",
     gender: str = "男女平均",
     garden_ratio: float = 80,
 ) -> dict[str, Any]:
@@ -163,7 +163,7 @@ def export_nutrition_sheet(
     recipe: str,
     standard_mode: str = AUTO_MODE,
     student_groups: Any = None,
-    age_group: str = "4–5岁平均",
+    age_group: str = "4–6岁平均",
     gender: str = "男女平均",
     garden_ratio: float = 80,
 ) -> dict[str, Any]:

@@ -10,7 +10,15 @@ from tongjianyun.nutrition_standards import (
 )
 
 
-def test_manual_profile_keeps_the_previous_equal_weight_estimate() -> None:
+def test_manual_profile_defaults_to_the_4_to_6_year_range() -> None:
+    values, profile = standard_profile("4–6岁平均", "男女平均")
+
+    assert values["energy"] == pytest.approx((1300 + 1250 + 1400 + 1300 + 1600 + 1450) / 6)
+    assert values["protein"] == pytest.approx((30 + 30 + 30 + 30 + 35 + 35) / 6)
+    assert profile == "手动估算·4–6岁平均·男女平均"
+
+
+def test_manual_profile_keeps_existing_4_to_5_year_filters_compatible() -> None:
     values, profile = standard_profile("4–5岁平均", "男女平均")
 
     assert values["energy"] == 1312.5

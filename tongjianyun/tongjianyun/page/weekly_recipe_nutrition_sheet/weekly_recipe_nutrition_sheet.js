@@ -104,8 +104,8 @@ class WeeklyRecipeNutritionSheet {
             fieldname: "age_group",
             label: "手动年龄口径",
             fieldtype: "Select",
-            options: "4–5岁平均\n4岁\n5岁",
-            default: "4–5岁平均",
+            options: "4–6岁平均\n4岁\n5岁\n6岁",
+            default: "4–6岁平均",
             change: reload,
         });
         this.genderControl = this.page.add_field({
@@ -156,7 +156,7 @@ class WeeklyRecipeNutritionSheet {
             recipe: this.recipeControl.get_value() || null,
             standard_mode: this.standardModeControl.get_value() || "自动（按学生档案）",
             student_groups: this.studentGroupsControl.get_value() || [],
-            age_group: this.ageControl.get_value() || "4–5岁平均",
+            age_group: this.ageControl.get_value() || "4–6岁平均",
             gender: this.genderControl.get_value() || "男女平均",
             garden_ratio: this.ratioControl.get_value() || 80,
         };

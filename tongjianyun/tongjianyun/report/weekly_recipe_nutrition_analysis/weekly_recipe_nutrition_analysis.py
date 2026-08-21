@@ -184,7 +184,7 @@ def _resolve_standard(recipe, filters: dict[str, Any]) -> tuple[dict[str, float]
             dict(calculated["population"]),
         )
 
-    age_group = filters.get("age_group") or "4–5岁平均"
+    age_group = filters.get("age_group") or "4–6岁平均"
     gender = filters.get("gender") or "男女平均"
     values, profile = _standard_profile(age_group, gender)
     return values, profile, OFFICIAL_SOURCE, None

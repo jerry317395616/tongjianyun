@@ -24,8 +24,8 @@ frappe.query_reports["Weekly Recipe Nutrition Analysis"] = {
             fieldname: "age_group",
             label: "手动年龄口径",
             fieldtype: "Select",
-            options: "4–5岁平均\n4岁\n5岁",
-            default: "4–5岁平均",
+            options: "4–6岁平均\n4岁\n5岁\n6岁",
+            default: "4–6岁平均",
         },
         {
             fieldname: "gender",
