@@ -12,9 +12,14 @@ from tongjianyun.recipe_analysis import (
     create_and_attach_recipe_analysis,
 )
 from tongjianyun.recipe_storage import get_recipe_detail
-from tongjianyun.tongjianyun.report.weekly_recipe_nutrition_analysis.weekly_recipe_nutrition_analysis import (
-    _standard_profile,
+from tongjianyun.nutrition_population import (
+    AUTO_MODE,
+    build_population_standard,
+    freeze_snapshot,
+    parse_student_groups,
+    read_snapshot,
 )
+from tongjianyun.nutrition_standards import OFFICIAL_SOURCE, standard_profile
 
 
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
@@ -34,15 +39,62 @@ def _latest_recipe() -> str | None:
     )
 
 
-def _analysis_standard(age_group: str, gender: str, ratio_percent: float) -> dict[str, Any]:
-    core_standard, profile = _standard_profile(age_group, gender)
+def _manual_standard(age_group: str, gender: str, ratio_percent: float) -> dict[str, Any]:
+    core_standard, profile = standard_profile(age_group, gender)
     return {
         **DEFAULT_STANDARD,
         **core_standard,
         "profile": profile,
         "garden_ratio": ratio_percent / 100,
-        "source": "DB4403/T 489—2024《0岁～6岁儿童营养配餐指南》",
+        "source": OFFICIAL_SOURCE,
     }
+
+
+def _population_standard(
+    recipe_doc: Any,
+    student_groups: Any,
+    ratio_percent: float,
+    *,
+    freeze: bool = False,
+) -> dict[str, Any]:
+    groups = parse_student_groups(student_groups)
+    status = recipe_doc.get("workflow_status")
+    snapshot = read_snapshot(recipe_doc, groups) if status in {"已发布", "已归档"} else None
+    if snapshot:
+        calculated = {
+            "values": dict(snapshot["values"]),
+            "profile": f"{snapshot['profile']}（已冻结）",
+            "source": snapshot.get("source") or OFFICIAL_SOURCE,
+            "population": dict(snapshot.get("population") or {}),
+        }
+    else:
+        calculated = build_population_standard(recipe_doc, groups)
+        if freeze:
+            freeze_snapshot(recipe_doc, calculated, groups)
+
+    return {
+        **DEFAULT_STANDARD,
+        **calculated["values"],
+        "profile": calculated["profile"],
+        "garden_ratio": ratio_percent / 100,
+        "source": calculated["source"],
+        "population": calculated["population"],
+    }
+
+
+def _analysis_standard(
+    recipe_doc: Any,
+    standard_mode: str,
+    student_groups: Any,
+    age_group: str,
+    gender: str,
+    ratio_percent: float,
+    *,
+    freeze: bool = False,
+) -> dict[str, Any]:
+    if standard_mode == AUTO_MODE:
+        return _population_standard(recipe_doc, student_groups, ratio_percent, freeze=freeze)
+    return _manual_standard(age_group, gender, ratio_percent)
 
 
 def _validated_ratio(value: Any) -> float:
@@ -55,6 +107,8 @@ def _validated_ratio(value: Any) -> float:
 @frappe.whitelist()
 def get_nutrition_sheet(
     recipe: str | None = None,
+    standard_mode: str = AUTO_MODE,
+    student_groups: Any = None,
     age_group: str = "4–5岁平均",
     gender: str = "男女平均",
     garden_ratio: float = 80,
@@ -70,7 +124,14 @@ def get_nutrition_sheet(
         frappe.throw("回收站中的食谱不能生成营养分析表。")
 
     ratio_percent = _validated_ratio(garden_ratio)
-    standard = _analysis_standard(age_group, gender, ratio_percent)
+    standard = _analysis_standard(
+        recipe_doc,
+        standard_mode,
+        student_groups,
+        age_group,
+        gender,
+        ratio_percent,
+    )
     payload = get_recipe_detail(recipe_doc.name)
     analysis = analyze_recipe_payload(
         payload,
@@ -88,6 +149,8 @@ def get_nutrition_sheet(
         },
         "analysis": analysis,
         "filters": {
+            "standard_mode": standard_mode,
+            "student_groups": parse_student_groups(student_groups),
             "age_group": age_group,
             "gender": gender,
             "garden_ratio": ratio_percent,
@@ -98,6 +161,8 @@ def get_nutrition_sheet(
 @frappe.whitelist()
 def export_nutrition_sheet(
     recipe: str,
+    standard_mode: str = AUTO_MODE,
+    student_groups: Any = None,
     age_group: str = "4–5岁平均",
     gender: str = "男女平均",
     garden_ratio: float = 80,
@@ -106,5 +171,13 @@ def export_nutrition_sheet(
     recipe_doc = frappe.get_doc(RECIPE_DOCTYPE, recipe)
     recipe_doc.check_permission("read")
     ratio_percent = _validated_ratio(garden_ratio)
-    standard = _analysis_standard(age_group, gender, ratio_percent)
+    standard = _analysis_standard(
+        recipe_doc,
+        standard_mode,
+        student_groups,
+        age_group,
+        gender,
+        ratio_percent,
+        freeze=True,
+    )
     return create_and_attach_recipe_analysis(recipe_doc.name, standard=standard)

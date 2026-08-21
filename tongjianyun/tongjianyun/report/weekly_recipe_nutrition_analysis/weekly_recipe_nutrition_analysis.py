@@ -6,13 +6,19 @@ from typing import Any
 import frappe
 from frappe.utils import escape_html, flt
 
+from tongjianyun.nutrition_population import (
+	AUTO_MODE,
+	build_population_standard,
+	parse_student_groups,
+	read_snapshot,
+)
+from tongjianyun.nutrition_standards import OFFICIAL_SOURCE, standard_profile
 from tongjianyun.recipe_analysis import analyze_recipe_payload, classify_ingredient
 from tongjianyun.recipe_storage import get_recipe_detail
 
 
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
-OFFICIAL_SOURCE = "DB4403/T 489—2024《0岁～6岁儿童营养配餐指南》"
-OFFICIAL_URL = "https://amr.sz.gov.cn/attachment/1/1478/1478779/11504298.pdf"
+OFFICIAL_URL = "https://amr.sz.gov.cn/attachment/1/1478/1478779/11504294.pdf"
 
 NUTRIENT_META = (
     ("energy", "能量", "kcal", "主食、薯类和油脂总量"),
@@ -52,18 +58,6 @@ FOOD_GROUPS = (
     ("water", "饮水", ("water",), 700, 800, "饮水常不写入食谱；未记录时请结合饮水安排判断"),
 )
 
-FULL_DAY_REFERENCE = {
-    "4": {
-        "男": {"energy": 1300, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 390, "vitamin_b1": 0.9, "vitamin_b2": 0.9, "vitamin_c": 50},
-        "女": {"energy": 1250, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 380, "vitamin_b1": 0.9, "vitamin_b2": 0.8, "vitamin_c": 50},
-    },
-    "5": {
-        "男": {"energy": 1400, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 390, "vitamin_b1": 0.9, "vitamin_b2": 0.9, "vitamin_c": 50},
-        "女": {"energy": 1300, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 380, "vitamin_b1": 0.9, "vitamin_b2": 0.8, "vitamin_c": 50},
-    },
-}
-
-
 def execute(filters: dict[str, Any] | None = None):
     filters = frappe._dict(filters or {})
     recipe_name = filters.get("recipe") or _latest_recipe()
@@ -79,10 +73,8 @@ def execute(filters: dict[str, Any] | None = None):
     if ratio_percent < 30 or ratio_percent > 100:
         frappe.throw("园内供给目标应设置在 30%–100% 之间。")
     garden_ratio = ratio_percent / 100
-    age_group = filters.get("age_group") or "4–5岁平均"
-    gender = filters.get("gender") or "男女平均"
     section = filters.get("section") or "全部"
-    full_standard, profile_label = _standard_profile(age_group, gender)
+    full_standard, profile_label, source, population = _resolve_standard(recipe, filters)
 
     payload = get_recipe_detail(recipe.name)
     analysis = analyze_recipe_payload(
@@ -90,8 +82,9 @@ def execute(filters: dict[str, Any] | None = None):
         standard={
             **full_standard,
             "profile": profile_label,
-            "source": OFFICIAL_SOURCE,
+            "source": source,
             "garden_ratio": garden_ratio,
+            "population": population,
         },
     )
 
@@ -110,6 +103,12 @@ def execute(filters: dict[str, Any] | None = None):
     attention = [row for row in evaluated if row.get("evaluation") in {"偏低", "偏高", "需调整"}]
     diversity = len(analysis.get("ingredients") or [])
     report_summary = [
+        {
+            "label": "统计学生",
+            "value": population.get("student_count") if population else "手动估算",
+            "datatype": "Int" if population else "Data",
+            "indicator": "Green" if population else "Orange",
+        },
         {"label": "分析天数", "value": analysis["day_count"], "datatype": "Int", "indicator": "Blue"},
         {"label": "周食材种类", "value": diversity, "datatype": "Int", "indicator": "Green" if diversity >= 25 else "Orange"},
         {"label": "日均能量(kcal)", "value": round(flt(analysis["nutrients"].get("energy")), 1), "datatype": "Float", "indicator": "Blue"},
@@ -131,7 +130,7 @@ def execute(filters: dict[str, Any] | None = None):
             "colors": ["#5e64ff", "#adb5bd"],
             "axisOptions": {"xAxisMode": "tick", "yAxisMode": "tick"},
         }
-    message = _report_message(recipe, profile_label, ratio_percent, data)
+    message = _report_message(recipe, profile_label, ratio_percent, data, population)
     return _columns(), data, message, chart, report_summary, 1
 
 
@@ -161,12 +160,34 @@ def _latest_recipe() -> str | None:
 
 
 def _standard_profile(age_group: str, gender: str) -> tuple[dict[str, float], str]:
-    ages = ["4", "5"] if age_group == "4–5岁平均" else ["4" if str(age_group).startswith("4") else "5"]
-    genders = ["男", "女"] if gender == "男女平均" else [gender if gender in {"男", "女"} else "男"]
-    selected = [FULL_DAY_REFERENCE[age][selected_gender] for age in ages for selected_gender in genders]
-    keys = FULL_DAY_REFERENCE["4"]["男"].keys()
-    standard = {key: sum(flt(item[key]) for item in selected) / len(selected) for key in keys}
-    return standard, f"{age_group}·{gender}"
+    """Compatibility wrapper for callers that still use manual estimation."""
+    return standard_profile(age_group, gender)
+
+
+def _resolve_standard(recipe, filters: dict[str, Any]) -> tuple[dict[str, float], str, str, dict[str, Any] | None]:
+    mode = filters.get("standard_mode") or AUTO_MODE
+    groups = parse_student_groups(filters.get("student_groups"))
+    if mode == AUTO_MODE:
+        snapshot = read_snapshot(recipe, groups) if recipe.workflow_status in {"已发布", "已归档"} else None
+        if snapshot:
+            return (
+                dict(snapshot["values"]),
+                f"{snapshot['profile']}（已冻结）",
+                snapshot.get("source") or OFFICIAL_SOURCE,
+                dict(snapshot.get("population") or {}),
+            )
+        calculated = build_population_standard(recipe, groups)
+        return (
+            dict(calculated["values"]),
+            str(calculated["profile"]),
+            str(calculated["source"]),
+            dict(calculated["population"]),
+        )
+
+    age_group = filters.get("age_group") or "4–5岁平均"
+    gender = filters.get("gender") or "男女平均"
+    values, profile = _standard_profile(age_group, gender)
+    return values, profile, OFFICIAL_SOURCE, None
 
 
 def _section_header(data: list[dict[str, Any]], section: str, title: str) -> None:
@@ -403,7 +424,13 @@ def _diversity_metrics(payload: dict[str, Any]) -> tuple[int, float, int]:
     return len(weekly), daily_average, fish_days
 
 
-def _report_message(recipe: Any, profile: str, ratio_percent: float, data: list[dict[str, Any]]) -> str:
+def _report_message(
+    recipe: Any,
+    profile: str,
+    ratio_percent: float,
+    data: list[dict[str, Any]],
+    population: dict[str, Any] | None,
+) -> str:
     title = escape_html(recipe.title or recipe.name)
     week_start = escape_html(str(recipe.week_start or "—"))
     week_end = escape_html(str(recipe.week_end or "—"))
@@ -417,12 +444,24 @@ def _report_message(recipe: Any, profile: str, ratio_percent: float, data: list[
     else:
         summary = "当前所选模块未发现需要调整的指标。"
     conclusion = escape_html(summary)
+    population_line = ""
+    if population:
+        groups = "、".join(str(group) for group in population.get("groups") or []) or "全部启用班级"
+        composition = "、".join(
+            f"{item.get('label')} {item.get('count')}人"
+            for item in population.get("composition") or []
+        ) or "—"
+        population_line = (
+            f"<br>统计范围：{escape_html(groups)}；共 {flt(population.get('student_count')):.0f} 名学生。"
+            f"年龄性别构成：{escape_html(composition)}。"
+        )
     return f"""
         <div style="padding:12px 14px;border:1px solid var(--border-color);border-radius:8px;background:var(--subtle-fg);">
             <div style="font-weight:700;margin-bottom:5px;">{title}｜{week_start} 至 {week_end}</div>
             <div style="color:var(--text-muted);line-height:1.7;">
                 评价口径：{escape_html(profile)}，园内供给目标 {ratio_percent:.0f}%。
                 参考 <a href="{OFFICIAL_URL}" target="_blank" rel="noopener">{OFFICIAL_SOURCE}</a>。
+                {population_line}
                 主要食物类别的园内目标按全天建议范围 × 供给比例估算。
                 营养含量采用食材分类均值估算，适合食谱编制阶段筛查；正式营养评估应结合准确食物成分、可食部、烹调损耗与实际摄入量。
             </div>

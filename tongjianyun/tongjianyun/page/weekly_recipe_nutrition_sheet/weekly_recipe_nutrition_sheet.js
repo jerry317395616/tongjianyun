@@ -85,9 +85,24 @@ class WeeklyRecipeNutritionSheet {
             get_query: () => ({ filters: { is_deleted: 0 } }),
             change: reload,
         });
+        this.standardModeControl = this.page.add_field({
+            fieldname: "standard_mode",
+            label: "标准计算方式",
+            fieldtype: "Select",
+            options: "自动（按学生档案）\n手动估算",
+            default: "自动（按学生档案）",
+            change: reload,
+        });
+        this.studentGroupsControl = this.page.add_field({
+            fieldname: "student_groups",
+            label: "统计班级（不选则全部）",
+            fieldtype: "MultiSelectList",
+            get_data: (txt) => frappe.db.get_link_options("Student Group", txt, { disabled: 0 }),
+            change: reload,
+        });
         this.ageControl = this.page.add_field({
             fieldname: "age_group",
-            label: "年龄口径",
+            label: "手动年龄口径",
             fieldtype: "Select",
             options: "4–5岁平均\n4岁\n5岁",
             default: "4–5岁平均",
@@ -95,7 +110,7 @@ class WeeklyRecipeNutritionSheet {
         });
         this.genderControl = this.page.add_field({
             fieldname: "gender",
-            label: "性别口径",
+            label: "手动性别口径",
             fieldtype: "Select",
             options: "男女平均\n男\n女",
             default: "男女平均",
@@ -139,6 +154,8 @@ class WeeklyRecipeNutritionSheet {
     filterArgs() {
         return {
             recipe: this.recipeControl.get_value() || null,
+            standard_mode: this.standardModeControl.get_value() || "自动（按学生档案）",
+            student_groups: this.studentGroupsControl.get_value() || [],
             age_group: this.ageControl.get_value() || "4–5岁平均",
             gender: this.genderControl.get_value() || "男女平均",
             garden_ratio: this.ratioControl.get_value() || 80,
@@ -174,12 +191,13 @@ class WeeklyRecipeNutritionSheet {
         const rows = buildFoodRows(analysis);
         const nutritionRows = buildNutritionRows(analysis);
         const recipeTitle = result.recipe.title || result.recipe.recipe_id || result.recipe.name;
+        const population = populationSummary(analysis.standard.population);
         this.main.html(`
             <div class="tjy-sheet-heading">
                 <div>
                     <div class="tjy-sheet-kicker">童健云 · 标准营养分析表</div>
                     <h2>${escapeHtml(recipeTitle)}</h2>
-                    <p>${escapeHtml(result.recipe.week_start || "—")} 至 ${escapeHtml(result.recipe.week_end || "—")} · ${escapeHtml(analysis.standard.profile)} · 园内目标 ${formatNumber(analysis.standard.garden_ratio * 100, 0)}%</p>
+                    <p>${escapeHtml(result.recipe.week_start || "—")} 至 ${escapeHtml(result.recipe.week_end || "—")} · ${escapeHtml(analysis.standard.profile)} · 园内目标 ${formatNumber(analysis.standard.garden_ratio * 100, 0)}%${population ? ` · ${population}` : ""}</p>
                 </div>
                 <div class="tjy-sheet-legend"><span class="good"></span>适宜 <span class="warn"></span>需调整</div>
             </div>
@@ -380,10 +398,11 @@ function renderAnalysisCells(index, analysis, recipe) {
     if (index === 20) return `<td colspan="2">胆固醇实给量：<strong>${formatNumber(analysis.nutrients.cholesterol)} mg</strong></td>`;
     if (index === 21) return '<td colspan="2"></td>';
     if (index === 22) {
+        const population = populationSummary(analysis.standard.population);
         return `<td colspan="9" rowspan="6" class="analysis-note">
             <strong>食谱：</strong>${escapeHtml(recipe.title || recipe.recipe_id || recipe.name)}<br>
             <strong>日期：</strong>${escapeHtml(recipe.week_start || "—")} 至 ${escapeHtml(recipe.week_end || "—")}<br>
-            <strong>标准：</strong>${escapeHtml(analysis.standard.profile)}；在园目标按全日 ${formatNumber(analysis.standard.garden_ratio * 100, 0)}% 计算。<br>
+            <strong>标准：</strong>${escapeHtml(analysis.standard.profile)}；在园目标按全日 ${formatNumber(analysis.standard.garden_ratio * 100, 0)}% 计算。${population ? `<br><strong>统计学生：</strong>${population}` : ""}<br>
             <strong>数据口径：</strong>食物成分采用分类代表值估算。
         </td>`;
     }
@@ -491,6 +510,15 @@ function formatNumber(value, digits = 1) {
     const numeric = numberValue(value);
     const fixed = numeric.toFixed(digits);
     return fixed.includes(".") ? fixed.replace(/0+$/, "").replace(/\.$/, "") : fixed;
+}
+
+function populationSummary(population) {
+    if (!population || !Number(population.student_count)) return "";
+    const groups = (population.groups || []).map((group) => String(group)).join("、") || "全部启用班级";
+    const composition = (population.composition || [])
+        .map((item) => `${item.label} ${item.count}人`)
+        .join("、") || "年龄性别构成未记录";
+    return `统计 ${formatNumber(population.student_count, 0)} 人（${escapeHtml(groups)}；${escapeHtml(composition)}）`;
 }
 
 function escapeHtml(value) {

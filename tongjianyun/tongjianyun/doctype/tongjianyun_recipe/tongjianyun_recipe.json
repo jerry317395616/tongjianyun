@@ -22,6 +22,7 @@
   "parser",
   "relation_source",
   "imported_at",
+  "nutrition_population_snapshots",
   "detail_section",
   "recipe_detail_html"
  ],
@@ -127,6 +128,14 @@
    "fieldname": "imported_at",
    "fieldtype": "Datetime",
    "label": "\u5bfc\u5165\u65f6\u95f4"
+  },
+  {
+   "fieldname": "nutrition_population_snapshots",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "\u8425\u517b\u6807\u51c6\u5feb\u7167",
+   "options": "JSON",
+   "read_only": 1
   },
   {
    "fieldname": "detail_section",
