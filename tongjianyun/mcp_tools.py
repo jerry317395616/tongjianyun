@@ -28,7 +28,7 @@ READ_ONLY = ToolAnnotations(
 
 @mcp.tool(annotations=READ_ONLY)
 @as_verified_actor
-@audited_tool("frappe_explain_tongjianyun_nutrition_standard", "解释营养标准计算")
+@audited_tool("frappe_explain_tongjianyun_nutrition_standard", "读取")
 def frappe_explain_tongjianyun_nutrition_standard(
     metric: str = "energy",
     recipe: str | None = None,
@@ -68,7 +68,7 @@ def frappe_explain_tongjianyun_nutrition_standard(
 
 @mcp.tool(annotations=READ_ONLY)
 @as_verified_actor
-@audited_tool("frappe_get_tongjianyun_weekly_nutrition_analysis", "读取周食谱营养分析")
+@audited_tool("frappe_get_tongjianyun_weekly_nutrition_analysis", "读取")
 def frappe_get_tongjianyun_weekly_nutrition_analysis(
     recipe: str | None = None,
     standard_mode: str = "自动（按学生档案）",
@@ -109,7 +109,7 @@ PUBLISH_WRITE = ToolAnnotations(
 
 @mcp.tool(annotations=READ_ONLY)
 @as_verified_actor
-@audited_tool("frappe_list_tongjianyun_nutrition_rules", "读取营养规则")
+@audited_tool("frappe_list_tongjianyun_nutrition_rules", "读取")
 def frappe_list_tongjianyun_nutrition_rules(
     status: str | None = None,
     limit: int = 20,
@@ -127,7 +127,7 @@ def frappe_list_tongjianyun_nutrition_rules(
 
 @mcp.tool(annotations=DRAFT_WRITE)
 @as_verified_actor
-@audited_tool("frappe_create_tongjianyun_nutrition_rule_draft", "创建营养规则草稿")
+@audited_tool("frappe_create_tongjianyun_nutrition_rule_draft", "写入")
 def frappe_create_tongjianyun_nutrition_rule_draft(
     title: str,
     changes: dict[str, Any],
@@ -149,7 +149,7 @@ def frappe_create_tongjianyun_nutrition_rule_draft(
 
 @mcp.tool(annotations=DRAFT_WRITE)
 @as_verified_actor
-@audited_tool("frappe_preview_tongjianyun_nutrition_rule", "试算营养规则")
+@audited_tool("frappe_preview_tongjianyun_nutrition_rule", "读取")
 def frappe_preview_tongjianyun_nutrition_rule(
     rule_set: str,
     recipe: str | None = None,
@@ -167,7 +167,7 @@ def frappe_preview_tongjianyun_nutrition_rule(
 
 @mcp.tool(annotations=DRAFT_WRITE)
 @as_verified_actor
-@audited_tool("frappe_submit_tongjianyun_nutrition_rule", "提交营养规则审核")
+@audited_tool("frappe_submit_tongjianyun_nutrition_rule", "写入")
 def frappe_submit_tongjianyun_nutrition_rule(
     rule_set: str,
     actor_token: str | None = None,
@@ -183,7 +183,7 @@ def frappe_submit_tongjianyun_nutrition_rule(
 
 @mcp.tool(annotations=PUBLISH_WRITE)
 @as_verified_actor
-@audited_tool("frappe_publish_tongjianyun_nutrition_rule", "发布营养规则")
+@audited_tool("frappe_publish_tongjianyun_nutrition_rule", "写入")
 def frappe_publish_tongjianyun_nutrition_rule(
     rule_set: str,
     confirmation: str,
@@ -201,7 +201,7 @@ def frappe_publish_tongjianyun_nutrition_rule(
 
 @mcp.tool(annotations=PUBLISH_WRITE)
 @as_verified_actor
-@audited_tool("frappe_rollback_tongjianyun_nutrition_rule", "回滚营养规则")
+@audited_tool("frappe_rollback_tongjianyun_nutrition_rule", "写入")
 def frappe_rollback_tongjianyun_nutrition_rule(
     target_rule_set: str,
     confirmation: str,
