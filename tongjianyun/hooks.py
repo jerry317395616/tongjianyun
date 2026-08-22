@@ -7,6 +7,9 @@ app_license = "mit"
 use_json_request_body = True
 required_apps = ["education"]
 
+# Register the domain-specific nutrition rule tools on I-ONE Core's MCP endpoint.
+ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
+
 app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
 app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260821-nutrition-population-3"]
@@ -26,6 +29,7 @@ after_migrate = [
     "tongjianyun.education_integration.install",
     "tongjianyun.meal_attendance_setup.install",
     "tongjianyun.recipe_storage.install",
+    "tongjianyun.nutrition_rule_setup.install",
     "tongjianyun.workbench.install",
 ]
 

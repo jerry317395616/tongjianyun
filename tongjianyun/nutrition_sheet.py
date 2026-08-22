@@ -11,6 +11,7 @@ from tongjianyun.recipe_analysis import (
     analyze_recipe_payload,
     create_and_attach_recipe_analysis,
 )
+from tongjianyun.nutrition_rule_service import get_active_rule_set
 from tongjianyun.recipe_storage import get_recipe_detail
 from tongjianyun.nutrition_population import (
     AUTO_MODE,
@@ -137,6 +138,7 @@ def get_nutrition_sheet(
         payload,
         standard=standard,
         person_days=_person_days(recipe_doc),
+        rule_set=get_active_rule_set(),
     )
 
     return {
@@ -180,4 +182,8 @@ def export_nutrition_sheet(
         ratio_percent,
         freeze=True,
     )
-    return create_and_attach_recipe_analysis(recipe_doc.name, standard=standard)
+    return create_and_attach_recipe_analysis(
+        recipe_doc.name,
+        standard=standard,
+        rule_set=get_active_rule_set(),
+    )

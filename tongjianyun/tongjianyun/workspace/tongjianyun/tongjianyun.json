@@ -26,10 +26,11 @@
   {"type":"Link","label":"今日就餐确认","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Daily Meal Confirmation","link_count":0,"onboard":0,"is_query_report":0},
   {"type":"Link","label":"就餐调整记录","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Daily Meal Adjustment","link_count":0,"onboard":0,"is_query_report":0},
   {"type":"Link","label":"月度就餐统计","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Meal Attendance","link_count":0,"onboard":0,"is_query_report":0},
-  {"type":"Card Break","label":"膳食营养","hidden":0,"link_type":"DocType","link_count":3,"onboard":0,"is_query_report":0},
+  {"type":"Card Break","label":"膳食营养","hidden":0,"link_type":"DocType","link_count":4,"onboard":0,"is_query_report":0},
   {"type":"Link","label":"食谱计划","hidden":0,"link_type":"Page","link_to":"tongjianyun-recipe-workbench","link_count":0,"onboard":0,"is_query_report":0},
   {"type":"Link","label":"周食谱营养分析","hidden":0,"link_type":"Page","link_to":"weekly-recipe-nutrition-sheet","link_count":0,"onboard":0,"is_query_report":0},
   {"type":"Link","label":"食材营养统计","hidden":0,"link_type":"Report","link_to":"Ingredient Nutrition Statistics","link_count":0,"onboard":0,"is_query_report":1},
+  {"type":"Link","label":"营养计算规则","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Nutrition Rule Set","link_count":0,"onboard":0,"is_query_report":0},
   {"type":"Card Break","label":"食安执行","hidden":0,"link_type":"DocType","link_count":1,"onboard":0,"is_query_report":0},
   {"type":"Link","label":"食材采购","hidden":0,"link_type":"DocType","link_to":"Tongjianyun Food Purchase","link_count":0,"onboard":0,"is_query_report":0}
  ],
@@ -70,6 +71,7 @@
   {"type":"Link","label":"食谱计划","link_type":"Page","link_to":"tongjianyun-recipe-workbench","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
   {"type":"Link","label":"周食谱营养分析","link_type":"Page","link_to":"weekly-recipe-nutrition-sheet","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
   {"type":"Link","label":"食材营养统计","link_type":"Report","link_to":"Ingredient Nutrition Statistics","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
+  {"type":"Link","label":"营养计算规则","link_type":"DocType","link_to":"Tongjianyun Nutrition Rule Set","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0},
   {"type":"Section Break","label":"食安执行","link_type":"DocType","icon":"shield-check","default_workspace":0,"child":0,"open_in_new_tab":0,"collapsible":1,"indent":1,"keep_closed":0,"show_arrow":1},
   {"type":"Link","label":"食材采购","link_type":"DocType","link_to":"Tongjianyun Food Purchase","icon":"","default_workspace":0,"child":1,"open_in_new_tab":0,"collapsible":1,"indent":0,"keep_closed":0,"show_arrow":0}
  ],

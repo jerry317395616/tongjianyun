@@ -403,6 +403,7 @@ function renderAnalysisCells(index, analysis, recipe) {
             <strong>食谱：</strong>${escapeHtml(recipe.title || recipe.recipe_id || recipe.name)}<br>
             <strong>日期：</strong>${escapeHtml(recipe.week_start || "—")} 至 ${escapeHtml(recipe.week_end || "—")}<br>
             <strong>标准：</strong>${escapeHtml(analysis.standard.profile)}；在园目标按全日 ${formatNumber(analysis.standard.garden_ratio * 100, 0)}% 计算。${population ? `<br><strong>统计学生：</strong>${population}` : ""}<br>
+            <strong>计算规则：</strong>${escapeHtml(analysis.calculation_rule?.title || "默认营养计算规则")}（${escapeHtml(analysis.calculation_rule?.version || "1.0")}）<br>
             <strong>数据口径：</strong>食物成分采用分类代表值估算。
         </td>`;
     }
@@ -427,7 +428,7 @@ function buildNutritionRows(analysis) {
             garden: formatNumber(garden, 2),
             actual: formatNumber(actual, 2),
             rate: `${formatNumber(percent)}%`,
-            evaluation: evaluateNutrient(key, percent),
+            evaluation: analysis.nutrient_evaluations?.[key]?.status || "偏低",
         });
     };
     nutrient("energy", "热量（kcal）", { group: "热量", groupRows: 4 });
@@ -436,7 +437,7 @@ function buildNutritionRows(analysis) {
         ["fat", "脂肪供热", "fat_energy_range"],
         ["protein", "蛋白质供热", "protein_energy_range"],
     ]) {
-        const range = standard[rangeKey] || [0, 0];
+        const range = analysis.calculation_rule?.macro_ranges?.[key] || standard[rangeKey] || [0, 0];
         const actual = numberValue(analysis.macro_energy_ratio[key]);
         rows.push({
             label,
@@ -450,8 +451,8 @@ function buildNutritionRows(analysis) {
     nutrient("protein", "总量（g）", { group: "蛋白质", groupRows: 3 });
     const protein = numberValue(nutrients.protein);
     for (const [label, actual, target] of [
-        ["动物蛋白", numberValue(analysis.animal_protein), 30],
-        ["动豆蛋白", numberValue(analysis.animal_soy_protein), 50],
+        ["动物蛋白", numberValue(analysis.animal_protein), numberValue(analysis.calculation_rule?.animal_protein_target || 30)],
+        ["动豆蛋白", numberValue(analysis.animal_soy_protein), numberValue(analysis.calculation_rule?.animal_soy_protein_target || 50)],
     ]) {
         const percent = protein ? actual / protein * 100 : 0;
         rows.push({
@@ -493,12 +494,6 @@ function renderNutritionCells(index, rows, analysis) {
     if (index === 20) return '<td colspan="7" rowspan="2" class="blank-panel"></td>';
     if (index === 28) return `<td colspan="7" rowspan="6" class="conclusion">${escapeHtml(analysis.conclusion || "暂无结论")}</td>`;
     return "";
-}
-
-function evaluateNutrient(key, percent) {
-    if (key === "energy") return percent >= 90 && percent <= 110 ? "适宜" : (percent < 90 ? "偏低" : "偏高");
-    if (key === "protein") return percent >= 80 && percent <= 120 ? "适宜" : (percent < 80 ? "偏低" : "偏高");
-    return percent >= 80 ? "适宜" : "偏低";
 }
 
 function numberValue(value) {

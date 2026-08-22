@@ -1,0 +1,34 @@
+{
+ "actions": [],
+ "autoname": "format:NR-REV-{YYYY}-{#####}",
+ "creation": "2026-08-22 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["rule_set","action","acted_by","acted_at","from_hash","to_hash","snapshot","comparison"],
+ "fields": [
+  {"fieldname":"rule_set","fieldtype":"Link","in_list_view":1,"label":"规则版本","options":"Tongjianyun Nutrition Rule Set","reqd":1},
+  {"fieldname":"action","fieldtype":"Select","in_list_view":1,"label":"操作","options":"创建草稿\n试算\n提交审核\n发布\n停用\n回滚","reqd":1},
+  {"fieldname":"acted_by","fieldtype":"Link","in_list_view":1,"label":"操作人","options":"User","reqd":1},
+  {"fieldname":"acted_at","fieldtype":"Datetime","in_list_view":1,"label":"操作时间","reqd":1},
+  {"fieldname":"from_hash","fieldtype":"Data","label":"变更前指纹","read_only":1},
+  {"fieldname":"to_hash","fieldtype":"Data","label":"变更后指纹","read_only":1},
+  {"fieldname":"snapshot","fieldtype":"Code","label":"规则快照","options":"JSON","read_only":1},
+  {"fieldname":"comparison","fieldtype":"Code","label":"变更摘要","options":"JSON","read_only":1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Nutrition Rule Revision",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"export":1,"print":1,"read":1,"report":1,"role":"System Manager"},
+  {"export":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Administrator"},
+  {"export":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Nutrition"},
+  {"export":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Director"}
+ ],
+ "sort_field": "acted_at",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

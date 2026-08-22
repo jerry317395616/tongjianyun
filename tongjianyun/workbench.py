@@ -13,6 +13,7 @@ RECIPE_DOCTYPE = "Tongjianyun Recipe"
 DISH_DOCTYPE = "Tongjianyun Recipe Dish"
 CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
 PURCHASE_DOCTYPE = "Tongjianyun Food Purchase"
+NUTRITION_RULE_DOCTYPE = "Tongjianyun Nutrition Rule Set"
 
 CLOSED_STATUSES = ("完成", "已完成", "关闭", "已关闭", "closed", "completed", "done")
 
@@ -318,6 +319,7 @@ def _sidebar_items() -> list[dict[str, Any]]:
         _sidebar_link("食谱计划", "Page", "tongjianyun-recipe-workbench", child=1),
         _sidebar_link("周食谱营养分析", "Page", "weekly-recipe-nutrition-sheet", child=1),
         _sidebar_link("食材营养统计", "Report", "Ingredient Nutrition Statistics", child=1),
+        _sidebar_link("营养计算规则", "DocType", NUTRITION_RULE_DOCTYPE, child=1),
         _section("食安执行", "shield-check"),
         _sidebar_link("食材采购", "DocType", PURCHASE_DOCTYPE, child=1),
     ]
@@ -392,6 +394,7 @@ def _workspace_links() -> list[dict[str, Any]]:
                 ("食谱计划", "Page", "tongjianyun-recipe-workbench"),
                 ("周食谱营养分析", "Page", "weekly-recipe-nutrition-sheet"),
                 ("食材营养统计", "Report", "Ingredient Nutrition Statistics"),
+                ("营养计算规则", "DocType", NUTRITION_RULE_DOCTYPE),
             ],
         ),
         (

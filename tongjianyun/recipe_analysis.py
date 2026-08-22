@@ -10,6 +10,13 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 import xml.etree.ElementTree as ET
 
+from tongjianyun.nutrition_rules import (
+    calculate_nutrient_value,
+    evaluate_nutrient,
+    normalize_rule_set,
+    public_rule_metadata,
+)
+
 
 SHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 ET.register_namespace("", SHEET_NS)
@@ -123,12 +130,19 @@ def _grams(row: dict[str, Any]) -> float:
     return max(0, amount)
 
 
-def analyze_recipe_payload(payload: dict[str, Any], *, standard: dict[str, Any] | None = None, person_days: int | None = None) -> dict[str, Any]:
+def analyze_recipe_payload(
+    payload: dict[str, Any],
+    *,
+    standard: dict[str, Any] | None = None,
+    person_days: int | None = None,
+    rule_set: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     days = list(payload.get("days") or [])
     if not days:
         raise ValueError("食谱没有可分析的日期明细")
     standard_values = deepcopy(DEFAULT_STANDARD)
     standard_values.update(standard or {})
+    calculation_rules = normalize_rule_set(rule_set)
     day_count = len(days)
     ingredients: dict[str, dict[str, Any]] = {}
     meal_nutrients = {slot: defaultdict(float) for slot in MEAL_SLOTS}
@@ -150,11 +164,19 @@ def analyze_recipe_payload(payload: dict[str, Any], *, standard: dict[str, Any] 
                 profile = _profile(CATEGORY_PROFILES[category])
                 item = ingredients.setdefault(normalized, {"name": normalized, "grams": 0.0, "category": category, "basis": "分类代表值"})
                 item["grams"] += grams / day_count
+                calculated: dict[str, float] = {}
                 for key, per_100g in profile.items():
-                    value = per_100g * grams / 100 / day_count
+                    value = calculate_nutrient_value(
+                        key,
+                        per_100g=per_100g,
+                        grams=grams,
+                        day_count=day_count,
+                        rule_set=calculation_rules,
+                    )
+                    calculated[key] = value
                     total_nutrients[key] += value
                     meal_nutrients[slot][key] += value
-                protein = profile["protein"] * grams / 100 / day_count
+                protein = calculated["protein"]
                 if category in {"egg", "meat", "liver", "fish", "dairy"}:
                     animal_protein += protein
                     animal_soy_protein += protein
@@ -163,9 +185,8 @@ def analyze_recipe_payload(payload: dict[str, Any], *, standard: dict[str, Any] 
 
     energy = total_nutrients["energy"]
     macro = {
-        "carbohydrate": total_nutrients["carbohydrate"] * 4 / energy * 100 if energy else 0,
-        "fat": total_nutrients["fat"] * 9 / energy * 100 if energy else 0,
-        "protein": total_nutrients["protein"] * 4 / energy * 100 if energy else 0,
+        key: total_nutrients[key] * float(calculation_rules["macro_factors"][key]) / energy * 100 if energy else 0
+        for key in ("carbohydrate", "fat", "protein")
     }
     meal_energy = {slot: meal_nutrients[slot]["energy"] for slot in MEAL_SLOTS}
     meal_ratio = {slot: (meal_energy[slot] / energy * 100 if energy else 0) for slot in MEAL_SLOTS}
@@ -180,8 +201,10 @@ def analyze_recipe_payload(payload: dict[str, Any], *, standard: dict[str, Any] 
         "animal_protein": animal_protein, "animal_soy_protein": animal_soy_protein,
         "calcium_phosphorus_ratio": total_nutrients["calcium"] / total_nutrients["phosphorus"] if total_nutrients["phosphorus"] else 0,
         "standard": standard_values,
+        "calculation_rule": public_rule_metadata(calculation_rules),
     }
-    result["conclusion"] = _conclusion(result)
+    result["nutrient_evaluations"] = _nutrient_evaluations(result, calculation_rules)
+    result["conclusion"] = _conclusion(result, calculation_rules)
     return result
 
 
@@ -189,21 +212,37 @@ def _percent(actual: float, target: float) -> float:
     return actual / target * 100 if target else 0
 
 
-def _evaluation(percent: float) -> str:
-    if percent < 80:
-        return "偏低"
-    if percent > 120:
-        return "偏高"
-    return "适宜"
+def _nutrient_evaluations(result: dict[str, Any], rule_set: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    standard = result["standard"]
+    garden_ratio = float(standard["garden_ratio"])
+    evaluations: dict[str, dict[str, Any]] = {}
+    for key, full_target in standard.items():
+        if key not in rule_set["rules"]:
+            continue
+        garden_target = float(full_target) * garden_ratio
+        actual = float(result["nutrients"].get(key, 0))
+        percent = _percent(actual, garden_target)
+        evaluations[key] = {
+            "full_target": float(full_target),
+            "garden_target": garden_target,
+            "actual": actual,
+            "percent": percent,
+            "status": evaluate_nutrient(key, percent, rule_set),
+        }
+    return evaluations
 
 
-def _conclusion(result: dict[str, Any]) -> str:
+def _conclusion(result: dict[str, Any], rule_set: dict[str, Any]) -> str:
     standard = result["standard"]
     garden_ratio = float(standard["garden_ratio"])
     nutrients = result["nutrients"]
     checks = []
     for key, label in (("energy", "热量"), ("protein", "蛋白质"), ("calcium", "钙"), ("iron", "铁"), ("zinc", "锌"), ("vitamin_a", "维生素A"), ("vitamin_c", "维生素C")):
-        status = _evaluation(_percent(float(nutrients.get(key, 0)), float(standard[key]) * garden_ratio))
+        status = evaluate_nutrient(
+            key,
+            _percent(float(nutrients.get(key, 0)), float(standard[key]) * garden_ratio),
+            rule_set,
+        )
         if status != "适宜":
             checks.append(f"{label}{status}")
     diversity = len(result["ingredients"])
@@ -333,9 +372,9 @@ def _populate_sheet(root: ET.Element, analysis: dict[str, Any]) -> None:
         _set_cell(root, f"S{row}", round(garden, 2))
         _set_cell(root, f"T{row}", round(actual, 2))
         _set_cell(root, f"U{row}", f"{_fmt(pct)}%")
-        _set_cell(root, f"V{row}", _evaluation(pct))
-    for row, macro_key, range_key in ((5, "carbohydrate", "carbohydrate_energy_range"), (6, "fat", "fat_energy_range"), (7, "protein", "protein_energy_range")):
-        low, high = std[range_key]
+        _set_cell(root, f"V{row}", analysis["nutrient_evaluations"][key]["status"])
+    for row, macro_key in ((5, "carbohydrate"), (6, "fat"), (7, "protein")):
+        low, high = analysis["calculation_rule"]["macro_ranges"][macro_key]
         actual = analysis["macro_energy_ratio"][macro_key]
         _set_cell(root, f"R{row}", f"{low}-{high}%")
         _set_cell(root, f"S{row}", f"{low}-{high}%")
@@ -343,25 +382,43 @@ def _populate_sheet(root: ET.Element, analysis: dict[str, Any]) -> None:
         _set_cell(root, f"U{row}", f"{_fmt(actual)}%")
         _set_cell(root, f"V{row}", "适宜" if low <= actual <= high else ("偏低" if actual < low else "偏高"))
     protein = analysis["nutrients"]["protein"]
-    for row, actual in ((9, analysis["animal_protein"]), (10, analysis["animal_soy_protein"])):
+    protein_targets = (
+        analysis["calculation_rule"]["animal_protein_target"],
+        analysis["calculation_rule"]["animal_soy_protein_target"],
+    )
+    for row, actual, target in (
+        (9, analysis["animal_protein"], protein_targets[0]),
+        (10, analysis["animal_soy_protein"], protein_targets[1]),
+    ):
         pct = actual / protein * 100 if protein else 0
         _set_cell(root, f"T{row}", round(actual, 2))
         _set_cell(root, f"U{row}", f"{_fmt(pct)}%")
-        _set_cell(root, f"V{row}", "适宜" if pct >= (30 if row == 9 else 50) else "偏低")
+        _set_cell(root, f"V{row}", "适宜" if pct >= target else "偏低")
     recipe = analysis.get("recipe") or {}
     _set_cell(root, "N26", f"食谱：{recipe.get('title') or recipe.get('recipeId') or '—'}\n日期：{recipe.get('weekStart') or '—'} 至 {recipe.get('weekEnd') or '—'}\n标准：{std['profile']}；在园目标按全日 {garden_ratio:.0%} 计算。食物成分采用分类代表值估算。")
     _set_cell(root, "P32", analysis["conclusion"])
 
 
-def create_and_attach_recipe_analysis(recipe_name: str, *, standard: dict[str, Any] | None = None) -> dict[str, Any]:
+def create_and_attach_recipe_analysis(
+    recipe_name: str,
+    *,
+    standard: dict[str, Any] | None = None,
+    rule_set: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     import frappe
     from frappe.utils import get_url
+    from tongjianyun.nutrition_rule_service import get_active_rule_set
     from tongjianyun.recipe_storage import get_recipe_detail
 
     recipe = frappe.get_doc("Tongjianyun Recipe", recipe_name)
     recipe.check_permission("read")
     payload = get_recipe_detail(recipe.name)
-    analysis = analyze_recipe_payload(payload, standard=standard, person_days=_person_days(recipe))
+    analysis = analyze_recipe_payload(
+        payload,
+        standard=standard,
+        person_days=_person_days(recipe),
+        rule_set=rule_set or get_active_rule_set(),
+    )
     content = build_report_xlsx(analysis)
     recipe_id = str((payload.get("recipe") or {}).get("recipeId") or recipe.name)
     file_name = f"食谱带量分析-{recipe_id}.xlsx"

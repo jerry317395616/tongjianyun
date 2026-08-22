@@ -63,6 +63,8 @@ def test_analyzes_ingredient_weights_and_nutrients_deterministically() -> None:
     assert analysis["nutrients"]["energy"] > 0
     assert analysis["meal_ratio"]["breakfast"] > 0
     assert "临床诊断" in analysis["conclusion"]
+    assert analysis["calculation_rule"]["rule_code"] == "DEFAULT-V1"
+    assert analysis["nutrient_evaluations"]["energy"]["status"] in {"偏低", "适宜", "偏高"}
 
 
 def test_generates_template_preserving_xlsx_with_populated_analysis() -> None:

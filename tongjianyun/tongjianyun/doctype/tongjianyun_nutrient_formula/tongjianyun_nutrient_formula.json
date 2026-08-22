@@ -1,0 +1,95 @@
+{
+ "actions": [],
+ "creation": "2026-08-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "nutrient",
+  "unit",
+  "formula",
+  "column_break_ratio",
+  "edible_ratio",
+  "retention_rate",
+  "lower_percent",
+  "upper_percent",
+  "enabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "nutrient",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "营养指标",
+   "options": "energy\nprotein\nfat\ncarbohydrate\ncalcium\nvitamin_a\nvitamin_b1\nvitamin_b2\nvitamin_c\nvitamin_e\nniacin\npotassium\nmagnesium\niron\nzinc\nphosphorus\nselenium\ncarotene\nfiber\ncholesterol",
+   "reqd": 1
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "单位",
+   "read_only": 1
+  },
+  {
+   "description": "允许变量：per_100g、grams、day_count、edible_ratio、retention_rate；允许函数：min、max、abs、round。",
+   "fieldname": "formula",
+   "fieldtype": "Code",
+   "in_list_view": 1,
+   "label": "计算公式",
+   "options": "Python",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_ratio",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "0 到 1；1 表示全部可食。",
+   "fieldname": "edible_ratio",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "可食部比例",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "0 到 1；用于表达烹调后营养素保留比例。",
+   "fieldname": "retention_rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "烹调保留率",
+   "reqd": 1
+  },
+  {
+   "default": "80",
+   "fieldname": "lower_percent",
+   "fieldtype": "Percent",
+   "label": "达标下限",
+   "reqd": 1
+  },
+  {
+   "description": "留空或填 0 表示不设置上限。",
+   "fieldname": "upper_percent",
+   "fieldtype": "Percent",
+   "label": "达标上限"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "启用"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Nutrient Formula",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}
