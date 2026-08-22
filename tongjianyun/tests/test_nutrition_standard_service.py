@@ -74,3 +74,33 @@ def test_explains_roster_weighted_energy_formula(monkeypatch) -> None:
     )
     assert result["population"] == population
     assert result["source"]["url"].endswith("11504294.pdf")
+
+
+def test_explanation_discloses_manual_fallback_when_roster_is_empty(monkeypatch) -> None:
+    calls = []
+
+    def get_sheet(*args):
+        calls.append(args)
+        if args[1] == nutrition_standard_service.AUTO_MODE:
+            raise RuntimeError("当前没有启用学生，无法计算营养标准。")
+        return _sheet(
+            {
+                "energy": 1312.5,
+                "profile": "手动估算·4–5岁平均·男女平均",
+                "source": nutrition_standard_service.OFFICIAL_SOURCE,
+            },
+            {"standard_mode": "手动估算", "garden_ratio": 80},
+        )
+
+    monkeypatch.setattr(nutrition_standard_service, "_get_nutrition_sheet", get_sheet)
+
+    result = nutrition_standard_service.explain_nutrition_standard(
+        "energy", standard_mode=nutrition_standard_service.AUTO_MODE, age_group="4–5岁平均"
+    )
+
+    assert result["requested_standard_mode"] == nutrition_standard_service.AUTO_MODE
+    assert result["standard_mode"] == "手动估算"
+    assert result["fallback"]["used"] is True
+    assert "当前没有启用学生" in result["fallback"]["reason"]
+    assert "以下为手动估算" in result["answer_summary"]
+    assert calls[1][1] == "手动估算"

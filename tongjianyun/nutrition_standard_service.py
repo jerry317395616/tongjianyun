@@ -48,14 +48,29 @@ def explain_nutrition_standard(
     if metric not in REFERENCE_NUTRIENTS:
         raise ValueError(f"不支持的全天营养标准指标：{metric}")
 
-    sheet = _get_nutrition_sheet(
-        recipe,
-        standard_mode,
-        student_groups,
-        age_group,
-        gender,
-        garden_ratio,
-    )
+    requested_standard_mode = standard_mode
+    fallback_reason = None
+    try:
+        sheet = _get_nutrition_sheet(
+            recipe,
+            standard_mode,
+            student_groups,
+            age_group,
+            gender,
+            garden_ratio,
+        )
+    except Exception as exc:
+        if standard_mode != AUTO_MODE or not _is_population_data_error(exc):
+            raise
+        fallback_reason = str(exc)
+        sheet = _get_nutrition_sheet(
+            recipe,
+            "手动估算",
+            None,
+            age_group,
+            gender,
+            garden_ratio,
+        )
     standard = sheet["analysis"]["standard"]
     ratio_percent = float(sheet["filters"]["garden_ratio"])
     full_day = float(standard[metric])
@@ -83,7 +98,17 @@ def explain_nutrition_standard(
         "unit": NUTRIENT_UNITS[metric],
         "recipe": sheet["recipe"],
         "profile": standard.get("profile"),
+        "requested_standard_mode": requested_standard_mode,
         "standard_mode": sheet["filters"].get("standard_mode"),
+        "fallback": (
+            {
+                "used": True,
+                "reason": fallback_reason,
+                "guidance": "请补全并启用学生档案后重新使用自动模式。",
+            }
+            if fallback_reason
+            else {"used": False}
+        ),
         "population": population or None,
         "components": components,
         "calculation": {
@@ -108,7 +133,8 @@ def explain_nutrition_standard(
             "rule_hash": calculation_rule.get("rule_hash"),
         },
         "answer_summary": (
-            f"{standard.get('profile')}的{NUTRIENT_LABELS[metric]}全日标准为"
+            (f"自动模式暂不可用（{fallback_reason}），以下为手动估算：" if fallback_reason else "")
+            + f"{standard.get('profile')}的{NUTRIENT_LABELS[metric]}全日标准为"
             f"{_display_number(full_day)} {NUTRIENT_UNITS[metric]}；"
             f"按园内供给比例{_display_number(ratio_percent)}%，园内目标为"
             f"{_display_number(garden_target)} {NUTRIENT_UNITS[metric]}。"
@@ -202,6 +228,19 @@ def _get_nutrition_sheet(*args: Any) -> dict[str, Any]:
     from tongjianyun.nutrition_sheet import get_nutrition_sheet
 
     return get_nutrition_sheet(*args)
+
+
+def _is_population_data_error(exc: Exception) -> bool:
+    message = str(exc)
+    return any(
+        marker in message
+        for marker in (
+            "没有启用学生",
+            "暂无启用学生",
+            "未找到可统计的启用班级",
+            "自动营养标准需要完整的学生档案",
+        )
+    )
 
 
 def _display_number(value: float) -> str:
