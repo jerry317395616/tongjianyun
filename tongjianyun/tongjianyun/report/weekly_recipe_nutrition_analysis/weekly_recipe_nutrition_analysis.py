@@ -7,13 +7,15 @@ from frappe.utils import escape_html, flt
 
 from tongjianyun.recipe_analysis import analyze_recipe_payload, classify_ingredient
 from tongjianyun.nutrition_rule_service import get_active_rule_set
+from tongjianyun.nutrition_standard_service import (
+    OFFICIAL_SOURCE,
+    OFFICIAL_URL,
+    standard_profile,
+)
 from tongjianyun.recipe_storage import get_recipe_detail
 
 
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
-OFFICIAL_SOURCE = "DB4403/T 489—2024《0岁～6岁儿童营养配餐指南》"
-OFFICIAL_URL = "https://amr.sz.gov.cn/attachment/1/1478/1478779/11504298.pdf"
-
 NUTRIENT_META = (
     ("energy", "能量", "kcal", "主食、薯类和油脂总量"),
     ("protein", "蛋白质", "g", "奶、蛋、鱼禽肉及大豆制品"),
@@ -52,18 +54,6 @@ FOOD_GROUPS = (
     ("water", "饮水", ("water",), 700, 800, "饮水常不写入食谱；未记录时请结合饮水安排判断"),
 )
 
-FULL_DAY_REFERENCE = {
-    "4": {
-        "男": {"energy": 1300, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 390, "vitamin_b1": 0.9, "vitamin_b2": 0.9, "vitamin_c": 50},
-        "女": {"energy": 1250, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 380, "vitamin_b1": 0.9, "vitamin_b2": 0.8, "vitamin_c": 50},
-    },
-    "5": {
-        "男": {"energy": 1400, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 390, "vitamin_b1": 0.9, "vitamin_b2": 0.9, "vitamin_c": 50},
-        "女": {"energy": 1300, "protein": 30, "calcium": 600, "iron": 10, "zinc": 5.5, "vitamin_a": 380, "vitamin_b1": 0.9, "vitamin_b2": 0.8, "vitamin_c": 50},
-    },
-}
-
-
 def execute(filters: dict[str, Any] | None = None):
     filters = frappe._dict(filters or {})
     recipe_name = filters.get("recipe") or _latest_recipe()
@@ -82,7 +72,7 @@ def execute(filters: dict[str, Any] | None = None):
     age_group = filters.get("age_group") or "4–5岁平均"
     gender = filters.get("gender") or "男女平均"
     section = filters.get("section") or "全部"
-    full_standard, profile_label = _standard_profile(age_group, gender)
+    full_standard, profile_label = standard_profile(age_group, gender)
 
     payload = get_recipe_detail(recipe.name)
     active_rule_set = get_active_rule_set()
@@ -163,12 +153,8 @@ def _latest_recipe() -> str | None:
 
 
 def _standard_profile(age_group: str, gender: str) -> tuple[dict[str, float], str]:
-    ages = ["4", "5"] if age_group == "4–5岁平均" else ["4" if str(age_group).startswith("4") else "5"]
-    genders = ["男", "女"] if gender == "男女平均" else [gender if gender in {"男", "女"} else "男"]
-    selected = [FULL_DAY_REFERENCE[age][selected_gender] for age in ages for selected_gender in genders]
-    keys = FULL_DAY_REFERENCE["4"]["男"].keys()
-    standard = {key: sum(flt(item[key]) for item in selected) / len(selected) for key in keys}
-    return standard, f"{age_group}·{gender}"
+    """Compatibility wrapper for existing report integrations."""
+    return standard_profile(age_group, gender)
 
 
 def _section_header(data: list[dict[str, Any]], section: str, title: str) -> None:

@@ -10,6 +10,8 @@ from frappe.utils import getdate, now_datetime, today
 
 from tongjianyun.nutrition_rules import (
     NUTRIENT_KEYS,
+    NUTRIENT_UNITS,
+    REFERENCE_NUTRIENT_KEYS,
     default_rule_set,
     normalize_rule_set,
 )
@@ -30,6 +32,9 @@ def document_to_rule_set(document: Any) -> dict[str, Any]:
         "version": document.get("version"),
         "status": document.get("status"),
         "source": document.get("source"),
+        "reference_standards": _reference_rows_to_mapping(
+            document.get("reference_standards") or []
+        ),
         "rules": [
             {
                 "nutrient": row.get("nutrient"),
@@ -362,6 +367,24 @@ def _merge_changes(
     for group in ("macro_factors", "macro_ranges"):
         if isinstance(changes.get(group), Mapping):
             candidate[group].update(deepcopy(dict(changes[group])))
+    supplied_reference = changes.get("reference_standards")
+    if supplied_reference is not None:
+        if not isinstance(supplied_reference, Mapping):
+            frappe.throw(_("reference_standards 必须是按年龄、性别组织的对象。"))
+        for raw_age, genders in supplied_reference.items():
+            age = str(raw_age)
+            if age not in candidate["reference_standards"] or not isinstance(
+                genders, Mapping
+            ):
+                frappe.throw(_("不支持的全天标准年龄或结构：{0}").format(age))
+            for gender, nutrients in genders.items():
+                if gender not in candidate["reference_standards"][age] or not isinstance(
+                    nutrients, Mapping
+                ):
+                    frappe.throw(_("不支持的全天标准性别或结构：{0}").format(gender))
+                candidate["reference_standards"][age][gender].update(
+                    deepcopy(dict(nutrients))
+                )
 
     supplied_rules = changes.get("rules") or {}
     if isinstance(supplied_rules, list):
@@ -389,6 +412,7 @@ def _new_rule_document(
     document.previous_version = previous_version
     document.source = config.get("source")
     document.change_reason = change_reason
+    _append_reference_rows(document, config)
     document.carbohydrate_energy_factor = config["macro_factors"]["carbohydrate"]
     document.fat_energy_factor = config["macro_factors"]["fat"]
     document.protein_energy_factor = config["macro_factors"]["protein"]
@@ -462,6 +486,7 @@ def _parse_changes(changes: str | dict[str, Any]) -> dict[str, Any]:
         "rules",
         "macro_factors",
         "macro_ranges",
+        "reference_standards",
         "animal_protein_target",
         "animal_soy_protein_target",
     }
@@ -506,3 +531,31 @@ def _rule_summary(config: Mapping[str, Any]) -> dict[str, Any]:
         "status": config.get("status"),
         "rule_hash": config.get("rule_hash"),
     }
+
+
+def _reference_rows_to_mapping(rows: Any) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for row in rows or []:
+        age = str(int(row.get("age_years"))) if row.get("age_years") else ""
+        gender = str(row.get("gender") or "")
+        nutrient = str(row.get("nutrient") or "")
+        if not age or not gender or not nutrient:
+            continue
+        result.setdefault(age, {}).setdefault(gender, {})[nutrient] = row.get("value")
+    return result
+
+
+def _append_reference_rows(document: Any, config: Mapping[str, Any]) -> None:
+    for age in ("4", "5"):
+        for gender in ("男", "女"):
+            for nutrient in REFERENCE_NUTRIENT_KEYS:
+                document.append(
+                    "reference_standards",
+                    {
+                        "age_years": int(age),
+                        "gender": gender,
+                        "nutrient": nutrient,
+                        "value": config["reference_standards"][age][gender][nutrient],
+                        "unit": NUTRIENT_UNITS[nutrient],
+                    },
+                )

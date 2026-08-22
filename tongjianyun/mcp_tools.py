@@ -15,11 +15,67 @@ from tongjianyun.nutrition_rule_service import (
     rollback_rule_set,
     submit_rule_set,
 )
+from tongjianyun.nutrition_standard_service import (
+    explain_nutrition_standard,
+    get_weekly_nutrition_analysis_context,
+)
 
 
 READ_ONLY = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
 )
+
+
+@mcp.tool(annotations=READ_ONLY)
+@as_verified_actor
+@audited_tool("frappe_explain_tongjianyun_nutrition_standard", "解释营养标准计算")
+def frappe_explain_tongjianyun_nutrition_standard(
+    metric: str = "energy",
+    age_group: str = "4–5岁平均",
+    gender: str = "男女平均",
+    garden_ratio: float = 80,
+    actor_token: str | None = None,
+) -> dict[str, Any]:
+    """读取童健云当前生效规则，解释全日标准及园内目标的真实计算过程。
+
+    当用户询问周食谱营养分析中的热量、蛋白质、钙、铁、锌或维生素标准
+    如何得出时，应优先调用本工具，不要搜索 Harness 自身源码或凭常识猜测。
+
+    Args:
+        metric: 指标键，支持 energy、protein、calcium、iron、zinc、vitamin_a、vitamin_b1、vitamin_b2、vitamin_c。
+        age_group: 4岁、5岁或4–5岁平均。
+        gender: 男、女或男女平均。
+        garden_ratio: 园内供给比例，30–100，默认80。
+        actor_token: IONE Agent 自动注入的当前 Frappe 用户身份令牌。
+    """
+    return explain_nutrition_standard(metric, age_group, gender, garden_ratio)
+
+
+@mcp.tool(annotations=READ_ONLY)
+@as_verified_actor
+@audited_tool("frappe_get_tongjianyun_weekly_nutrition_analysis", "读取周食谱营养分析")
+def frappe_get_tongjianyun_weekly_nutrition_analysis(
+    recipe: str | None = None,
+    age_group: str = "4–5岁平均",
+    gender: str = "男女平均",
+    garden_ratio: float = 80,
+    actor_token: str | None = None,
+) -> dict[str, Any]:
+    """使用童健云真实食谱、当前规则和当前登录用户权限生成周营养分析上下文。
+
+    当用户询问某份周食谱的营养值、达标情况、食材构成或结论时，应优先调用
+    本工具；recipe 留空时使用童健云最新的未删除食谱。
+
+    Args:
+        recipe: 童健云食谱编号；留空时使用最新食谱。
+        age_group: 4岁、5岁或4–5岁平均。
+        gender: 男、女或男女平均。
+        garden_ratio: 园内供给比例，30–100，默认80。
+        actor_token: IONE Agent 自动注入的当前 Frappe 用户身份令牌。
+    """
+    return get_weekly_nutrition_analysis_context(
+        recipe, age_group, gender, garden_ratio
+    )
 DRAFT_WRITE = ToolAnnotations(
     readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
 )
@@ -60,7 +116,7 @@ def frappe_create_tongjianyun_nutrition_rule_draft(
 
     Args:
         title: 新规则草稿名称。
-        changes: 结构化变更，只允许公式、比例、阈值、供能系数和目标字段。
+        changes: 结构化变更，只允许全天标准、公式、比例、阈值、供能系数和目标字段。
         base_rule_set: 可选的基础规则编号；留空时使用当前生效规则。
         change_reason: 变更原因和业务依据。
         actor_token: IONE Agent 自动注入的当前 Frappe 用户身份令牌。

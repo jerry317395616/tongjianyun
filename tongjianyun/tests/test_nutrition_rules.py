@@ -69,6 +69,17 @@ def test_rule_thresholds_and_hash_are_deterministic() -> None:
     assert evaluate_nutrient("calcium", 121, first) == "适宜"
 
 
+def test_reference_standard_is_versioned_and_changes_rule_hash() -> None:
+    baseline = normalize_rule_set(default_rule_set())
+    changed = deepcopy(baseline)
+    changed["reference_standards"]["4"]["男"]["energy"] = 1320
+    candidate = normalize_rule_set(changed)
+
+    assert baseline["reference_standards"]["4"]["男"]["energy"] == 1300
+    assert candidate["reference_standards"]["4"]["男"]["energy"] == 1320
+    assert candidate["rule_hash"] != baseline["rule_hash"]
+
+
 def test_custom_retention_rate_changes_only_selected_nutrient() -> None:
     payload = {
         "recipe": {"recipeId": "RULE-TEST"},

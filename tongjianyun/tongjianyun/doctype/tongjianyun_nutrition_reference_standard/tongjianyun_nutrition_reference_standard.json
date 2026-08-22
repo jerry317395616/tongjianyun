@@ -1,0 +1,24 @@
+{
+ "actions": [],
+ "creation": "2026-08-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["age_years", "gender", "nutrient", "value", "unit"],
+ "fields": [
+  {"fieldname":"age_years","fieldtype":"Int","in_list_view":1,"label":"年龄（岁）","reqd":1},
+  {"fieldname":"gender","fieldtype":"Select","in_list_view":1,"label":"性别","options":"男\n女","reqd":1},
+  {"fieldname":"nutrient","fieldtype":"Select","in_list_view":1,"label":"营养指标","options":"energy\nprotein\ncalcium\niron\nzinc\nvitamin_a\nvitamin_b1\nvitamin_b2\nvitamin_c","reqd":1},
+  {"fieldname":"value","fieldtype":"Float","in_list_view":1,"label":"全天标准值","reqd":1},
+  {"fieldname":"unit","fieldtype":"Data","in_list_view":1,"label":"单位","read_only":1}
+ ],
+ "istable": 1,
+ "links": [],
+ "module": "Tongjianyun",
+ "name": "Tongjianyun Nutrition Reference Standard",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

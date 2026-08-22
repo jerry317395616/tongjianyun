@@ -56,6 +56,67 @@ NUTRIENT_UNITS = {
     "fiber": "g",
     "cholesterol": "mg",
 }
+REFERENCE_NUTRIENT_KEYS = (
+    "energy",
+    "protein",
+    "calcium",
+    "iron",
+    "zinc",
+    "vitamin_a",
+    "vitamin_b1",
+    "vitamin_b2",
+    "vitamin_c",
+)
+DEFAULT_FULL_DAY_REFERENCE = {
+    "4": {
+        "男": {
+            "energy": 1300,
+            "protein": 30,
+            "calcium": 600,
+            "iron": 10,
+            "zinc": 5.5,
+            "vitamin_a": 390,
+            "vitamin_b1": 0.9,
+            "vitamin_b2": 0.9,
+            "vitamin_c": 50,
+        },
+        "女": {
+            "energy": 1250,
+            "protein": 30,
+            "calcium": 600,
+            "iron": 10,
+            "zinc": 5.5,
+            "vitamin_a": 380,
+            "vitamin_b1": 0.9,
+            "vitamin_b2": 0.8,
+            "vitamin_c": 50,
+        },
+    },
+    "5": {
+        "男": {
+            "energy": 1400,
+            "protein": 30,
+            "calcium": 600,
+            "iron": 10,
+            "zinc": 5.5,
+            "vitamin_a": 390,
+            "vitamin_b1": 0.9,
+            "vitamin_b2": 0.9,
+            "vitamin_c": 50,
+        },
+        "女": {
+            "energy": 1300,
+            "protein": 30,
+            "calcium": 600,
+            "iron": 10,
+            "zinc": 5.5,
+            "vitamin_a": 380,
+            "vitamin_b1": 0.9,
+            "vitamin_b2": 0.8,
+            "vitamin_c": 50,
+        },
+    },
+}
 
 _MAX_FORMULA_LENGTH = 300
 _MAX_AST_NODES = 64
@@ -82,6 +143,7 @@ def default_rule_set() -> dict[str, Any]:
         "version": "1.0",
         "status": "系统默认",
         "source": "童健云内置规则",
+        "reference_standards": deepcopy(DEFAULT_FULL_DAY_REFERENCE),
         "rules": {
             key: {
                 "nutrient": key,
@@ -232,6 +294,30 @@ def normalize_rule_set(value: Mapping[str, Any] | None) -> dict[str, Any]:
         if isinstance(supplied, Mapping):
             result[group].update(deepcopy(dict(supplied)))
 
+    supplied_reference = value.get("reference_standards")
+    if isinstance(supplied_reference, Mapping):
+        for raw_age, gender_values in supplied_reference.items():
+            age = str(raw_age)
+            if age not in result["reference_standards"]:
+                raise NutritionFormulaError(f"不支持的年龄：{age}")
+            if not isinstance(gender_values, Mapping):
+                raise NutritionFormulaError(f"{age} 岁全天标准必须按性别配置")
+            for gender, nutrient_values in gender_values.items():
+                if gender not in result["reference_standards"][age]:
+                    raise NutritionFormulaError(f"不支持的性别：{gender}")
+                if not isinstance(nutrient_values, Mapping):
+                    raise NutritionFormulaError(
+                        f"{age} 岁{gender}童全天标准必须是营养指标对象"
+                    )
+                unknown = set(nutrient_values).difference(REFERENCE_NUTRIENT_KEYS)
+                if unknown:
+                    raise NutritionFormulaError(
+                        f"全天标准包含不支持的营养指标：{', '.join(sorted(unknown))}"
+                    )
+                result["reference_standards"][age][gender].update(
+                    deepcopy(dict(nutrient_values))
+                )
+
     supplied_rules = value.get("rules")
     rows: Sequence[Mapping[str, Any]]
     if isinstance(supplied_rules, Mapping):
@@ -271,6 +357,19 @@ def normalize_rule_set(value: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def _validate_rule_set(rule_set: dict[str, Any]) -> None:
+    for age in ("4", "5"):
+        for gender in ("男", "女"):
+            profile = rule_set["reference_standards"][age][gender]
+            for nutrient in REFERENCE_NUTRIENT_KEYS:
+                value = _finite_number(
+                    profile[nutrient], f"{age} 岁{gender}童 {nutrient} 全天标准"
+                )
+                if value <= 0:
+                    raise NutritionFormulaError(
+                        f"{age} 岁{gender}童 {nutrient} 全天标准必须大于 0"
+                    )
+                profile[nutrient] = value
+
     for nutrient, row in rule_set["rules"].items():
         row["formula"] = validate_formula(str(row.get("formula") or ""))
         row["edible_ratio"] = _bounded_ratio(
@@ -365,6 +464,7 @@ def public_rule_metadata(rule_set: Mapping[str, Any] | None) -> dict[str, Any]:
         "status": rules["status"],
         "source": rules["source"],
         "rule_hash": rules["rule_hash"],
+        "reference_standards": deepcopy(rules["reference_standards"]),
         "evaluation_rules": {
             key: {
                 "lower_percent": row["lower_percent"],
@@ -382,6 +482,7 @@ def public_rule_metadata(rule_set: Mapping[str, Any] | None) -> dict[str, Any]:
 def rule_set_hash(rule_set: Mapping[str, Any]) -> str:
     payload = {
         "rules": rule_set.get("rules"),
+        "reference_standards": rule_set.get("reference_standards"),
         "macro_factors": rule_set.get("macro_factors"),
         "macro_ranges": rule_set.get("macro_ranges"),
         "animal_protein_target": rule_set.get("animal_protein_target"),

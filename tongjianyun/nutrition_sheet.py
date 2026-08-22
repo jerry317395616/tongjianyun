@@ -12,10 +12,8 @@ from tongjianyun.recipe_analysis import (
     create_and_attach_recipe_analysis,
 )
 from tongjianyun.nutrition_rule_service import get_active_rule_set
+from tongjianyun.nutrition_standard_service import OFFICIAL_SOURCE, standard_profile
 from tongjianyun.recipe_storage import get_recipe_detail
-from tongjianyun.tongjianyun.report.weekly_recipe_nutrition_analysis.weekly_recipe_nutrition_analysis import (
-    _standard_profile,
-)
 
 
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
@@ -36,13 +34,13 @@ def _latest_recipe() -> str | None:
 
 
 def _analysis_standard(age_group: str, gender: str, ratio_percent: float) -> dict[str, Any]:
-    core_standard, profile = _standard_profile(age_group, gender)
+    core_standard, profile = standard_profile(age_group, gender)
     return {
         **DEFAULT_STANDARD,
         **core_standard,
         "profile": profile,
         "garden_ratio": ratio_percent / 100,
-        "source": "DB4403/T 489—2024《0岁～6岁儿童营养配餐指南》",
+        "source": OFFICIAL_SOURCE,
     }
 
 
