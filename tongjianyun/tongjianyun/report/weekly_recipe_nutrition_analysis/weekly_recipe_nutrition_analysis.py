@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Any
 
 import frappe
 from frappe.utils import escape_html, flt
 
 from tongjianyun.recipe_analysis import analyze_recipe_payload, classify_ingredient
+from tongjianyun.nutrition_rule_service import get_active_rule_set
 from tongjianyun.recipe_storage import get_recipe_detail
 
 
@@ -85,6 +85,7 @@ def execute(filters: dict[str, Any] | None = None):
     full_standard, profile_label = _standard_profile(age_group, gender)
 
     payload = get_recipe_detail(recipe.name)
+    active_rule_set = get_active_rule_set()
     analysis = analyze_recipe_payload(
         payload,
         standard={
@@ -93,6 +94,7 @@ def execute(filters: dict[str, Any] | None = None):
             "source": OFFICIAL_SOURCE,
             "garden_ratio": garden_ratio,
         },
+        rule_set=active_rule_set,
     )
 
     data: list[dict[str, Any]] = []
@@ -131,7 +133,7 @@ def execute(filters: dict[str, Any] | None = None):
             "colors": ["#5e64ff", "#adb5bd"],
             "axisOptions": {"xAxisMode": "tick", "yAxisMode": "tick"},
         }
-    message = _report_message(recipe, profile_label, ratio_percent, data)
+    message = _report_message(recipe, profile_label, ratio_percent, data, analysis)
     return _columns(), data, message, chart, report_summary, 1
 
 
@@ -188,7 +190,9 @@ def _append_nutrition(
         target = reference * garden_ratio
         actual = flt(nutrients.get(key))
         percent = actual / target * 100 if target else 0
-        evaluation = _evaluate_nutrient(key, percent)
+        evaluation = analysis.get("nutrient_evaluations", {}).get(key, {}).get("status") or "偏低"
+        if evaluation == "适宜":
+            evaluation = "达标"
         detail = "达到参考范围。" if evaluation == "达标" else f"建议关注：{guidance}。"
         data.append(
             {
@@ -207,12 +211,13 @@ def _append_nutrition(
         chart_values.append(round(percent, 1))
 
     _section_header(data, "营养素", "宏量营养素供能结构")
-    macro_rows = (
-        ("carbohydrate", "碳水化合物供能比", 50, 65),
-        ("fat", "脂肪供能比", 20, 30),
-        ("protein", "蛋白质供能比", 10, 20),
-    )
-    for key, label, low, high in macro_rows:
+    macro_labels = {
+        "carbohydrate": "碳水化合物供能比",
+        "fat": "脂肪供能比",
+        "protein": "蛋白质供能比",
+    }
+    for key, (low, high) in analysis["calculation_rule"]["macro_ranges"].items():
+        label = macro_labels[key]
         actual = flt(analysis["macro_energy_ratio"].get(key))
         evaluation = "适宜" if low <= actual <= high else ("偏低" if actual < low else "偏高")
         data.append(
@@ -231,8 +236,16 @@ def _append_nutrition(
 
     protein = flt(nutrients.get("protein"))
     for label, actual, target in (
-        ("动物性蛋白占比", flt(analysis.get("animal_protein")) / protein * 100 if protein else 0, 30),
-        ("动物性及豆类蛋白占比", flt(analysis.get("animal_soy_protein")) / protein * 100 if protein else 0, 50),
+        (
+            "动物性蛋白占比",
+            flt(analysis.get("animal_protein")) / protein * 100 if protein else 0,
+            flt(analysis["calculation_rule"]["animal_protein_target"]),
+        ),
+        (
+            "动物性及豆类蛋白占比",
+            flt(analysis.get("animal_soy_protein")) / protein * 100 if protein else 0,
+            flt(analysis["calculation_rule"]["animal_soy_protein_target"]),
+        ),
     ):
         data.append(
             {
@@ -348,14 +361,6 @@ def _append_meal_structure(data: list[dict[str, Any]], analysis: dict[str, Any])
         )
 
 
-def _evaluate_nutrient(key: str, percent: float) -> str:
-    if key == "energy":
-        return "达标" if 90 <= percent <= 110 else ("偏低" if percent < 90 else "偏高")
-    if key == "protein":
-        return "达标" if 80 <= percent <= 120 else ("偏低" if percent < 80 else "偏高")
-    return "达标" if percent >= 80 else "偏低"
-
-
 def _evaluate_range(actual: float, low: float, high: float) -> str:
     if low == high:
         low, high = low * 0.9, high * 1.1
@@ -403,7 +408,13 @@ def _diversity_metrics(payload: dict[str, Any]) -> tuple[int, float, int]:
     return len(weekly), daily_average, fish_days
 
 
-def _report_message(recipe: Any, profile: str, ratio_percent: float, data: list[dict[str, Any]]) -> str:
+def _report_message(
+    recipe: Any,
+    profile: str,
+    ratio_percent: float,
+    data: list[dict[str, Any]],
+    analysis: dict[str, Any],
+) -> str:
     title = escape_html(recipe.title or recipe.name)
     week_start = escape_html(str(recipe.week_start or "—"))
     week_end = escape_html(str(recipe.week_end or "—"))
@@ -417,6 +428,8 @@ def _report_message(recipe: Any, profile: str, ratio_percent: float, data: list[
     else:
         summary = "当前所选模块未发现需要调整的指标。"
     conclusion = escape_html(summary)
+    rule = analysis.get("calculation_rule") or {}
+    rule_label = escape_html(f"{rule.get('title') or '默认营养计算规则'}（{rule.get('version') or '1.0'}）")
     return f"""
         <div style="padding:12px 14px;border:1px solid var(--border-color);border-radius:8px;background:var(--subtle-fg);">
             <div style="font-weight:700;margin-bottom:5px;">{title}｜{week_start} 至 {week_end}</div>
@@ -424,7 +437,8 @@ def _report_message(recipe: Any, profile: str, ratio_percent: float, data: list[
                 评价口径：{escape_html(profile)}，园内供给目标 {ratio_percent:.0f}%。
                 参考 <a href="{OFFICIAL_URL}" target="_blank" rel="noopener">{OFFICIAL_SOURCE}</a>。
                 主要食物类别的园内目标按全天建议范围 × 供给比例估算。
-                营养含量采用食材分类均值估算，适合食谱编制阶段筛查；正式营养评估应结合准确食物成分、可食部、烹调损耗与实际摄入量。
+                营养含量采用食材分类均值估算，计算规则为 {rule_label}；
+                适合食谱编制阶段筛查；正式营养评估应结合准确食物成分、可食部、烹调损耗与实际摄入量。
             </div>
             <div style="margin-top:6px;">系统结论：{conclusion}</div>
         </div>
