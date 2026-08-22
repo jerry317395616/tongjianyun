@@ -15,11 +15,90 @@ from tongjianyun.nutrition_rule_service import (
     rollback_rule_set,
     submit_rule_set,
 )
+from tongjianyun.nutrition_standard_service import (
+    explain_nutrition_standard,
+    get_weekly_nutrition_analysis_context,
+)
 
 
 READ_ONLY = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
 )
+
+
+@mcp.tool(annotations=READ_ONLY)
+@as_verified_actor
+@audited_tool("frappe_explain_tongjianyun_nutrition_standard", "解释营养标准计算")
+def frappe_explain_tongjianyun_nutrition_standard(
+    metric: str = "energy",
+    recipe: str | None = None,
+    standard_mode: str = "自动（按学生档案）",
+    student_groups: list[str] | None = None,
+    age_group: str = "4–6岁平均",
+    gender: str = "男女平均",
+    garden_ratio: float = 80,
+    actor_token: str | None = None,
+) -> dict[str, Any]:
+    """解释童健云当前报表所用全日标准及园内目标的真实计算过程。
+
+    自动模式会按食谱开始日逐名读取学生年龄、性别和官方参考值后求加权平均；
+    手动模式会解释指定年龄段和性别的平均过程。应优先调用本工具，不要搜索
+    Harness 自身源码或凭常识猜测。
+
+    Args:
+        metric: 指标键，热量使用 energy。
+        recipe: 食谱编号；留空使用最新食谱。
+        standard_mode: 自动（按学生档案）或手动估算。
+        student_groups: 自动模式下可选的班级编号列表；留空统计全园启用学生。
+        age_group: 手动模式的年龄范围。
+        gender: 手动模式的性别范围。
+        garden_ratio: 园内供给比例，30–100，默认80。
+        actor_token: IONE Agent 自动注入的当前 Frappe 用户身份令牌。
+    """
+    return explain_nutrition_standard(
+        metric,
+        recipe,
+        standard_mode,
+        student_groups,
+        age_group,
+        gender,
+        garden_ratio,
+    )
+
+
+@mcp.tool(annotations=READ_ONLY)
+@as_verified_actor
+@audited_tool("frappe_get_tongjianyun_weekly_nutrition_analysis", "读取周食谱营养分析")
+def frappe_get_tongjianyun_weekly_nutrition_analysis(
+    recipe: str | None = None,
+    standard_mode: str = "自动（按学生档案）",
+    student_groups: list[str] | None = None,
+    age_group: str = "4–6岁平均",
+    gender: str = "男女平均",
+    garden_ratio: float = 80,
+    actor_token: str | None = None,
+) -> dict[str, Any]:
+    """按当前用户权限读取真实食谱、学生范围和当前规则，实时生成周营养分析。
+
+    Args:
+        recipe: 食谱编号；留空使用最新食谱。
+        standard_mode: 自动（按学生档案）或手动估算。
+        student_groups: 自动模式下可选的班级编号列表。
+        age_group: 手动模式的年龄范围。
+        gender: 手动模式的性别范围。
+        garden_ratio: 园内供给比例，30–100，默认80。
+        actor_token: IONE Agent 自动注入的当前 Frappe 用户身份令牌。
+    """
+    return get_weekly_nutrition_analysis_context(
+        recipe,
+        standard_mode,
+        student_groups,
+        age_group,
+        gender,
+        garden_ratio,
+    )
+
+
 DRAFT_WRITE = ToolAnnotations(
     readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
 )
