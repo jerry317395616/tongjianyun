@@ -513,7 +513,10 @@ function populationSummary(population) {
     const composition = (population.composition || [])
         .map((item) => `${item.label} ${item.count}人`)
         .join("、") || "年龄性别构成未记录";
-    return `统计 ${formatNumber(population.student_count, 0)} 人（${escapeHtml(groups)}；${escapeHtml(composition)}）`;
+    const summary = `统计 ${formatNumber(population.student_count, 0)} 人（${escapeHtml(groups)}；${escapeHtml(composition)}）`;
+    const warnings = (population.warnings || []).map((item) => String(item)).filter(Boolean);
+    if (!warnings.length) return summary;
+    return `${summary}<br><span style="color:#c2410c;">提示：${escapeHtml(warnings.join("；"))}</span>`;
 }
 
 function escapeHtml(value) {

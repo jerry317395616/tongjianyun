@@ -109,15 +109,12 @@ def _reference_date(recipe) -> date:
 	return getdate(recipe.week_start)
 
 
-def _quality_error(total: int, missing_birth: int, missing_gender: int, unsupported_ages: dict[int, int]) -> None:
+def _quality_error(total: int, missing_birth: int, missing_gender: int) -> None:
 	problems = []
 	if missing_birth:
 		problems.append(f"出生日期缺失 {missing_birth} 人")
 	if missing_gender:
 		problems.append(f"性别缺失或无法识别 {missing_gender} 人")
-	if unsupported_ages:
-		ages = "、".join(f"{age}岁 {count}人" for age, count in sorted(unsupported_ages.items()))
-		problems.append(f"标准表未覆盖 {ages}")
 	if problems:
 		raise PopulationDataError(
 			f"自动营养标准需要完整的学生档案：统计到 {total} 名学生，"
@@ -151,7 +148,14 @@ def build_population_standard(recipe, student_groups: Any = None) -> dict[str, A
 			continue
 		valid_population.append({"age": age, "gender": gender})
 
-	_quality_error(len(students), missing_birth, missing_gender, unsupported_ages)
+	_quality_error(len(students), missing_birth, missing_gender)
+	if not valid_population:
+		ages = "、".join(f"{age}岁 {count}人" for age, count in sorted(unsupported_ages.items()))
+		raise PopulationDataError(
+			"自动营养标准没有可用学生：当前官方参考表覆盖 2–6 岁，"
+			f"统计到的学生均不在可计算范围（{ages or '年龄不适用'}）。"
+			"请检查学生档案或切换为“手动估算”。"
+		)
 	standard, composition = weighted_standard(valid_population)
 	group_labels = [group.get("student_group_name") or group["name"] for group in groups]
 	scope_label = f"{len(group_labels)}个班级" if requested_groups else "全园启用学生"
@@ -159,6 +163,13 @@ def build_population_standard(recipe, student_groups: Any = None) -> dict[str, A
 		group_labels = ["全园启用学生"]
 	composition_rows = [{"label": label, "count": count} for label, count in composition.items()]
 	composition_text = "、".join(f"{label}×{count}" for label, count in composition.items())
+	excluded_count = sum(unsupported_ages.values())
+	warnings = []
+	if excluded_count:
+		ages = "、".join(f"{age}岁 {count}人" for age, count in sorted(unsupported_ages.items()))
+		warnings.append(
+			f"已排除标准表未覆盖的学生：{ages}；全日标准按其余 {len(valid_population)} 名学生逐名平均。"
+		)
 	return {
 		"values": standard,
 		"profile": f"自动计算·{scope_label}·{len(valid_population)}名学生",
@@ -166,6 +177,12 @@ def build_population_standard(recipe, student_groups: Any = None) -> dict[str, A
 		"population": {
 			"reference_date": str(reference_date),
 			"student_count": len(valid_population),
+			"source_student_count": len(students),
+			"excluded_student_count": excluded_count,
+			"excluded_age_counts": [
+				{"age": age, "count": count} for age, count in sorted(unsupported_ages.items())
+			],
+			"warnings": warnings,
 			"group_count": len(groups),
 			"scope": scope_label,
 			"groups": group_labels,

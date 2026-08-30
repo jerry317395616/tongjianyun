@@ -451,6 +451,7 @@ def _report_message(
     conclusion = escape_html(summary)
     population = analysis.get("standard", {}).get("population")
     population_line = ""
+    population_warning_line = ""
     if population:
         groups = "、".join(str(group) for group in population.get("groups") or []) or "全部启用班级"
         composition = "、".join(
@@ -461,6 +462,12 @@ def _report_message(
             f"<br>统计范围：{escape_html(groups)}；共 {flt(population.get('student_count')):.0f} 名学生。"
             f"年龄性别构成：{escape_html(composition)}。"
         )
+        warnings = [str(item) for item in population.get("warnings") or [] if str(item).strip()]
+        if warnings:
+            population_warning_line = (
+                "<br><span style=\"color:#c2410c;\"><strong>数据提示：</strong>"
+                f"{escape_html('；'.join(warnings))}</span>"
+            )
     rule = analysis.get("calculation_rule") or {}
     rule_label = escape_html(f"{rule.get('title') or '默认营养计算规则'}（{rule.get('version') or '1.0'}）")
     return f"""
@@ -469,7 +476,7 @@ def _report_message(
             <div style="color:var(--text-muted);line-height:1.7;">
                 评价口径：{escape_html(profile)}，园内供给目标 {ratio_percent:.0f}%。
                 参考 <a href="{OFFICIAL_URL}" target="_blank" rel="noopener">{OFFICIAL_SOURCE}</a>。
-                {population_line}
+                {population_line}{population_warning_line}
                 主要食物类别的园内目标按全天建议范围 × 供给比例估算。
                 营养含量采用食材分类均值估算，计算规则为 {rule_label}；
                 适合食谱编制阶段筛查；正式营养评估应结合准确食物成分、可食部、烹调损耗与实际摄入量。
