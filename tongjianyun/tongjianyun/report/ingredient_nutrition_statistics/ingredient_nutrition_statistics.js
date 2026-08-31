@@ -8,6 +8,12 @@ frappe.query_reports["Ingredient Nutrition Statistics"] = {
             get_query: () => ({ filters: { is_deleted: 0 } }),
         },
         {
+            fieldname: "meal_date",
+            label: "按天查询",
+            fieldtype: "Date",
+            description: "只统计所选食谱当天的食材和营养数据；不选则统计整周。",
+        },
+        {
             fieldname: "meal_slot",
             label: "餐次",
             fieldtype: "Select",

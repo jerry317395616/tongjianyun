@@ -92,7 +92,12 @@ def execute(filters: dict[str, Any] | None = None):
     if recipe.is_deleted:
         frappe.throw("回收站中的食谱不能生成食材营养统计。")
 
+    meal_date = _clean(filters.get("meal_date"))
     dishes = _get_dishes(recipe.name)
+    if meal_date:
+        dishes = [row for row in dishes if _clean(row.get("meal_date")) == meal_date]
+        if not dishes:
+            frappe.throw(f"所选日期 {escape_html(meal_date)} 没有食谱数据。")
     day_count = max(1, len({row.get("day_id") or str(row.get("meal_date") or "") for row in dishes if row.get("day_id") or row.get("meal_date")}))
     dish_map = {row.name: row for row in dishes}
     meal_key = MEAL_KEYS.get(str(filters.get("meal_slot") or ""), "")
@@ -171,7 +176,7 @@ def execute(filters: dict[str, Any] | None = None):
     columns = _columns(value_basis, nutrient_scope)
     chart = _chart(data, sort_key, value_basis)
     report_summary = _summary(data, day_count)
-    message = _message(recipe, day_count, value_basis, nutrient_scope, len(data))
+    message = _message(recipe, day_count, value_basis, nutrient_scope, len(data), meal_date)
     return columns, data, message, chart, report_summary, 1
 
 
@@ -291,9 +296,18 @@ def _daily_rows(data: list[dict[str, Any]], day_count: int) -> list[dict[str, fl
     return rows
 
 
-def _message(recipe: Any, day_count: int, value_basis: str, nutrient_scope: str, ingredient_count: int) -> str:
+def _message(
+    recipe: Any,
+    day_count: int,
+    value_basis: str,
+    nutrient_scope: str,
+    ingredient_count: int,
+    meal_date: str = "",
+) -> str:
     date_range = ""
-    if recipe.week_start or recipe.week_end:
+    if meal_date:
+        date_range = f"（统计日期 {escape_html(meal_date)}）"
+    elif recipe.week_start or recipe.week_end:
         date_range = f"（{escape_html(str(recipe.week_start or ''))} 至 {escape_html(str(recipe.week_end or ''))}）"
     return (
         '<div style="padding:10px 12px;line-height:1.7;border-left:3px solid #1f7a5a;background:var(--subtle-fg);">'
