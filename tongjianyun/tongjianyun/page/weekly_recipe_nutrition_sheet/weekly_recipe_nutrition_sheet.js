@@ -432,6 +432,7 @@ function buildNutritionRows(analysis) {
         });
     };
     nutrient("energy", "热量（kcal）", { group: "热量", groupRows: 4 });
+    const energyTotal = numberValue(nutrients.energy);
     for (const [key, label, rangeKey] of [
         ["carbohydrate", "碳水化合物供热", "carbohydrate_energy_range"],
         ["fat", "脂肪供热", "fat_energy_range"],
@@ -439,10 +440,14 @@ function buildNutritionRows(analysis) {
     ]) {
         const range = analysis.calculation_rule?.macro_ranges?.[key] || standard[rangeKey] || [0, 0];
         const actual = numberValue(analysis.macro_energy_ratio[key]);
+        const refKcalLow = energyTotal * range[0] / 100;
+        const refKcalHigh = energyTotal * range[1] / 100;
+        const targetKcalLow = refKcalLow * ratio;
+        const targetKcalHigh = refKcalHigh * ratio;
         rows.push({
             label,
-            full: `${range[0]}–${range[1]}%`,
-            garden: `${range[0]}–${range[1]}%`,
+            full: `${formatNumber(refKcalLow, 0)}–${formatNumber(refKcalHigh, 0)}`,
+            garden: `${formatNumber(targetKcalLow, 0)}–${formatNumber(targetKcalHigh, 0)}`,
             actual: `${formatNumber(actual)}%`,
             rate: `${formatNumber(actual)}%`,
             evaluation: actual >= range[0] && actual <= range[1] ? "适宜" : (actual < range[0] ? "偏低" : "偏高"),

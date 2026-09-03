@@ -27,6 +27,7 @@ before_migrate = "tongjianyun.education_integration.before_migrate"
 
 after_migrate = [
     "tongjianyun.education_integration.install",
+    "tongjianyun.student_identity.install",
     "tongjianyun.meal_attendance_setup.install",
     "tongjianyun.recipe_storage.install",
     "tongjianyun.nutrition_rule_setup.install",
@@ -38,6 +39,7 @@ override_doctype_class = {
 }
 
 doctype_js = {
+    "Student": "public/js/student.js",
     "Student Group": "public/js/student_group.js",
 }
 

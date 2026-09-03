@@ -26,6 +26,7 @@ TEMPLATE_HEADERS = [
     "邮箱",
     "入学日期",
     "启用",
+    "身份证号",
 ]
 
 HEADER_ALIASES = {
@@ -50,6 +51,7 @@ HEADER_ALIASES = {
     "student_email_id": ("邮箱", "学生邮箱", "studentemailaddress", "email"),
     "joining_date": ("入学日期", "joiningdate"),
     "enabled": ("启用", "是否启用", "enabled"),
+    "id_number": ("身份证号", "身份证号码", "idnumber", "idcard"),
 }
 
 
@@ -271,6 +273,7 @@ def _get_or_create_student(values: dict, *, update_existing: bool):
     student_id = _cell_text(values.get("student_id"))
     email = _cell_text(values.get("student_email_id"))
     mobile = _cell_text(values.get("student_mobile_number"))
+    id_number = _cell_text(values.get("id_number"))
     birth_date = _date_value(values.get("date_of_birth"), "出生日期")
 
     existing_name = None
@@ -283,6 +286,10 @@ def _get_or_create_student(values: dict, *, update_existing: bool):
     elif email:
         existing_name = frappe.db.get_value(
             "Student", {"student_email_id": email}, "name"
+        )
+    elif id_number:
+        existing_name = frappe.db.get_value(
+            "Student", {"id_number": id_number}, "name"
         )
 
     if not existing_name and student_name:
@@ -328,6 +335,14 @@ def _get_or_create_student(values: dict, *, update_existing: bool):
         gender = _gender_value(values.get("gender"))
         if gender:
             student.gender = gender
+
+        if id_number:
+            from tongjianyun.student_identity import validate_id_number
+
+            error = validate_id_number(id_number)
+            if error:
+                raise ValueError(f"身份证号格式不正确：{error}")
+            student.id_number = id_number
 
         if "enabled" in values and not _is_blank(values.get("enabled")):
             student.enabled = _check_value(values.get("enabled"))

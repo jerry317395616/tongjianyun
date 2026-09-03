@@ -373,11 +373,18 @@ def _populate_sheet(root: ET.Element, analysis: dict[str, Any]) -> None:
         _set_cell(root, f"T{row}", round(actual, 2))
         _set_cell(root, f"U{row}", f"{_fmt(pct)}%")
         _set_cell(root, f"V{row}", analysis["nutrient_evaluations"][key]["status"])
+    energy_total = float(analysis["nutrients"].get("energy", 0))
     for row, macro_key in ((5, "carbohydrate"), (6, "fat"), (7, "protein")):
         low, high = analysis["calculation_rule"]["macro_ranges"][macro_key]
         actual = analysis["macro_energy_ratio"][macro_key]
-        _set_cell(root, f"R{row}", f"{low}-{high}%")
-        _set_cell(root, f"S{row}", f"{low}-{high}%")
+        ref_kcal_low = energy_total * low / 100
+        ref_kcal_high = energy_total * high / 100
+        std = analysis["standard"]
+        garden_ratio = float(std.get("garden_ratio", 0.8))
+        target_kcal_low = ref_kcal_low * garden_ratio
+        target_kcal_high = ref_kcal_high * garden_ratio
+        _set_cell(root, f"R{row}", f"{ref_kcal_low:.0f}–{ref_kcal_high:.0f}")
+        _set_cell(root, f"S{row}", f"{target_kcal_low:.0f}–{target_kcal_high:.0f}")
         _set_cell(root, f"T{row}", f"{_fmt(actual)}%")
         _set_cell(root, f"U{row}", f"{_fmt(actual)}%")
         _set_cell(root, f"V{row}", "适宜" if low <= actual <= high else ("偏低" if actual < low else "偏高"))

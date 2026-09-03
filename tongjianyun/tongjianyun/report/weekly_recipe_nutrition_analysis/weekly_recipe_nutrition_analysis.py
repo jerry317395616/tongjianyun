@@ -237,16 +237,21 @@ def _append_nutrition(
         "fat": "脂肪供能比",
         "protein": "蛋白质供能比",
     }
+    energy_total = flt(nutrients.get("energy"))
     for key, (low, high) in analysis["calculation_rule"]["macro_ranges"].items():
         label = macro_labels[key]
         actual = flt(analysis["macro_energy_ratio"].get(key))
+        ref_kcal_low = energy_total * low / 100
+        ref_kcal_high = energy_total * high / 100
+        target_kcal_low = ref_kcal_low * garden_ratio
+        target_kcal_high = ref_kcal_high * garden_ratio
         evaluation = "适宜" if low <= actual <= high else ("偏低" if actual < low else "偏高")
         data.append(
             {
                 "section": "营养素",
                 "metric": label,
-                "reference": f"{low}–{high}",
-                "garden_target": f"{low}–{high}",
+                "reference": f"{ref_kcal_low:.0f}–{ref_kcal_high:.0f}",
+                "garden_target": f"{target_kcal_low:.0f}–{target_kcal_high:.0f}",
                 "actual": actual,
                 "unit": "%E",
                 "achievement_rate": None,

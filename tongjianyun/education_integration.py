@@ -122,6 +122,17 @@ class TongjianyunStudent(Student):
     A Customer can still be created explicitly if fee management is enabled later.
     """
 
+    def validate(self):
+        super().validate()
+        self._validate_id_number()
+
+    def _validate_id_number(self):
+        from tongjianyun.student_identity import validate_id_number
+
+        error = validate_id_number(self.id_number)
+        if error:
+            frappe.throw(f"身份证号不合法：{error}")
+
     def on_update(self):
         return None
 
