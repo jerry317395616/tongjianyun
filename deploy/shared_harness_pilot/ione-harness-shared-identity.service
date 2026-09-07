@@ -1,0 +1,15 @@
+[Unit]
+Description=Account-scoped identity authority for shared Harness pilot
+
+[Service]
+Type=simple
+WorkingDirectory=/home/zyd/frappe/native-bench
+ExecStart=/home/zyd/frappe/native-bench/env/bin/python -B /home/zyd/frappe/deepseek-harness/packages/extensions/tool-native-bench-frappe/python/shared_identity.py --config /home/zyd/.config/ione-harness-shared/authority.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

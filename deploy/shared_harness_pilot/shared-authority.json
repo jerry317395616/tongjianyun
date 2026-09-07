@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "socket_path": "/home/zyd/.config/ione-harness-shared/authority.sock",
+  "runtime_uid": 1000,
+  "uid_policy": "single-user",
+  "issuer": "child.myyr.top",
+  "secret_file": "/home/zyd/deepseek-harness-config/harness_sso_shared_secret",
+  "identity_configs": [
+    "/home/zyd/.config/ione-harness-employees/teacher-a/refresh.json",
+    "/home/zyd/.config/ione-harness-employees/teacher-b/refresh.json"
+  ],
+  "session_seconds": 1800,
+  "max_sessions": 16,
+  "max_connections": 8,
+  "timeout_seconds": 30,
+  "read_doctypes": [
+    "Student",
+    "Student Group",
+    "Student Attendance",
+    "Student Leave Application"
+  ]
+}

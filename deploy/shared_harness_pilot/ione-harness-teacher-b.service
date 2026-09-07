@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew shared Harness teacher-b identity
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/zyd/frappe/native-bench
+ExecStart=/home/zyd/frappe/native-bench/env/bin/python -B /home/zyd/frappe/deepseek-harness/packages/extensions/tool-native-bench-frappe/python/native_actor_refresh.py --config /home/zyd/.config/ione-harness-employees/teacher-b/refresh.json
+UMask=0077
+NoNewPrivileges=true
+TimeoutStartSec=30
