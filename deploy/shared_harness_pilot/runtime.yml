@@ -1,4 +1,7 @@
 # Last overlay after employee-readonly and employee-shared. No maintenance home.
+- id: credentials
+  config:
+    path: /home/zyd/deepseek-harness-config/qwen-credentials.yaml
 - id: llm-deepseek
   disabled: true
 - id: llm-pi-ai
