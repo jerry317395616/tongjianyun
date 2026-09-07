@@ -6,6 +6,7 @@ from datetime import timedelta
 import frappe
 from frappe import _
 from frappe.utils import getdate, nowdate
+from tongjianyun.attendance_scope import allowed_groups, require_group, require_manager, visible_confirmation
 
 
 CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
@@ -371,6 +372,8 @@ def get_daily_meal_confirmation(meal_date=None) -> dict:
         CONFIRMATION_DOCTYPE,
         {"meal_date": getdate(meal_date or nowdate())},
     )
+    if not name:
+        require_manager()
     if not name and not frappe.has_permission(CONFIRMATION_DOCTYPE, "create"):
         frappe.throw(_("没有创建每日就餐确认的权限"), frappe.PermissionError)
     doc = (
@@ -379,11 +382,12 @@ def get_daily_meal_confirmation(meal_date=None) -> dict:
         else refresh_confirmation(meal_date)
     )
     doc.check_permission("read")
-    return doc.as_dict()
+    return visible_confirmation(doc, allowed_groups())
 
 
 @frappe.whitelist(methods=["POST"])
 def confirm_daily_meal(meal_date=None) -> dict:
+    require_manager()
     name = frappe.db.exists(
         CONFIRMATION_DOCTYPE,
         {"meal_date": getdate(meal_date or nowdate())},
@@ -404,6 +408,7 @@ def confirm_daily_meal(meal_date=None) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def recalculate_daily_meal(name: str) -> dict:
+    require_manager()
     doc = frappe.get_doc(CONFIRMATION_DOCTYPE, name)
     doc.check_permission("write")
     refreshed = refresh_confirmation(doc.meal_date, force=True)
@@ -414,7 +419,11 @@ def recalculate_daily_meal(name: str) -> dict:
 def get_student_details(meal_date=None, student_group=None) -> list:
     _require_login()
     frappe.has_permission(CONFIRMATION_DOCTYPE, "read", throw=True)
-    return calculate_student_details(meal_date, student_group)
+    scope = allowed_groups()
+    if student_group:
+        require_group(student_group, scope)
+        scope = [student_group]
+    return [row for group in scope for row in calculate_student_details(meal_date, group)]
 
 
 @frappe.whitelist(methods=["POST"])
@@ -425,6 +434,12 @@ def save_student_meal_attendance(meal_date=None, changes=None) -> dict:
     if not isinstance(changes, list) or not changes:
         frappe.throw(_("没有需要保存的学生缺勤变更"))
 
+    scope = allowed_groups()
+    # Validate every class before any write (including confirmation creation).
+    for change in changes:
+        if not isinstance(change, dict):
+            frappe.throw(_("学生缺勤变更格式不正确"))
+        require_group(change.get("student_group"), scope)
     _get_confirmation_for_edit(meal_date)
     seen = set()
     meal_date = getdate(meal_date or nowdate())
@@ -450,13 +465,14 @@ def save_student_meal_attendance(meal_date=None, changes=None) -> dict:
 
     refreshed = refresh_confirmation(meal_date, force=True)
     return {
-        "confirmation": refreshed.as_dict(),
-        "details": calculate_student_details(meal_date),
+        "confirmation": visible_confirmation(refreshed, scope),
+        "details": [row for group in scope for row in calculate_student_details(meal_date, group)],
     }
 
 
 @frappe.whitelist(methods=["POST"])
 def reopen_daily_meal(name: str) -> dict:
+    require_manager()
     _require_login()
     _require_attendance_editor()
     doc = frappe.get_doc(CONFIRMATION_DOCTYPE, name)
