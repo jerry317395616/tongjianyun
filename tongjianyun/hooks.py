@@ -81,3 +81,13 @@ scheduler_events = {
         "tongjianyun.education_data_notifications.notify_missing_education_data",
     ],
 }
+
+# Application-level teacher row restrictions; no DocType permission metadata changes.
+permission_query_conditions = {
+    doctype: "tongjianyun.teacher_permissions.query_condition"
+    for doctype in ("Student Group", "Student", "Student Attendance", "Student Leave Application")
+}
+has_permission = {
+    doctype: "tongjianyun.teacher_permissions.document_permission"
+    for doctype in ("Student Group", "Student", "Student Attendance", "Student Leave Application")
+}
