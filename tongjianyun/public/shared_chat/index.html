@@ -18,7 +18,7 @@
       <div class="examples"><button data-question="请查询我有权限查看的班级及学生人数。" disabled>班级与学生 <span>查看权限范围内的班级信息 ↗</span></button><button data-question="请查询我有权限查看的今日出勤记录，并说明数据是否已确认。" disabled>今日出勤 <span>了解记录与确认情况 ↗</span></button><button data-question="请查询我有权限查看的本周食谱，说明适用日期。" disabled>本周食谱 <span>核对食谱与适用日期 ↗</span></button></div>
     </section>
     <section id="messages" aria-label="对话记录" aria-live="polite"></section>
-    <div class="composer"><p id="status" role="status">正在检查登录状态…</p><a id="login" hidden href="https://child.myyr.top/api/method/tongjianyun.harness_shared_login.launch">通过童健云登录 →</a>
+    <div class="composer"><p id="status" role="status">正在检查登录状态…</p><a id="login" hidden href="https://child.myyr.top/api/method/ione_core.harness_auth.launch">通过童健云登录 →</a>
       <form id="form"><label class="sr" for="question">输入业务问题</label><textarea id="question" maxlength="6000" rows="3" placeholder="例如：查询我负责班级今天的缺勤记录" disabled></textarea><div class="actions"><span>仅查询 · 不自动修改业务数据</span><button id="cancel" type="button" hidden>停止等待</button><button id="send" disabled>发送 ↑</button></div></form>
       <p class="footnote">AI 回答可能存在遗漏，请以业务单据为准。刷新页面将开始新的对话，不会删除服务器记录。</p>
     </div>
