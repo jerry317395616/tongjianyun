@@ -73,6 +73,20 @@ class SharedLoginTests(unittest.TestCase):
             self.call()
         self.launcher.assert_not_called()
 
+    def test_explicitly_enabled_administrator_uses_signed_exchange(self):
+        self.fake.session.user = "Administrator"
+        self.fake.conf["tongjianyun_shared_harness_users"] = ["Administrator"]
+        self.fake.conf["tongjianyun_harness_administrator_enabled"] = 1
+        self.call()
+        self.assertEqual(self.fake.local.response["location"],
+                         "https://harness.myyr.top/employee/sso?token=synthetic-handoff")
+
+    def test_admin_flag_does_not_bypass_allowlist(self):
+        self.fake.session.user = "Administrator"
+        self.fake.conf["tongjianyun_harness_administrator_enabled"] = 1
+        with self.assertRaises(PermissionError):
+            self.call()
+
     def test_other_site_cannot_issue_child_identity(self):
         self.fake.local.site = "other.example.invalid"
         with self.assertRaises(PermissionError):

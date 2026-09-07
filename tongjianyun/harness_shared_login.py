@@ -42,9 +42,12 @@ def launch():
             or not isinstance(users, list) or not 1 <= len(users) <= 256
             or any(not isinstance(user, str) or not user or user != user.strip() for user in users)
             or len(set(users)) != len(users)
-            or frappe.session.user not in users
-            or frappe.session.user == "Administrator"):
+            or frappe.session.user not in users):
         _deny()
+    if frappe.session.user == "Administrator":
+        administrator_enabled = frappe.conf.get("tongjianyun_harness_administrator_enabled")
+        if type(administrator_enabled) not in {bool, int} or administrator_enabled != 1:
+            _deny()
     user = frappe.db.get_value("User", frappe.session.user, ["enabled", "user_type"], as_dict=True)
     if not user or not user.enabled or user.user_type != "System User":
         _deny()
