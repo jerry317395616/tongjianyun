@@ -1,0 +1,32 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>共享聊天浏览器测试</title><body><pre id="result">RUNNING</pre><script type="module">
+const report = document.getElementById('result');
+try {
+  const source = await (await fetch('../../public/shared_chat/index.html')).text();
+  const parsed = new DOMParser().parseFromString(source, 'text/html');
+  parsed.querySelector('script').remove();
+  document.body.append(...parsed.body.childNodes);
+  let loggedIn = true;
+  window.fetch = async path => {
+    const payload = path.endsWith('/status') ? {access:'read-only-turns',agentExecution:true}
+      : path.endsWith('/create') ? {sessionId:'session-11111111-1111-1111-1111-111111111111'}
+      : path.endsWith('/prompt') ? {settled:true,throughSeq:24}
+      : {records:[{type:'event',event:{type:'assistant/message',data:{message:{content:[{type:'text',text:'<img src=x onerror=alert(1)> 仅本班学生'}]}}}}],hasMore:false};
+    if(path.endsWith('/logout')) {loggedIn=false;return new Response(null,{status:204});}
+    return new Response(JSON.stringify(payload),{status:loggedIn?200:401,headers:{'Content-Type':'application/json'}});
+  };
+  await import('../../public/shared_chat/chat.mjs');
+  const tick=()=>new Promise(resolve=>setTimeout(resolve,40)); await tick();
+  const assert=(condition,message)=>{if(!condition)throw Error(message);};
+  assert(!document.getElementById('send').disabled,'authorized composer disabled');
+  document.getElementById('question').value='查询本班';
+  document.getElementById('form').requestSubmit();await tick();
+  assert(document.getElementById('messages').textContent.includes('仅本班学生'),'missing final response');
+  assert(!document.querySelector('#messages img'),'model HTML was interpreted');
+  document.getElementById('new').click();
+  assert(document.getElementById('messages').children.length===0,'new session kept old messages');
+  document.getElementById('logout').click();await tick();
+  assert(document.getElementById('send').disabled,'logout did not disable input');
+  assert(document.getElementById('messages').children.length===0,'logout retained data');
+  report.textContent='PASS — 登录启用、提问展示、HTML 文本化、新对话清理、退出禁用、退出清屏（模拟接口）';
+} catch(error) {report.textContent='FAIL — '+error.message;}
+</script></body></html>
