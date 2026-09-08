@@ -5,6 +5,49 @@ from tongjianyun import recipe_item_sync as service
 
 
 class TestRecipeItemSync(unittest.TestCase):
+    def test_batch_failure_preserves_other_successes(self):
+        pending = [{"key": str(i)} for i in range(41)]
+        with patch.object(service, "request_classification", side_effect=[
+                [{"key": "0"}], ValueError("private"), ValueError("private"), [{"key": "40"}]]), \
+             patch.object(service, "validate_proposals"):
+            rows, errors = service.classify_batches(None, pending, [])
+        self.assertEqual(rows, [{"key": "0"}, {"key": "40"}])
+        self.assertEqual(errors[0]["batch"], 2)
+        self.assertEqual(errors[0]["code"], "invalid_classification")
+        self.assertEqual(len(errors[0]["keys"]), 20)
+        self.assertNotIn("private", str(errors))
+
+    def test_transient_service_failure_retries(self):
+        with patch.object(service, "request_classification", side_effect=[service.ClassificationUnavailable("private"), [{"key":"a"}]] ) as call, \
+             patch.object(service, "validate_proposals"):
+            rows, errors = service.classify_batches(None, [{"key":"a"}], [])
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(errors, [])
+
+    def test_total_failure_is_bounded_and_sanitized(self):
+        with patch.object(service, "request_classification", side_effect=RuntimeError("private")) as call:
+            rows, errors = service.classify_batches(None, [{"key":"a"}], [])
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(rows, [])
+        self.assertEqual(errors[0]["code"], "unexpected_error")
+        self.assertNotIn("private", str(errors))
+
+    def test_global_group_validation_failure_preserves_prior_batch(self):
+        with patch.object(service, "request_classification", return_value=[{"key":"a"}]), \
+             patch.object(service, "validate_proposals", side_effect=[None, ValueError(), ValueError()]):
+            rows, errors = service.classify_batches(None, [{"key":str(i)} for i in range(21)], [])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(errors[0]["batch"], 2)
+
+    def test_status_distinguishes_failure_review_and_partial(self):
+        for mappings, failed, unresolved, status in [({}, True, [1], "failed"),
+                ({"a":{}}, True, [1], "partial"), ({}, False, [1], "needs_review"),
+                ({"a":{}}, False, [], "completed")]:
+            result = {"mappings":mappings,"classification_failed":failed,"unresolved":unresolved}
+            service.summarize_result(result)
+            self.assertEqual(result["status"], status)
+
     def test_enqueue_only_after_commit_with_no_actor_override(self):
         callbacks = []
         db = SimpleNamespace(after_commit=SimpleNamespace(add=callbacks.append))

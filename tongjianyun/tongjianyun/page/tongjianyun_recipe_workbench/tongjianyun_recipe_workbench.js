@@ -774,9 +774,10 @@ class TongjianyunRecipePage {
             try {
                 const response = await frappe.call({ method: "tongjianyun.recipe_item_sync.get_sync_status", args: { recipe } });
                 const data = response.message || {};
-                const labels = { queued: "已排队", running: "处理中", completed: "匹配完成", partial: "部分完成，需核对", failed: "同步失败", stale: "食材已变化", not_started: "尚未开始" };
+                const labels = { queued: "已排队", running: "处理中", completed: "匹配完成", partial: "部分完成，需核对", failed: "同步失败", needs_review: "待核对，尚未匹配", stale: "食材已变化", not_started: "尚未开始" };
                 dialog.fields_dict.result.$wrapper.html(`<p>${escapeHtml(labels[data.status] || data.status || "")}</p>
                     <p>${escapeHtml(data.message || "")}</p>
+                    ${(data.classification_errors || []).map(error => `<p>第 ${Number(error.batch)} 批：${escapeHtml(({service_unavailable: "模型服务调用失败", invalid_classification: "分类结果校验失败", unexpected_error: "分类处理异常"})[error.code] || "分类失败")}，已尝试 ${Number(error.attempts)} 次；其他成功批次不受影响。</p>`).join("")}
                     <p>已匹配 ${Object.keys(data.mappings || {}).length} 项；本次新建物料 ${(data.created_items || []).length} 个；新建分类 ${(data.created_groups || []).length} 个。</p>
                     ${(data.unresolved || []).map(row => `<p><strong>${escapeHtml(row.ingredient)}</strong>：${escapeHtml(row.reason)}</p>`).join("")}
                     <p class="text-muted">采购数量与毛料换算系数仍需在 ERP 采购预览中核对。失败或待处理项目可在核对后重新保存食谱重试。</p>`);

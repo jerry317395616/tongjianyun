@@ -3,7 +3,7 @@ import json
 
 import frappe
 
-from tongjianyun.ingredient_classification import request_classification
+from tongjianyun.ingredient_classification import request_classification, ClassificationUnavailable, validate_proposals
 from tongjianyun.harness_ingredient_client import HarnessIngredientClient
 from tongjianyun.ingredient_resolution import FILTERS, requires_product_confirmation
 from tongjianyun.recipe_procurement import TRACE, _permission, _read, conversion, digest
@@ -55,7 +55,7 @@ def schedule_after_save(recipe):
         queued = {"status": "queued", "revision": snapshot["revision"], "message": "食材物料匹配已排队。"}
         _state(recipe, queued)
         try:
-            frappe.enqueue("tongjianyun.recipe_item_sync.run_sync", queue="long", timeout=900,
+            frappe.enqueue("tongjianyun.recipe_item_sync.run_sync", queue="long", timeout=1800,
                 recipe=recipe, revision=snapshot["revision"],
                 job_id="recipe-item-sync-" + digest([recipe, snapshot["revision"], actor]), deduplicate=True)
         except Exception:
@@ -84,6 +84,32 @@ def _match(row):
     return None, ""
 
 
+def classify_batches(client, pending, groups):
+    """Validate each batch independently; never discard successful earlier batches."""
+    proposals, failures, accepted = [], [], []
+    for offset in range(0, len(pending), 20):
+        batch = pending[offset:offset + 20]
+        code = "service_unavailable"
+        for attempt in range(2):
+            try:
+                rows = request_classification(client, batch, groups)
+                # Preserve the overall new-group limit and parent consistency.
+                validate_proposals({"rows": proposals + rows}, accepted + batch, groups)
+                proposals.extend(rows)
+                accepted.extend(batch)
+                break
+            except ClassificationUnavailable:
+                code = "service_unavailable"
+            except ValueError:
+                code = "invalid_classification"
+            except Exception:
+                code = "unexpected_error"
+        else:
+            failures.append({"batch": offset // 20 + 1, "keys": [r["key"] for r in batch],
+                             "code": code, "attempts": 2})
+    return proposals, failures
+
+
 def make_plan(recipe):
     _permission("Item", "read")
     _permission("Item Group", "read")
@@ -98,11 +124,11 @@ def make_plan(recipe):
     plan["groups"] = groups
     plan["proposals"] = []
     plan["classification_failed"] = False
+    plan["classification_errors"] = []
+    plan["creation_blocked"] = bool(pending) and not frappe.has_permission("Item", ptype="create")
     if pending and frappe.has_permission("Item", ptype="create"):
-        try:
-            plan["proposals"] = request_classification(HarnessIngredientClient(), pending, groups)
-        except Exception:
-            plan["classification_failed"] = True
+        plan["proposals"], plan["classification_errors"] = classify_batches(HarnessIngredientClient(), pending, groups)
+        plan["classification_failed"] = bool(plan["classification_errors"])
     return plan
 
 
@@ -123,7 +149,9 @@ def apply_plan(plan):
     by_key = {row["key"]: row for row in proposals}
     result = {"recipe": current["recipe"], "revision": current["revision"], "mappings": {},
         "created_items": [], "created_groups": [], "unresolved": [], "actor": frappe.session.user,
-        "classification_failed": plan["classification_failed"]}
+        "classification_failed": plan["classification_failed"],
+        "classification_errors": plan.get("classification_errors", [])}
+    failed_keys = {key for error in result["classification_errors"] for key in error["keys"]}
     for index, row in enumerate(current["ingredients"]):
         savepoint = "ingredient_sync_" + str(index)
         frappe.db.savepoint(savepoint)
@@ -132,8 +160,14 @@ def apply_plan(plan):
             mapping, reason = _match(row)
             if not mapping and not reason:
                 proposal = by_key.get(row["key"])
-                if not proposal or proposal["action"] == "review":
-                    reason = "模型未给出可用分类或需要核对；未创建物料。"
+                if row["key"] in failed_keys:
+                    reason = "本批分类服务调用或结果校验失败，已尝试 2 次；未创建物料，可重试。"
+                elif plan.get("creation_blocked"):
+                    reason = "当前账号没有创建物料权限，未创建物料。"
+                elif not proposal:
+                    reason = "分类结果缺失，未创建物料；请重试。"
+                elif proposal["action"] == "review":
+                    reason = "食材分类需人工核对，未自动创建物料。"
                 else:
                     _permission("Item", "create")
                     # Only create UOM-independent Items when an existing enabled unit is an exact equivalence.
@@ -168,7 +202,7 @@ def apply_plan(plan):
         except Exception:
             frappe.db.rollback(save_point=savepoint)
             result["unresolved"].append({**row, "reason": "权限、分类或物料校验未通过，未创建该物料。"})
-    result["status"] = "partial" if result["unresolved"] else "completed"
+    summarize_result(result)
     key = KIND + "::" + digest(current["recipe"])[:32]
     receipt = _read(TRACE, key) if frappe.db.exists(TRACE, key) else frappe.get_doc({"doctype": TRACE, "data_key": key})
     receipt.update({"record_type": KIND, "record_id": current["revision"], "parent_id": current["recipe"],
@@ -176,6 +210,17 @@ def apply_plan(plan):
         "record_json": json.dumps(result, ensure_ascii=False)})
     receipt.save() if not receipt.is_new() else receipt.insert()
     return result
+
+
+def summarize_result(result):
+    if not result["unresolved"]:
+        result.update(status="completed", message="食材物料匹配完成。")
+    elif result["mappings"]:
+        result.update(status="partial", message="成功匹配已保留；其余项目请按原因处理。")
+    elif result["classification_failed"]:
+        result.update(status="failed", message="分类服务调用或结果校验失败，本次没有成功匹配物料；不是所有食材都需要人工分类。")
+    else:
+        result.update(status="needs_review", message="尚无成功匹配，请核对权限、单位及食材信息。")
 
 
 def run_sync(recipe, revision):
