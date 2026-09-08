@@ -144,6 +144,7 @@ class TongjianyunRecipePage {
                     </div>
                     <div class="tjy-hero-actions">
                         ${recipe.workflowStatus === "已发布" ? '<button class="tjy-outline-button" data-action="erp-procurement">准备 ERP 采购需求</button>' : ''}
+                        <button class="tjy-outline-button" data-action="item-sync">食材物料匹配结果</button>
                         <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入食谱</span></button>
                         <button class="tjy-primary-button" data-action="edit">${["已发布", "已归档"].includes(recipe.workflowStatus) ? "创建修订版" : "编辑食谱"}</button>
                     </div>
@@ -485,7 +486,9 @@ class TongjianyunRecipePage {
                 freeze_message: "正在保存食谱...",
             });
             this.state.payload = normalizePayload(response.message || this.state.payload);
-            frappe.show_alert({ message: "食谱已保存", indicator: "green" });
+            const sync = response.message?.erp_sync;
+            if (sync?.recipe) this.state.selectedRecipe = sync.recipe;
+            frappe.show_alert({ message: sync?.message || "食谱已保存", indicator: sync?.status === "blocked" ? "orange" : "green" });
             this.showBrowse();
         } catch (error) {
             this.showError("食谱保存失败", error);
@@ -749,6 +752,7 @@ class TongjianyunRecipePage {
     }
 
     bindCommonActions() {
+        this.main.find('[data-action="item-sync"]').on("click", () => this.showItemSync());
         this.main.find('[data-action="erp-procurement"]').on("click", () => this.openProcurement());
         this.main.find('[data-action="library"]').on("click", () => this.showLibrary());
         this.main.find('[data-action="edit"]').on("click", () => this.editRecipe());
@@ -758,6 +762,30 @@ class TongjianyunRecipePage {
         this.main.find('[data-action="calendar"]').on("click", () => this.enterEdit());
         this.main.find('[data-action="previous"]').on("click", () => this.openAdjacentRecipe(-1));
         this.main.find('[data-action="next"]').on("click", () => this.openAdjacentRecipe(1));
+    }
+
+    async showItemSync() {
+        const recipe = this.state.selectedRecipe || this.state.payload?.recipe?.recipeId;
+        if (!recipe) return;
+        const dialog = new frappe.ui.Dialog({ title: "食材物料匹配结果", fields: [{ fieldtype: "HTML", fieldname: "result" }],
+            primary_action_label: "刷新状态", primary_action: () => refresh() });
+        const refresh = async () => {
+            dialog.fields_dict.result.$wrapper.text("正在读取状态...");
+            try {
+                const response = await frappe.call({ method: "tongjianyun.recipe_item_sync.get_sync_status", args: { recipe } });
+                const data = response.message || {};
+                const labels = { queued: "已排队", running: "处理中", completed: "匹配完成", partial: "部分完成，需核对", failed: "同步失败", stale: "食材已变化", not_started: "尚未开始" };
+                dialog.fields_dict.result.$wrapper.html(`<p>${escapeHtml(labels[data.status] || data.status || "")}</p>
+                    <p>${escapeHtml(data.message || "")}</p>
+                    <p>已匹配 ${Object.keys(data.mappings || {}).length} 项；本次新建物料 ${(data.created_items || []).length} 个；新建分类 ${(data.created_groups || []).length} 个。</p>
+                    ${(data.unresolved || []).map(row => `<p><strong>${escapeHtml(row.ingredient)}</strong>：${escapeHtml(row.reason)}</p>`).join("")}
+                    <p class="text-muted">采购数量与毛料换算系数仍需在 ERP 采购预览中核对。失败或待处理项目可在核对后重新保存食谱重试。</p>`);
+            } catch (error) {
+                dialog.fields_dict.result.$wrapper.text("无法读取匹配结果，请检查账号权限。");
+            }
+        };
+        dialog.show();
+        await refresh();
     }
 
     async openProcurement() {

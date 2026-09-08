@@ -97,6 +97,13 @@ def prepare(recipe, company):
         if data.get("company") == company:
             for key, mapping in data.get("mappings", {}).items():
                 remembered.setdefault(key, mapping)
+    # Automatic matches are unit conversions only; explicit human/company mappings win.
+    from tongjianyun.recipe_item_sync import KIND as AUTO_KIND
+    auto_key = AUTO_KIND + "::" + digest(recipe)[:32]
+    if frappe.db.exists(TRACE, auto_key):
+        auto_data = json.loads(_read(TRACE, auto_key).record_json)
+        for key, mapping in auto_data.get("mappings", {}).items():
+            remembered.setdefault(key, {**mapping, "automatic": True})
     ingredients = {}
     meals = {}
     for row in rows:
@@ -119,7 +126,7 @@ def prepare(recipe, company):
                 item_code = ""
             ingredients[key] = {"key": key, "ingredient": row["ingredient_name"], "source_uom": row["unit"],
                 "item_code": item_code, "uom": unit, "factor": factor,
-                "basis": "历史确认" if mapping and item_code else "同名候选，需核对" if item_code else "待匹配"}
+                "basis": "自动匹配，需核对毛料系数" if mapping.get("automatic") and item_code else "历史确认" if mapping and item_code else "同名候选，需核对" if item_code else "待匹配"}
             if unit and not frappe.db.exists("UOM", unit):
                 ingredients[key]["basis"] = "库存单位不存在，需管理员修复"
         meal_key = row["date"] + ":" + row["slot"]

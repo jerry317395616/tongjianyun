@@ -138,8 +138,8 @@ def _recipe_business_links(recipe_doc) -> list[dict[str, Any]]:
             continue
         count = cint(
             frappe.db.sql(
-                f"select count(*) from `tab{doctype}` where {' or '.join(clauses)}",
-                tuple(values),
+                f"select count(*) from `tab{doctype}` where ({' or '.join(clauses)}) and coalesce(record_type, '') != %s",
+                tuple(values) + ("erp_recipe_auto_mapping",),
             )[0][0]
         )
         if count:
@@ -308,9 +308,13 @@ def _save_current_recipe(payload: Any, *, commit: bool) -> dict[str, Any]:
                     ingredient.sort_order = ingredient_order
                     _save_doc(ingredient)
 
+    from tongjianyun.recipe_item_sync import schedule_after_save
+    sync = schedule_after_save(recipe.name)
     if commit:
         frappe.db.commit()
-    return _current_recipe_payload(recipe)
+    result = _current_recipe_payload(recipe)
+    result["erp_sync"] = sync
+    return result
 
 
 def _current_recipe_payload(recipe) -> dict[str, Any]:
