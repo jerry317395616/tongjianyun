@@ -10,12 +10,12 @@ ORIGIN = "https://harness.myyr.top"
 def valid_redirect(location):
     target = urlsplit(urljoin(ORIGIN + "/", location))
     return (target.scheme, target.netloc, target.path) == (
-        "https", "harness.myyr.top", "/employee/chat/"
+        "https", "harness.myyr.top", "/native/"
     ) and not target.query and not target.fragment
 
 
 def main():
-    assert valid_redirect("/employee/chat/")
+    assert valid_redirect("/native/")
     assert not valid_redirect("http://harness.myyr.top:13091/employee/chat/")
     checks = []
     for path, expected in [("/", 302), ("/employee/chat/", 200),
