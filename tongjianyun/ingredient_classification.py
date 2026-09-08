@@ -8,6 +8,8 @@ class ClassificationUnavailable(RuntimeError):
 
 
 def request_classification(client, ingredients, groups):
+    if hasattr(client, "classify_ingredients"):
+        return validate_proposals(client.classify_ingredients(ingredients, groups), ingredients, groups)
     endpoint = urlsplit(client.endpoint or "")
     if endpoint.scheme not in {"http", "https"} or not endpoint.netloc:
         raise ClassificationUnavailable("食材分类模型接口尚未配置，未创建任何物料或物料组。")
@@ -56,6 +58,8 @@ def validate_proposals(result, ingredients, groups):
             if (not re.fullmatch(r"[\u4e00-\u9fffA-Za-z0-9][\u4e00-\u9fffA-Za-z0-9 ·（）()及与-]{0,39}", group)
                     or group in catalog or parent not in catalog or not catalog[parent]["is_group"]):
                 raise ValueError("新物料组或父级无效")
+            if group in {r["ingredient"] for r in source.values()}:
+                raise ValueError("不能按单个食材名称新建物料组")
             if group in new_groups and new_groups[group] != parent:
                 raise ValueError("同名新组的父级不一致")
             new_groups[group] = parent
@@ -74,7 +78,7 @@ def validate_proposals(result, ingredients, groups):
 def preview_recipe(recipe):
     """Internal read-only preview. Not exposed as an unauthenticated model proxy."""
     import frappe
-    from ione_agent.structured import StructuredTaskClient
+    from tongjianyun.harness_ingredient_client import HarnessIngredientClient
     from tongjianyun.recipe_procurement import _permission, _read, digest
 
     _permission("Item Group", "read")
@@ -92,5 +96,5 @@ def preview_recipe(recipe):
     groups = [dict(r) for r in frappe.get_list("Item Group",
         fields=["name", "is_group", "parent_item_group"], limit_page_length=0)]
     source = [{"key": key, **value} for key, value in sorted(ingredients.items())]
-    rows = request_classification(StructuredTaskClient.from_frappe_config(), source, groups)
+    rows = request_classification(HarnessIngredientClient(), source, groups)
     return {"recipe": recipe, "revision": digest(source), "rows": rows, "read_only": True}

@@ -20,6 +20,10 @@ class TestClassification(unittest.TestCase):
     def test_new(self):
         self.assertEqual(self.validate(action="new", group="谷物", parent="根")[0]["action"], "new")
 
+    def test_no_group_per_ingredient(self):
+        with self.assertRaises(ValueError):
+            self.validate(action="new", group="大米", parent="根")
+
     def test_review(self):
         self.assertEqual(self.validate(action="review", group="")[0]["action"], "review")
 
@@ -60,3 +64,10 @@ class TestClassification(unittest.TestCase):
     def test_local_linking_response_rejected(self):
         with self.assertRaises(ValueError):
             validate_proposals({"portions": []}, self.source, self.groups)
+
+    def test_harness_result_uses_same_validation(self):
+        client = SimpleNamespace(classify_ingredients=lambda ingredients, groups: {"rows": [self.row]})
+        self.assertEqual(request_classification(client, self.source, self.groups)[0], self.row)
+        client.classify_ingredients = lambda ingredients, groups: {"rows": []}
+        with self.assertRaises(ValueError):
+            request_classification(client, self.source, self.groups)

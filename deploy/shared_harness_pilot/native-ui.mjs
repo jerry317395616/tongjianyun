@@ -4,9 +4,10 @@ import { randomBytes } from 'node:crypto';
 import { request } from 'node:http';
 import { nativeModelCatalog, selectNativeModel } from './native-models.mjs';
 import { readOwnedAttachment } from './native-attachments.mjs';
+import { startBridge } from './ingredient-model-bridge.mjs';
 
 export const name = 'tongjianyun-native-harness-ui';
-export const inject = ['webServer', 'sessionController', 'sessionQuery'];
+export const inject = ['webServer', 'sessionController', 'sessionQuery', 'llm', 'agentDefaultModel'];
 const ORIGIN = 'https://harness.myyr.top';
 const BASE = '/home/zyd/frappe/native-bench/apps/tongjianyun/deploy/shared_harness_pilot/';
 const INDEX = '/home/zyd/frappe/deepseek-harness/apps/web/dist/index.html';
@@ -87,7 +88,8 @@ export async function executeOwnedCommand(value, cookie, signal, services, autho
   return result;
 }
 
-export function apply(ctx) {
+export async function apply(ctx) {
+  await ctx.effect(() => startBridge(ctx));
   const active = new Map();
   let closing = false;
   async function handle(req, res, abort) {
