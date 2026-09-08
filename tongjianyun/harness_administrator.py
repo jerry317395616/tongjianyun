@@ -19,7 +19,7 @@ ENABLE_KEY = "tongjianyun_harness_administrator_enabled"
 OPERATIONS = frozenset({"create", "update", "submit", "cancel", "delete"})
 PROTECTED_MODULES = frozenset({
     "Core", "Custom", "Desk", "Integrations", "Printing", "Email", "Website",
-    "Workflow", "Automation", "Social",
+    "Workflow", "Automation", "Social", "I ONE AI", "Flow",
 })
 PROTECTED_TYPES = frozenset({
     "DocType", "DocField", "DocPerm", "Custom DocPerm", "Custom Field",
