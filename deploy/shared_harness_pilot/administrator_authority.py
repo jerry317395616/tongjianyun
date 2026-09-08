@@ -2,12 +2,14 @@
 
 Ordinary accounts retain the upstream pinned-identity executor and read scope.
 Administrator shares the signed login, cookie lifecycle and peer-UID checks,
-but uses a fixed Tongjianyun worker. No write operation is exposed here.
+but uses a fixed Tongjianyun worker. Confirmation is a separate browser action.
 """
 import argparse
 import asyncio
 from dataclasses import replace
 import json
+import hashlib
+import re
 from pathlib import Path
 import signal
 import sys
@@ -54,6 +56,8 @@ class AdministratorAuthority(SharedIdentity):
         if (not isinstance(request, dict) or set(request) != {"version", "operation", "value"}
                 or type(request["version"]) is not int or request["version"] != 1):
             raise ValueError("invalid request")
+        if request["operation"] == "application":
+            return await self.application(request["value"])
         if request["operation"] != "read":
             return await super().execute(request)
         value = request["value"]
@@ -77,6 +81,29 @@ class AdministratorAuthority(SharedIdentity):
             return result
         finally:
             self.readers.remove("Administrator")
+
+    async def application(self, value):
+        """Admit only authenticated Administrator actions; bind plans to this login and chat."""
+        if (not isinstance(value, dict)
+                or set(value) != {"credential", "sessionId", "action", "arguments"}
+                or not isinstance(value["sessionId"], str)
+                or not re.fullmatch(r"session-[0-9a-f-]{36}", value["sessionId"])
+                or value["action"] not in {"capabilities", "preview", "review", "confirm"}
+                or not isinstance(value["arguments"], dict)):
+            raise ValueError("invalid application request")
+        principal = await self.resolve(value["credential"])
+        if principal is None:
+            raise PermissionError("login unavailable")
+        if principal["user"] != "Administrator":
+            if value["action"] == "capabilities" and value["arguments"] == {}:
+                return {"previews": False}
+            raise PermissionError("application action unavailable")
+        binding = hashlib.sha256(json.dumps([value["credential"], value["sessionId"]]).encode()).hexdigest()
+        result = await self.worker("application", {"session_hash": binding,
+            "action": value["action"], "arguments": value["arguments"]}, self.config.timeout_seconds)
+        if await self.resolve(value["credential"]) != principal:
+            raise PermissionError("login revoked during application action")
+        return result
 
 
 async def serve(authority):

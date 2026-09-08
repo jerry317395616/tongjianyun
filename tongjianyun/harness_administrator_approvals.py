@@ -1,6 +1,6 @@
 """Internal confirmed-write adapter using existing Frappe audit documents.
 
-No HTTP method or AI tool exposes this module. The transport must supply the
+No whitelisted Frappe method exposes this module. The transport must supply the
 verified session hash and accept confirmation separately from model execution.
 Each function owns an otherwise empty database transaction in a dedicated worker.
 """
@@ -95,12 +95,70 @@ def _load(preview_id, session_hash, displayed_digest):
     return envelope
 
 
+def _lock_preview(preview_id):
+    """Lock the exact primary key before metadata loading can establish a snapshot."""
+    business._name(preview_id)
+    audit = frappe.qb.DocType(AUDIT)
+    (frappe.qb.from_(audit).select(audit.name).where(audit.name == preview_id).for_update()).run()
+
+
 def _receipt(tool_name):
-    rows = frappe.get_list(AUDIT, filters={"user": "Administrator", "tool_name": tool_name},
-                           fields=["name", "result_summary"], limit_page_length=2)
+    # Confirmation takes the preview row lock before its consistent snapshot.
+    # Do not range-lock the non-indexed tool_name field: that locks unrelated
+    # audit rows and can deadlock with the winning worker's result insertion.
+    rows = frappe.db.get_values(AUDIT, {"user": "Administrator", "tool_name": tool_name},
+        ["name", "result_summary"], as_dict=True, limit=2)
     if len(rows) > 1:
         raise RuntimeError("Duplicate approval receipts; operator review required")
     return json.loads(rows[0]["result_summary"]) if rows else None
+
+
+def review_previews(session_hash):
+    """Return at most ten previews belonging to this exact login and chat, with durable outcomes."""
+    _require(session_hash)
+    rows = frappe.get_list(AUDIT, filters={"user": "Administrator", "tool_name": PREVIEW_TOOL,
+        "status": "成功", "request_summary": ["like", '%"session_hash":"' + session_hash + '"%']},
+        fields=["name", "request_summary"], order_by="creation desc", limit_page_length=10)
+    items = []
+    for row in rows:
+        envelope = json.loads(row["request_summary"])
+        if not hmac.compare_digest(envelope["session_hash"], session_hash):
+            raise PermissionError("Preview binding mismatch")
+        if hashlib.sha256(envelope["payload"].encode()).hexdigest() != envelope["digest"]:
+            raise PermissionError("Preview content mismatch")
+        receipt = _receipt(RESULT_PREFIX + row["name"])
+        claim = _receipt(CLAIM_PREFIX + row["name"])
+        state = (receipt or {}).get("state") or ("outcome_unknown" if claim else
+            "expired" if envelope["expires_at"] <= time.time() else "awaiting_confirmation")
+        items.append({"preview_id": row["name"], "digest": envelope["digest"],
+            "expires_at": envelope["expires_at"], "plan": json.loads(envelope["payload"]),
+            "state": state, "receipt": receipt})
+    return {"items": items}
+
+
+def dispatch(value):
+    """Validate the private transport protocol; callers cannot supply a site or account."""
+    if not isinstance(value, dict) or set(value) != {"session_hash", "action", "arguments"}:
+        raise ValueError("Invalid application request")
+    business._administrator()
+    action, args, binding = value["action"], value["arguments"], value["session_hash"]
+    if not isinstance(args, dict):
+        raise ValueError("Invalid application arguments")
+    if action == "capabilities" and not args:
+        enabled = frappe.conf.get(WRITE_ENABLE_KEY)
+        return {"previews": type(enabled) in {int, bool} and enabled == 1}
+    _require(binding)
+    if action == "review" and not args:
+        return review_previews(binding)
+    if action == "confirm" and set(args) == {"preview_id", "digest"}:
+        return confirm_preview(binding, args["preview_id"], args["digest"])
+    if action == "preview" and set(args) == {"operation", "arguments"}:
+        change = args["arguments"]
+        if (not isinstance(change, dict) or "doctype" not in change
+                or set(change) - {"doctype", "name", "changes"}):
+            raise ValueError("Invalid preview fields")
+        return create_preview(binding, args["operation"], **change)
+    raise ValueError("Unsupported application action")
 
 
 def confirm_preview(session_hash, preview_id, displayed_digest):
@@ -113,7 +171,13 @@ def confirm_preview(session_hash, preview_id, displayed_digest):
     effects require reconciliation on failure; this is not distributed atomicity.
     """
     _require(session_hash)
+    # This function owns an otherwise empty worker transaction. Discard the
+    # identity checks' old repeatable-read snapshot before taking the preview
+    # lock. The first consistent receipt read then sees the preceding winner's
+    # committed claim, without locking the entire audit table.
+    frappe.db.rollback()
     try:
+        _lock_preview(preview_id)
         envelope = _load(preview_id, session_hash, displayed_digest)
         previous = _receipt(CLAIM_PREFIX + preview_id)
         if previous is not None:

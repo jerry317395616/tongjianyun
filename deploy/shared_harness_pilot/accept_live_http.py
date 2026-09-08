@@ -6,8 +6,8 @@ from urllib.parse import urlsplit
 import frappe
 from ione_core import harness_auth
 
-def request(path, cookie=None, payload=None):
-    connection = http.client.HTTPConnection('127.0.0.1',13091,timeout=35)
+def request(path, cookie=None, payload=None, *, timeout=35):
+    connection = http.client.HTTPConnection('127.0.0.1',13091,timeout=timeout)
     headers = {'Host':'harness.myyr.top','Origin':'https://harness.myyr.top'}
     if cookie: headers['Cookie'] = cookie
     if payload is not None: headers['Content-Type'] = 'application/json'

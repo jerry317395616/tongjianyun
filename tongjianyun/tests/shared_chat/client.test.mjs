@@ -40,3 +40,36 @@ test('empty or oversized questions never issue network requests', async () => {
   const api=new EmployeeChat(()=>{throw Error('unexpected network');});
   await assert.rejects(api.prompt(' '));await assert.rejects(api.prompt('a'.repeat(6001)));
 });
+
+test('history restores an owned session without inventing an upper cursor', async () => {
+  const api = new EmployeeChat(async (path, options) => {
+    assert.equal(path, '/employee/session/page');
+    assert.deepEqual(JSON.parse(options.body), {sessionId: id, maxMessages: 50});
+    return {ok: true, status: 200, json: async () => ({records: [], hasMore: false})};
+  });
+  api.session = id;
+  assert.deepEqual(await api.history(), {messages: [], hasMore: false});
+});
+
+test('review never executes and confirmation sends only the retained preview reference', async () => {
+  const calls = [];
+  const replies = [{previews: true}, {items: []}, {state: 'succeeded'}];
+  const api = new EmployeeChat(async (path, options) => {
+    calls.push([path, JSON.parse(options.body)]);
+    return {ok: true, status: 200, json: async () => replies.shift()};
+  });
+  api.session = id;
+  await api.reviews();
+  assert.deepEqual(calls.map(row => row[0]), ['/employee/session/capabilities', '/employee/session/review']);
+  await api.confirm({preview_id: 'audit-one', digest: 'a'.repeat(64), plan: {changes: {injected: true}}});
+  assert.deepEqual(calls[2], ['/employee/session/confirm', {sessionId: id, preview_id: 'audit-one', digest: 'a'.repeat(64)}]);
+});
+
+test('a confirmation transport failure is not automatically retried', async () => {
+  let attempts = 0;
+  const api = new EmployeeChat(async () => { attempts++; throw new Error('connection lost'); });
+  api.session = id;
+  await assert.rejects(api.confirm({preview_id: 'audit-one', digest: 'a'.repeat(64)}));
+  assert.equal(attempts, 1);
+  assert.equal(api.session, id);
+});

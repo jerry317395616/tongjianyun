@@ -35,12 +35,16 @@ class Ledger:
         data = doctype if isinstance(doctype, dict) else self.rows[name]
         return AuditDoc(**data, ledger=self)
 
-    def get_list(self, doctype, *, filters, fields, limit_page_length):
+    def get_list(self, doctype, *, filters, fields, limit_page_length, order_by=None):
         return [{field: row.get(field) for field in fields} for row in self.rows.values()
-                if all(row.get(key) == value for key, value in filters.items())][:limit_page_length]
+                if all((value[1].strip('%') in row.get(key, '')) if isinstance(value, list)
+                    else row.get(key) == value for key, value in filters.items())][:limit_page_length]
 
     def commit(self):
         self.saved = deepcopy(self.rows), self.business_count
+
+    def get_values(self, doctype, filters, fields, *, as_dict, limit):
+        return self.get_list(doctype, filters=filters, fields=fields, limit_page_length=limit)
 
     def rollback(self):
         self.rows, self.business_count = deepcopy(self.saved)
@@ -61,6 +65,7 @@ class ApprovalTests(unittest.TestCase):
         self.admin = Mock()
         self.apply = Mock(side_effect=self.write)
         for patcher in [patch.object(service, "frappe", self.fake),
+                        patch.object(service, "_lock_preview", Mock()),
                         patch.object(service.business, "_administrator", self.admin),
                         patch.object(service.business, "preview_change", Mock(return_value=preview)),
                         patch.object(service.business, "apply_preview", self.apply),
@@ -125,6 +130,7 @@ class ApprovalTests(unittest.TestCase):
         envelope = json.loads(row["request_summary"])
         envelope["payload"] += " "
         row["request_summary"] = json.dumps(envelope)
+        self.ledger.commit()
         with self.assertRaises(PermissionError):
             self.confirm(preview)
         self.apply.assert_not_called()
@@ -199,6 +205,27 @@ class ApprovalTests(unittest.TestCase):
         self.assertEqual(self.confirm(preview)["state"], "outcome_unknown")
         self.assertEqual(self.confirm(preview)["state"], "succeeded")
         self.apply.assert_called_once()
+
+    def test_review_uses_only_session_owned_previews_and_durable_results(self):
+        preview = self.create()
+        self.assertEqual(service.review_previews("b" * 64), {"items": []})
+        self.assertEqual(service.review_previews(self.binding)["items"][0]["state"], "awaiting_confirmation")
+        self.confirm(preview)
+        self.assertEqual(service.review_previews(self.binding)["items"][0]["state"], "succeeded")
+        self.apply.assert_called_once()
+
+    def test_dispatch_rejects_identity_extra_fields_and_confirmation_in_preview(self):
+        value = {"session_hash": self.binding, "action": "preview", "arguments": {
+            "operation": "create", "arguments": {"doctype": "Student", "changes": {"first_name": "Synthetic"}}}}
+        preview = service.dispatch(value)
+        self.apply.assert_not_called()
+        for extra in ["user", "site", "confirm", "session_hash"]:
+            with self.assertRaises((ValueError, PermissionError)):
+                service.dispatch({**value, extra: "invalid"})
+            with self.assertRaises(ValueError):
+                service.dispatch({**value, "arguments": {**value["arguments"], extra: True}})
+        self.assertEqual(service.dispatch({"session_hash": self.binding, "action": "confirm",
+            "arguments": {"preview_id": preview["preview_id"], "digest": preview["digest"]}})["state"], "succeeded")
 
 
 if __name__ == "__main__":

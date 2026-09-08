@@ -1,0 +1,24 @@
+# Final opt-in overlay. Business definitions and persona are owned by Tongjianyun.
+- id: employee-session-access
+  config:
+    applicationPreviews: true
+    promptPreset: tongjianyun-business
+    publicOrigin: https://harness.myyr.top
+    identitySocketPath: /home/zyd/frappe/state/harness/authority.sock
+    ownersDirectory: !!js process.env.DSH_SHARED_OWNERS_DIRECTORY
+    timeoutMs: 90000
+    maxRequests: 16
+    maxOwnershipEntries: 10000
+    maxResponseBytes: 1000000
+- id: agent-presets
+  config:
+    default: employee-readonly
+    includeShippedRoot: false
+    includeUserRoot: false
+    roots:
+      - path: /home/zyd/frappe/deepseek-harness/apps/cli/config/examples/employee-readonly/presets
+        trust: system
+      - path: /home/zyd/frappe/deepseek-harness/apps/cli/config/examples/employee-shared/presets
+        trust: system
+      - path: /home/zyd/frappe/native-bench/apps/tongjianyun/deploy/shared_harness_pilot/presets
+        trust: system

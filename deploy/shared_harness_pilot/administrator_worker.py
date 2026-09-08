@@ -1,4 +1,4 @@
-"""Fixed read-only worker for the trusted shared authority, never a model CLI."""
+"""Fixed worker for the trusted authority; business actions remain in Tongjianyun."""
 from contextlib import redirect_stdout, redirect_stderr
 import json
 import os
@@ -25,6 +25,9 @@ def execute(request):
         raise PermissionError("Administrator is not admitted")
     if operation == "check" and arguments == {}:
         return {"enabled": True}
+    if operation == "application":
+        from tongjianyun import harness_administrator_approvals as approvals
+        return approvals.dispatch(arguments)
     if (not isinstance(operation, str) or operation not in READ_FIELDS or not isinstance(arguments, dict)
             or set(arguments) - READ_FIELDS[operation]):
         raise ValueError("unsupported read")
@@ -41,7 +44,21 @@ def execute(request):
                 continue
             fields.append({"fieldname": field.fieldname, "fieldtype": field.fieldtype,
                            "label": field.label})
-        return {"doctype": doctype, "fields": fields, "access": "read-only"}
+        from tongjianyun.harness_administrator_approvals import WRITE_ENABLE_KEY
+        enabled = frappe.conf.get(WRITE_ENABLE_KEY)
+        can_preview = type(enabled) in {int, bool} and enabled == 1
+        for field in fields:
+            try:
+                service._field(meta, field["fieldname"], writing=True)
+                field["writable"] = True
+            except ValueError:
+                field["writable"] = False
+        return {"doctype": doctype, "fields": fields, "access": "preview-confirm" if can_preview else "read-only",
+                "change_preview": {"tool": "employee_application_preview", "operation": "update",
+                    "arguments": {"doctype": doctype, "name": "existing record name", "changes": "writable scalar fields only"},
+                    "operations": ["create", "update", "submit", "cancel", "delete"],
+                    "instructions": "Prepare only the requested change. A preview is NOT execution; the user must review and confirm separately."}
+                if can_preview else None}
     options = {key: value for key, value in arguments.items() if key != "doctype"}
     if options.pop("order_by", "name asc") not in {None, "name asc"}:
         raise ValueError("Only name asc ordering is currently supported")

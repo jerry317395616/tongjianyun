@@ -1,6 +1,6 @@
 /** Same-origin employee-only transport. No Host API, credential storage or actor parameter. */
 export class EmployeeChat {
-  constructor(fetcher = fetch) { this.fetcher = fetcher; this.session = null; this.cursor = -1; }
+  constructor(fetcher = (input, init) => fetch(input, init)) { this.fetcher = fetcher; this.session = null; this.cursor = -1; }
   async request(path, data, signal) {
     const response = await this.fetcher(`/employee/${path}`, {
       method: data === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store',
@@ -15,6 +15,23 @@ export class EmployeeChat {
   }
   reset() { this.session = null; this.cursor = -1; }
   async status(signal) { return this.request('status', undefined, signal); }
+  async reviews(signal) {
+    if (!this.session) return { items: [] };
+    const capability = await this.request('session/capabilities', { sessionId: this.session }, signal);
+    if (capability.previews !== true) return { items: [] };
+    return this.request('session/review', { sessionId: this.session }, signal);
+  }
+  async confirm(preview, signal) {
+    if (!this.session) throw new Error('Missing session');
+    return this.request('session/confirm', { sessionId: this.session,
+      preview_id: preview.preview_id, digest: preview.digest }, signal);
+  }
+  async history(signal) {
+    if (!this.session) return { messages: [], hasMore: false };
+    const page = await this.request('session/page', { sessionId: this.session,
+      maxMessages: 50 }, signal);
+    return { messages: messages(page), hasMore: page.hasMore === true };
+  }
   async prompt(text, signal) {
     if (!text.trim() || text.length > 6000) throw new Error('Invalid question');
     if (!this.session) {
