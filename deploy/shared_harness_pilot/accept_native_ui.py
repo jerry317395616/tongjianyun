@@ -43,6 +43,9 @@ def main():
             ('/native/view', '{}', True, 'https://harness.myyr.top', 400),
             ('/native/view', body, True, 'https://harness.myyr.top', 404),
             ('/api/rpc', '{}', True, 'https://harness.myyr.top', 404),
+            ('/native/command', json.dumps({'operation':'cancel','sessionId':'session-11111111-1111-1111-1111-111111111111'}), False, 'https://harness.myyr.top', 401),
+            ('/native/command', json.dumps({'operation':'cancel','sessionId':'session-11111111-1111-1111-1111-111111111111'}), True, 'https://harness.myyr.top', 404),
+            ('/native/command', json.dumps({'operation':'cancel','sessionId':'session-11111111-1111-1111-1111-111111111111','user':'Administrator'}), True, 'https://harness.myyr.top', 400),
         ]:
             headers = {'Host': 'harness.myyr.top', 'Origin': origin, 'Content-Type': 'application/json'}
             if authenticated:

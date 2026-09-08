@@ -33,9 +33,23 @@ try {
   await page.waitForTimeout(2000);
   if (await page.getByText('只回复“原生界面连接正常”。不要查询或修改业务数据。', {exact:true}).count() !== 1)
     throw new Error('Duplicate user echo');
+  const sessionId = calls.find(row=>row.path.includes('prompt'))?.sessionId;
+  if (!sessionId) throw new Error('No owned session');
+  const commands = await page.evaluate(async sessionId => {
+    const invoke = async (method, request) => {
+      const response = await window.__DSH_TRANSPORT__.fetch('', {body:JSON.stringify({
+        rpcId:crypto.randomUUID(),method,payload:{args:{request}},
+      }),signal:new AbortController().signal});
+      return (await response.json()).result;
+    };
+    return [await invoke('session/rename',{sessionId,title:'原生会话操作验收'}),
+      await invoke('session/cancel',{sessionId})];
+  },sessionId);
+  if (commands.some(result=>!result.ok)) throw new Error('Owned command failed');
+  await page.getByText('原生会话操作验收',{exact:true}).first().waitFor({timeout:10000});
   await page.screenshot({ path: '/home/zyd/frappe/backups/harness/application-preview-20260908/native-ui.png' });
   if (errors.length || failures.length) throw new Error('Native browser errors');
-  console.log(JSON.stringify({passed:true, uniqueUserEcho:true, modelReply:true, errors, failures}));
+  console.log(JSON.stringify({passed:true, uniqueUserEcho:true, modelReply:true, rename:true, cancelAcknowledged:true, errors, failures}));
 } catch (error) {
   await page.screenshot({ path: '/home/zyd/frappe/backups/harness/application-preview-20260908/native-ui.png' });
   console.log(JSON.stringify({ passed:false, error:error.message.slice(0,200), errors, failures,

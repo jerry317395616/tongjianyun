@@ -63,6 +63,28 @@ export async function readOwnedSnapshot(value, cookie, signal, services, authori
   return { snapshot: first.value, events };
 }
 
+/** Session-local commands only; no browser-selected service, actor or filesystem path. */
+export async function executeOwnedCommand(value, cookie, signal, services, authorize = ownedRequest) {
+  const bad = () => Object.assign(new Error('Invalid command'), { status: 400 });
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || !['cancel', 'rename'].includes(value.operation)
+      || !validView({ sessionId: value.sessionId, maxMessages: 1 })
+      || Object.keys(value).some(key => !['operation', 'sessionId', ...(value.operation === 'rename' ? ['title'] : [])].includes(key)))
+    throw bad();
+  if (value.operation === 'rename' && (typeof value.title !== 'string'
+      || !value.title.trim() || value.title.length > 200 || /[\u0000-\u001f\u007f]/.test(value.title))) throw bad();
+  const owned = { sessionId: value.sessionId, maxMessages: 1 };
+  await authorize(cookie, 'session/page', owned, signal);
+  signal.throwIfAborted();
+  const result = value.operation === 'cancel'
+    ? services.sessionController.cancel({ sessionId: value.sessionId })
+    : await services.sessionController.rename({ sessionId: value.sessionId, title: value.title });
+  // A denied response after mutation does not imply the mutation was rolled back.
+  await authorize(cookie, 'session/page', owned, signal);
+  signal.throwIfAborted();
+  return result;
+}
+
 export function apply(ctx) {
   const active = new Map();
   let closing = false;
@@ -101,18 +123,19 @@ export function apply(ctx) {
           'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'`,
         }); return;
       }
-      if (path !== '/native/view' || req.method !== 'POST') { send(404, '{}'); return; }
+      if (!['/native/view', '/native/command'].includes(path) || req.method !== 'POST') { send(404, '{}'); return; }
       if (req.headers.origin !== ORIGIN || req.headers['content-type'] !== 'application/json') { send(403, '{}'); return; }
       let raw = '';
       for await (const chunk of req) {
         raw += chunk.toString('utf8');
-        if (Buffer.byteLength(raw) > 1024) { send(413, '{}'); return; }
+        if (Buffer.byteLength(raw) > 2048) { send(413, '{}'); return; }
       }
       let value;
       try { value = JSON.parse(raw); } catch { send(400, '{}'); return; }
-      if (!validView(value)) { send(400, '{}'); return; }
       // The authoritative employee operation verifies both login and ownership.
-      const serialized = JSON.stringify(await readOwnedSnapshot(value, cookie, abort.signal, ctx));
+      const serialized = JSON.stringify(await (path === '/native/view'
+        ? readOwnedSnapshot(value, cookie, abort.signal, ctx)
+        : executeOwnedCommand(value, cookie, abort.signal, ctx)));
       if (Buffer.byteLength(serialized) > 1000000) { send(503, '{}'); return; }
       send(200, serialized);
     } catch (error) {

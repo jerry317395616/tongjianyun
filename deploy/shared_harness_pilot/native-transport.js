@@ -27,6 +27,8 @@
     switch (endpoint) {
       case 'session/list': return employee('list', {}, signal);
       case 'session/create': return employee('create', {}, signal);
+      case 'session/cancel': return request('/native/command', { operation: 'cancel', sessionId: input.sessionId }, signal);
+      case 'session/rename': return request('/native/command', { operation: 'rename', sessionId: input.sessionId, title: input.title }, signal);
       case 'session/prompt': {
         if (!Array.isArray(input.content) || input.content.some(part => part.type !== 'text'))
           throw new Error('Only text business requests are available');
