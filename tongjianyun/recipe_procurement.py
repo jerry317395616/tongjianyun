@@ -90,7 +90,7 @@ def prepare(recipe, company):
     _read("Company", company)
     doc, rows = _source(recipe)
     remembered = {}
-    for entry in frappe.get_list(TRACE, filters={"record_type": KIND}, fields=["name"],
+    for entry in frappe.get_list(TRACE, filters={"record_type": ["in", [KIND, "erp_recipe_mapping"]]}, fields=["name"],
                                 order_by="creation desc", limit_page_length=100):
         trace = _read(TRACE, entry.name)
         data = json.loads(trace.record_json)
@@ -133,7 +133,8 @@ def prepare(recipe, company):
                 confirmation = _read("Tongjianyun Daily Meal Confirmation", found[0].name)
                 meal["count"] = confirmation.get("total_" + SLOTS[meal["slot"]] + "_count")
                 meal["basis"] = "全园已确认人数，请核对本食谱适用范围"
-    return {"recipe": doc.name, "revision": digest(rows), "ingredients": list(ingredients.values()),
+    from tongjianyun.ingredient_resolution import suggestions
+    return {"recipe": doc.name, "revision": digest(rows), "ingredients": suggestions(list(ingredients.values())),
             "meals": sorted(meals.values(), key=lambda r: r["key"])}
 
 

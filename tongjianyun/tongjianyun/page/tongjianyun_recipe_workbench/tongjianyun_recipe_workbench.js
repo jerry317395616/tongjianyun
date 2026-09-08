@@ -782,6 +782,7 @@ class TongjianyunRecipePage {
                     title: "核对食材与备餐人数", size: "extra-large",
                     fields: [
                         {fieldtype: "HTML", options: "<p>只需处理未匹配项。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率，不能直接按净料采购。更换物料后请点击“更新库存单位”。</p>"},
+                        {fieldname: "batch_resolve", label: "批量处理未匹配食材", fieldtype: "Button", click: () => this.resolveIngredients(recipe, scope.company, dialog)},
                         {fieldname: "ingredients", label: "食材匹配（同名仅为候选）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
                             data: prepared.ingredients, fields: [
                                 {fieldname: "key", fieldtype: "Data", hidden: 1},
@@ -847,6 +848,71 @@ class TongjianyunRecipePage {
             },
         });
         setup.show();
+    }
+
+    async resolveIngredients(recipe, company, parentDialog) {
+        const unmatched = parentDialog.fields_dict.ingredients.df.data.filter(row => !row.item_code);
+        if (!unmatched.length) { frappe.msgprint("所有食材已关联物料，请继续核对换算和人数。"); return; }
+        const call = async (method, args) => (await frappe.call({method: `tongjianyun.ingredient_resolution.${method}`, args, freeze: true})).message;
+        const rows = unmatched.map(row => {
+            const candidate = row.candidates?.[0];
+            const risky = row.needs_product_confirmation;
+            const unit = candidate?.uom || row.suggested_uom || "";
+            return {...row, action: risky || (candidate && candidate.score < .99) ? "暂不处理" : candidate ? "关联已有" : "新建物料",
+                item_code: candidate?.score >= .99 ? candidate.item_code : "", uom: unit,
+                factor: row.source_uom === unit ? 1 : "", external_product: 0,
+                reason: risky ? "可能为自制菜品；外购成品需明确勾选" :
+                    candidate ? `${candidate.reason}：${row.candidates.map(c => c.item_code).join("、")}` : "新食材候选，请核对名称和单位"};
+        });
+        const dialog = new frappe.ui.Dialog({
+            title: `批量处理 ${rows.length} 项食材`, size: "extra-large",
+            fields: [
+                {fieldtype: "HTML", options: "<p>推荐不等于确认。新建物料会写入 ERPNext，预览前不会保存。暂不处理的项目仍会阻止生成完整采购需求。汤粥若是自制，请回食谱拆分配方，不要建成采购物料。</p>"},
+                {fieldname: "default_group", label: "本批新物料分类（统一选择一次）", fieldtype: "Link", options: "Item Group",
+                    get_query: () => ({filters: {is_group: 0}})},
+                {fieldname: "decisions", label: "建议清单（展开行可查看建议原因）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true, data: rows,
+                    fields: [
+                        {fieldname: "key", fieldtype: "Data", hidden: 1},
+                        {fieldname: "ingredient", label: "食材", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 2},
+                        {fieldname: "action", label: "处理", fieldtype: "Select", options: "暂不处理\n关联已有\n新建物料", in_list_view: 1, columns: 2},
+                        {fieldname: "item_code", label: "关联物料", fieldtype: "Link", options: "Item", in_list_view: 1, columns: 2,
+                            get_query: () => ({filters: {disabled: 0, is_stock_item: 1, is_purchase_item: 1, has_variants: 0}})},
+                        {fieldname: "uom", label: "库存单位", fieldtype: "Link", options: "UOM", in_list_view: 1, columns: 1,
+                            get_query: () => ({filters: {enabled: 1}})},
+                        {fieldname: "factor", label: "毛料换算", fieldtype: "Float", in_list_view: 1, columns: 2},
+                        {fieldname: "external_product", label: "外购成品", fieldtype: "Check", in_list_view: 1, columns: 1},
+                        {fieldname: "source_uom", label: "食谱单位", fieldtype: "Data", read_only: 1},
+                        {fieldname: "reason", label: "建议原因", fieldtype: "Small Text", read_only: 1},
+                        {fieldname: "item_group", label: "单项分类（留空沿用本批分类）", fieldtype: "Link", options: "Item Group",
+                            get_query: () => ({filters: {is_group: 0}})},
+                    ]},
+            ],
+            primary_action_label: "预览本批变更",
+            primary_action: async (values) => {
+                const args = {recipe, company, default_group: values.default_group || "", decisions: JSON.stringify(values.decisions)};
+                const plan = await call("preview_resolution", args);
+                const count = plan.rows.filter(row => row.action === "新建物料").length;
+                const review = new frappe.ui.Dialog({
+                    title: `确认新建 ${count} 个物料，关联 ${plan.rows.length - count} 项`, size: "large",
+                    fields: [{fieldtype: "HTML", options: `<p>仅保存本批物料及映射，不创建采购单、不产生库存或费用。</p><table class="table table-bordered"><thead><tr><th>食材</th><th>处理</th><th>物料</th><th>单位 / 换算</th><th>分类</th></tr></thead><tbody>${plan.rows.map(row => `<tr><td>${escapeHtml(row.ingredient)}</td><td>${escapeHtml(row.action)}</td><td>${escapeHtml(row.item_code)}</td><td>${escapeHtml(row.uom)} / ${escapeHtml(String(row.factor))}</td><td>${escapeHtml(row.item_group)}</td></tr>`).join("")}</tbody></table>`}],
+                    primary_action_label: "确认并保存本批",
+                    primary_action: async () => {
+                        review.get_primary_btn().prop("disabled", true);
+                        try {
+                            const result = await call("apply_resolution", {...args, token: plan.token, confirmed: 1});
+                            for (const row of parentDialog.fields_dict.ingredients.df.data) {
+                                if (result.mappings[row.key]) Object.assign(row, result.mappings[row.key], {basis: "已批量确认"});
+                            }
+                            parentDialog.fields_dict.ingredients.grid.refresh();
+                            review.hide(); dialog.hide();
+                            frappe.show_alert(`已保存匹配，新建 ${result.created.length} 个物料。`);
+                        } finally { review.get_primary_btn().prop("disabled", false); }
+                    },
+                });
+                review.show();
+            },
+        });
+        dialog.show();
     }
 
     clearPagePrimaryAction() {

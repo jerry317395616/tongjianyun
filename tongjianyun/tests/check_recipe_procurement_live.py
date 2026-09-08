@@ -5,6 +5,7 @@ import uuid
 import frappe
 from frappe.utils import add_days, nowdate
 from tongjianyun import recipe_procurement as service
+from tongjianyun import ingredient_resolution as resolution
 
 
 def run():
@@ -52,14 +53,57 @@ def run():
             pass
         remembered = service.prepare(recipe.name, company)
         assert remembered["ingredients"][0]["basis"] == "历史确认"
+        extra = frappe.get_doc({"doctype": "Tongjianyun Recipe Ingredient", "ingredient_row_id": prefix + "-I2",
+            "recipe": recipe.name, "recipe_dish": dish.name, "ingredient_name": prefix + "-NEW", "amount": 10, "unit": "g"}).insert()
+        names.append((extra.doctype, extra.name))
+        extra_key = service.digest([extra.ingredient_name, "g"])[:24]
+        decisions = [{"key": extra_key, "action": "新建物料", "uom": "g", "factor": 1}]
+        resolve_args = dict(recipe=recipe.name, company=company, decisions=decisions, default_group=group)
+        resolution_plan = resolution.preview_resolution(**resolve_args)
+        assert not frappe.db.exists("Item", resolution_plan["rows"][0]["item_code"])
+        for confirmed, token in ((0, resolution_plan["token"]), (1, "stale")):
+            try:
+                resolution.apply_resolution(**resolve_args, token=token, confirmed=confirmed)
+                raise AssertionError("invalid confirmation accepted")
+            except frappe.ValidationError:
+                pass
+        resolved = resolution.apply_resolution(**resolve_args, token=resolution_plan["token"], confirmed=1)
+        assert len(resolved["created"]) == 1
+        names.append(("Item", resolved["created"][0]))
+        receipt_key = resolution.MAPPING_KIND + "::" + service.digest([recipe.name, company, resolution_plan["token"]])[:32]
+        names.append((service.TRACE, receipt_key))
+        assert resolution.apply_resolution(**resolve_args, token=resolution_plan["token"], confirmed=1)["existing"]
+        assert next(r for r in service.prepare(recipe.name, company)["ingredients"] if r["key"] == extra_key)["item_code"] == resolved["created"][0]
+        try:
+            resolution.preview_resolution(**resolve_args)
+            raise AssertionError("duplicate name accepted")
+        except frappe.ValidationError:
+            pass
+        extra.ingredient_name = prefix + "-汤"
+        extra.save()
+        soup_key = service.digest([extra.ingredient_name, "g"])[:24]
+        try:
+            resolution.preview_resolution(recipe.name, company,
+                [{"key": soup_key, "action": "新建物料", "uom": "g", "factor": 1}], group)
+            raise AssertionError("self-made soup accepted without review")
+        except frappe.ValidationError:
+            pass
         frappe.set_user("Guest")
+        try:
+            resolution.preview_resolution(**resolve_args)
+            raise AssertionError("Guest resolution accepted")
+        except frappe.PermissionError:
+            pass
         try:
             service.preview(**args)
             raise AssertionError("Guest accepted")
         except frappe.PermissionError:
             pass
         print(json.dumps({"passed": ["live source matching", "demand preview", "standard ERP draft insert",
-            "idempotent retry", "stale preview rejection", "mapping reuse", "Guest denied"], "draft_submitted": False}))
+            "idempotent retry", "stale preview rejection", "mapping reuse", "Guest denied",
+            "resolution preview read-only", "resolution confirmation required", "batch Item creation",
+            "resolution retry", "resolution mapping reuse", "duplicate name rejection", "self-made soup guard",
+            "Guest resolution denied"], "draft_submitted": False}))
     finally:
         frappe.db.rollback()
         frappe.set_user("Administrator")
