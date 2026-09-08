@@ -47,9 +47,16 @@ try {
   },sessionId);
   if (commands.some(result=>!result.ok)) throw new Error('Owned command failed');
   await page.getByText('原生会话操作验收',{exact:true}).first().waitFor({timeout:10000});
+  const currentModel = await page.evaluate(async()=>{
+    const response=await fetch('/native/models');
+    if(!response.ok)throw new Error('model catalog unavailable');
+    return (await response.json()).default.model;
+  });
+  await page.getByRole('button').filter({hasText:currentModel}).last().click({timeout:10000});
+  await page.waitForTimeout(500);
   await page.screenshot({ path: '/home/zyd/frappe/backups/harness/application-preview-20260908/native-ui.png' });
   if (errors.length || failures.length) throw new Error('Native browser errors');
-  console.log(JSON.stringify({passed:true, uniqueUserEcho:true, modelReply:true, rename:true, cancelAcknowledged:true, errors, failures}));
+  console.log(JSON.stringify({passed:true, uniqueUserEcho:true, modelReply:true, rename:true, cancelAcknowledged:true, modelSelectorOpened:true, errors, failures}));
 } catch (error) {
   await page.screenshot({ path: '/home/zyd/frappe/backups/harness/application-preview-20260908/native-ui.png' });
   console.log(JSON.stringify({ passed:false, error:error.message.slice(0,200), errors, failures,

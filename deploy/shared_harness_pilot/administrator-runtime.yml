@@ -1,6 +1,10 @@
 # Final opt-in overlay. Business definitions and persona are owned by Tongjianyun.
 - id: ui-settings
   disabled: false
+- id: ui-model-selection
+  disabled: false
+- id: ui-commands
+  disabled: false
 - insert:
     - id: tongjianyun-native-harness-ui
       name: /home/zyd/frappe/native-bench/apps/tongjianyun/deploy/shared_harness_pilot/native-ui.mjs

@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { request } from 'node:http';
+import { nativeModelCatalog, selectNativeModel } from './native-models.mjs';
 
 export const name = 'tongjianyun-native-harness-ui';
 export const inject = ['webServer', 'sessionController', 'sessionQuery'];
@@ -107,6 +108,11 @@ export function apply(ctx) {
         send(200, await readFile(BASE + 'native-transport.js', 'utf8'), 'text/javascript'); return;
       }
       const cookie = req.headers.cookie ?? '';
+      if(path === '/native/models' && req.method === 'GET') {
+        const serialized=JSON.stringify(await nativeModelCatalog(cookie,abort.signal,ctx));
+        if(Buffer.byteLength(serialized)>1000000){send(503,'{}');return;}
+        send(200,serialized);return;
+      }
       if (path === '/native/' && req.method === 'GET') {
         try { await ownedRequest(cookie, 'status', undefined, abort.signal); }
         catch (error) {
@@ -123,7 +129,7 @@ export function apply(ctx) {
           'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'`,
         }); return;
       }
-      if (!['/native/view', '/native/command'].includes(path) || req.method !== 'POST') { send(404, '{}'); return; }
+      if (!['/native/view', '/native/command', '/native/model-selection'].includes(path) || req.method !== 'POST') { send(404, '{}'); return; }
       if (req.headers.origin !== ORIGIN || req.headers['content-type'] !== 'application/json') { send(403, '{}'); return; }
       let raw = '';
       for await (const chunk of req) {
@@ -132,6 +138,9 @@ export function apply(ctx) {
       }
       let value;
       try { value = JSON.parse(raw); } catch { send(400, '{}'); return; }
+      if(path === '/native/model-selection') {
+        send(200,JSON.stringify(await selectNativeModel(value,cookie,abort.signal,ctx,ownedRequest)));return;
+      }
       // The authoritative employee operation verifies both login and ownership.
       const serialized = JSON.stringify(await (path === '/native/view'
         ? readOwnedSnapshot(value, cookie, abort.signal, ctx)
