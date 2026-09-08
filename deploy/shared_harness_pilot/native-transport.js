@@ -29,6 +29,7 @@
       case 'session/create': return employee('create', {}, signal);
       case 'session/modelCatalog': return request('/native/models',undefined,signal);
       case 'session/selectModel': return request('/native/model-selection',input,signal);
+      case 'session/attachment': return request('/native/attachment',input,signal);
       case 'commands/list': return [];
       case 'session/cancel': return request('/native/command', { operation: 'cancel', sessionId: input.sessionId }, signal);
       case 'session/rename': return request('/native/command', { operation: 'rename', sessionId: input.sessionId, title: input.title }, signal);

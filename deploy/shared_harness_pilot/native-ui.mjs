@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { request } from 'node:http';
 import { nativeModelCatalog, selectNativeModel } from './native-models.mjs';
+import { readOwnedAttachment } from './native-attachments.mjs';
 
 export const name = 'tongjianyun-native-harness-ui';
 export const inject = ['webServer', 'sessionController', 'sessionQuery'];
@@ -129,7 +130,7 @@ export function apply(ctx) {
           'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'`,
         }); return;
       }
-      if (!['/native/view', '/native/command', '/native/model-selection'].includes(path) || req.method !== 'POST') { send(404, '{}'); return; }
+      if (!['/native/view', '/native/command', '/native/model-selection', '/native/attachment'].includes(path) || req.method !== 'POST') { send(404, '{}'); return; }
       if (req.headers.origin !== ORIGIN || req.headers['content-type'] !== 'application/json') { send(403, '{}'); return; }
       let raw = '';
       for await (const chunk of req) {
@@ -138,6 +139,9 @@ export function apply(ctx) {
       }
       let value;
       try { value = JSON.parse(raw); } catch { send(400, '{}'); return; }
+      if (path === '/native/attachment') {
+        send(200, JSON.stringify(await readOwnedAttachment(value, cookie, abort.signal, ctx, ownedRequest))); return;
+      }
       if(path === '/native/model-selection') {
         send(200,JSON.stringify(await selectNativeModel(value,cookie,abort.signal,ctx,ownedRequest)));return;
       }
@@ -148,7 +152,7 @@ export function apply(ctx) {
       if (Buffer.byteLength(serialized) > 1000000) { send(503, '{}'); return; }
       send(200, serialized);
     } catch (error) {
-      send([400, 401, 403, 404].includes(error.status) ? error.status : 503, '{"error":"native access unavailable"}');
+      send([400, 401, 403, 404, 413].includes(error.status) ? error.status : 503, '{"error":"native access unavailable"}');
     } finally { clearTimeout(timer); res.off('close', closed); abort.signal.removeEventListener('abort', destroy); }
   }
   ctx.effect(() => {

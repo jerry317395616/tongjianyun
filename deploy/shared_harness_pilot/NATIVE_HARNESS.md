@@ -16,6 +16,8 @@ Validation: `node --test deploy/shared_harness_pilot/test_native_ui.mjs deploy/s
 
 Full-role rollout is incomplete: server-global settings, arbitrary plugins, filesystem and shell require separately enforced isolation before enabling them in the shared entry. These session commands do not grant Administrator Host access or enable ordinary-user business writes.
 
+Image preparation: `/native/attachment` now bridges `session/attachment` reads only. Exact session/digest inputs, same-origin POST, current account ownership before and after the read, and the native controller's session-reference check are all required. Responses over 1 MB are rejected; shared attachment-store paths are never accepted. This is backend preparation, not an enabled upload feature: the attachment UI and image prompts remain disabled until bounded upload admission and model compatibility are verified. Run `node --test deploy/shared_harness_pilot/test_native_attachments.mjs` for ownership, revocation, malformed requests, cancellation and size-limit checks.
+
 `accept_native_commands.py` checks both Administrator and the admitted ordinary account, rejects commands on each other's sessions, and cancels a live ordinary-account model response. It creates only Harness test sessions and logs no credentials or business values.
 
 Deployment: the service loads `administrator-runtime.yml`; copy the checked `live-nginx.conf` to `/home/zyd/frappe/config/harness/nginx.conf`, then reload that nginx instance. To roll back the entry only, change the root and both SSO redirects to `/employee/chat/`; leave account authorization in place. No DocType or database schema change is required.
