@@ -34,10 +34,12 @@
       case 'session/cancel': return request('/native/command', { operation: 'cancel', sessionId: input.sessionId }, signal);
       case 'session/rename': return request('/native/command', { operation: 'rename', sessionId: input.sessionId, title: input.title }, signal);
       case 'session/prompt': {
-        if (!Array.isArray(input.content) || input.content.some(part => part.type !== 'text'))
-          throw new Error('Only text business requests are available');
+        if (!Array.isArray(input.content) || input.content.some(part => !['text', 'image'].includes(part.type)))
+          throw new Error('Unsupported message content');
+        const images = input.content.filter(part => part.type === 'image');
         await employee('prompt', { sessionId: input.sessionId, requestId: input.requestId,
-          text: input.content.map(part => part.text).join('\n') }, signal);
+          text: input.content.filter(part => part.type === 'text').map(part => part.text).join('\n') || 'Describe the attached image.',
+          ...(images.length ? { images } : {}) }, signal);
         return { accepted: true };
       }
       case 'session/page': return employee('page', { sessionId: input.address.sessionId,

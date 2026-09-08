@@ -15,6 +15,7 @@
         apiKeyEnv: QWEN_API_KEY
         models:
           - id: qwen3.6-35b-a3b-fp8
+            input: [text, image]
             contextWindow: 8192
             maxTokens: 1024
 - id: agent-default-model

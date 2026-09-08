@@ -127,7 +127,7 @@ export function apply(ctx) {
         html = html.replace('<head>', '<head><base href="/"><script src="/native/transport.js"></script>');
         html = html.replace(/<script\b/g, '<script nonce="' + nonce + '"');
         send(200, html, 'text/html; charset=utf-8', {
-          'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'`,
+          'content-security-policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'`,
         }); return;
       }
       if (!['/native/view', '/native/command', '/native/model-selection', '/native/attachment'].includes(path) || req.method !== 'POST') { send(404, '{}'); return; }

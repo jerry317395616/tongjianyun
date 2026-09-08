@@ -5,12 +5,22 @@
   disabled: false
 - id: ui-commands
   disabled: false
+- id: ui-attachment
+  disabled: false
+- id: attachment-local
+  config:
+    maxImageBytes: 256000
+    maxImagesPerMessage: 4
+    maxMessageImageBytes: 512000
+    normalizedImageMaxBytes: 512000
 - insert:
     - id: tongjianyun-native-harness-ui
       name: /home/zyd/frappe/native-bench/apps/tongjianyun/deploy/shared_harness_pilot/native-ui.mjs
 - id: employee-session-access
   config:
     applicationPreviews: true
+    allowImages: true
+    maxPromptBytes: 800000
     promptPreset: tongjianyun-business
     publicOrigin: https://harness.myyr.top
     identitySocketPath: /home/zyd/frappe/state/harness/authority.sock
