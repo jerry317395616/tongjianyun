@@ -143,6 +143,7 @@ class TongjianyunRecipePage {
                         </div>
                     </div>
                     <div class="tjy-hero-actions">
+                        ${recipe.workflowStatus === "已发布" ? '<button class="tjy-outline-button" data-action="erp-procurement">准备 ERP 采购需求</button>' : ''}
                         <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入食谱</span></button>
                         <button class="tjy-primary-button" data-action="edit">${["已发布", "已归档"].includes(recipe.workflowStatus) ? "创建修订版" : "编辑食谱"}</button>
                     </div>
@@ -748,6 +749,7 @@ class TongjianyunRecipePage {
     }
 
     bindCommonActions() {
+        this.main.find('[data-action="erp-procurement"]').on("click", () => this.openProcurement());
         this.main.find('[data-action="library"]').on("click", () => this.showLibrary());
         this.main.find('[data-action="edit"]').on("click", () => this.editRecipe());
         this.main.find('[data-action="browse"]').on("click", () => this.showBrowse());
@@ -756,6 +758,95 @@ class TongjianyunRecipePage {
         this.main.find('[data-action="calendar"]').on("click", () => this.enterEdit());
         this.main.find('[data-action="previous"]').on("click", () => this.openAdjacentRecipe(-1));
         this.main.find('[data-action="next"]').on("click", () => this.openAdjacentRecipe(1));
+    }
+
+    async openProcurement() {
+        const recipe = this.state.selectedRecipe;
+        if (!recipe) return;
+        const call = async (method, args) => (await frappe.call({
+            method: `tongjianyun.recipe_procurement.${method}`, args, freeze: true,
+        })).message;
+        const setup = new frappe.ui.Dialog({
+            title: "准备采购需求 · 选择业务范围",
+            fields: [
+                {fieldtype: "HTML", options: "生成的是按天总需求草稿，不扣库存、不提交订单。不会自动扣减在途采购或推定食材可食率。"},
+                {fieldname: "company", label: "公司", fieldtype: "Link", options: "Company", reqd: 1},
+                {fieldname: "warehouse", label: "收货仓库", fieldtype: "Link", options: "Warehouse", reqd: 1,
+                    get_query: () => ({filters: {company: setup.get_value("company"), is_group: 0, disabled: 0}})},
+            ],
+            primary_action_label: "匹配食材",
+            primary_action: async (scope) => {
+                const prepared = await call("prepare", {recipe, company: scope.company});
+                setup.hide();
+                const dialog = new frappe.ui.Dialog({
+                    title: "核对食材与备餐人数", size: "extra-large",
+                    fields: [
+                        {fieldtype: "HTML", options: "<p>只需处理未匹配项。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率，不能直接按净料采购。更换物料后请点击“更新库存单位”。</p>"},
+                        {fieldname: "ingredients", label: "食材匹配（同名仅为候选）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
+                            data: prepared.ingredients, fields: [
+                                {fieldname: "key", fieldtype: "Data", hidden: 1},
+                                {fieldname: "ingredient", label: "食谱食材", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 2},
+                                {fieldname: "source_uom", label: "食谱单位", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 1},
+                                {fieldname: "item_code", label: "物料", fieldtype: "Link", options: "Item", in_list_view: 1, columns: 3,
+                                    get_query: () => ({filters: {disabled: 0, is_purchase_item: 1, is_stock_item: 1, has_variants: 0}})},
+                                {fieldname: "uom", label: "库存单位", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 1},
+                                {fieldname: "factor", label: "毛料换算系数", fieldtype: "Float", in_list_view: 1, columns: 2},
+                                {fieldname: "basis", label: "来源", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 1},
+                            ]},
+                        {fieldname: "refresh_units", label: "更新库存单位", fieldtype: "Button", click: async () => {
+                            for (const row of dialog.fields_dict.ingredients.df.data) {
+                                if (!row.item_code) continue;
+                                const response = await frappe.db.get_value("Item", row.item_code, "stock_uom");
+                                const unit = response.message.stock_uom;
+                                if (unit !== row.uom) { row.uom = unit; row.factor = null; }
+                            }
+                            dialog.fields_dict.ingredients.grid.refresh();
+                            frappe.show_alert({message: "库存单位已更新，请核对换算系数。", indicator: "orange"});
+                        }},
+                        {fieldname: "new_item", label: "首次出现的食材：快速新建物料", fieldtype: "Button", click: () => {
+                            frappe.ui.form.make_quick_entry("Item", () => frappe.show_alert("物料已建立，请在匹配表中选择。"), null,
+                                {doctype: "Item", is_stock_item: 1, is_purchase_item: 1, is_sales_item: 0});
+                        }},
+                        {fieldname: "meals", label: "分餐人数（不是自动采用全园在册人数）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
+                            data: prepared.meals.map(row => ({...row, count: row.count == null ? "" : String(row.count), meal_label: MEAL_LABELS[row.slot]})), fields: [
+                                {fieldname: "key", fieldtype: "Data", hidden: 1},
+                                {fieldname: "date", label: "日期", fieldtype: "Date", read_only: 1, in_list_view: 1, columns: 2},
+                                {fieldname: "meal_label", label: "餐次", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 2},
+                                {fieldname: "count", label: "预计备餐人数", fieldtype: "Data", in_list_view: 1, columns: 2, reqd: 1},
+                                {fieldname: "basis", label: "来源", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 4},
+                            ]},
+                        {fieldname: "confirmed", label: "已核对食材规格、采购毛料换算和各餐适用人数", fieldtype: "Check", reqd: 1},
+                    ],
+                    primary_action_label: "预览采购需求",
+                    primary_action: async (values) => {
+                        if (!values.confirmed) { frappe.msgprint("请先核对并勾选确认。"); return; }
+                        const mappings = Object.fromEntries(values.ingredients.map(row => [row.key, {
+                            item_code: row.item_code, uom: row.uom, factor: row.factor,
+                        }]));
+                        const meals = Object.fromEntries(values.meals.map(row => [row.key, row.count]));
+                        const args = {recipe, ...scope, mappings: JSON.stringify(mappings), meals: JSON.stringify(meals)};
+                        const plan = await call("preview", args);
+                        const review = new frappe.ui.Dialog({
+                            title: `采购需求预览 · ${plan.lines.length} 行`, size: "large",
+                            fields: [{fieldtype: "HTML", options: `<p>这是总需求，尚未扣除库存及在途采购。创建后只保存为 ERPNext 草稿，由采购人员审核。</p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th>数量</th><th>单位</th></tr></thead><tbody>${plan.lines.map(line => `<tr><td>${escapeHtml(line.schedule_date)}</td><td>${escapeHtml(line.item_name)}</td><td>${escapeHtml(String(line.qty))}</td><td>${escapeHtml(line.uom)}</td></tr>`).join("")}</tbody></table>`}],
+                            primary_action_label: "确认创建草稿",
+                            primary_action: async () => {
+                                review.get_primary_btn().prop("disabled", true);
+                                try {
+                                    const result = await call("create_request", {...args, token: plan.token, confirmed: 1});
+                                    review.hide(); dialog.hide();
+                                    frappe.set_route("Form", "Material Request", result.name);
+                                    frappe.show_alert(result.existing ? "已打开原有需求，未重复创建。" : "采购需求草稿已创建，尚未提交。");
+                                } finally { review.get_primary_btn().prop("disabled", false); }
+                            },
+                        });
+                        review.show();
+                    },
+                });
+                dialog.show();
+            },
+        });
+        setup.show();
     }
 
     clearPagePrimaryAction() {
