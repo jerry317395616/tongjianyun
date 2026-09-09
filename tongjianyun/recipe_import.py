@@ -6,7 +6,7 @@ import json
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import PurePosixPath
 from typing import Any, Callable
@@ -350,17 +350,62 @@ def _find_date_columns(sheet, year: int) -> list[dict[str, Any]]:
     for row in sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, 8)):
         found: dict[int, dict[str, Any]] = {}
         for cell in row:
+            # A merged recipe title is not a day column, even if it has dates.
+            if "食谱" in _clean(cell.value):
+                continue
             parsed = _parse_header_date(cell.value, year)
             if parsed:
                 found[cell.column] = {"column": cell.column, "date": parsed[0], "day_label": parsed[1]}
         if found:
             candidates.append(found)
     if not candidates:
-        return []
+        return _find_weekday_columns(sheet)
     # A title often contains the first date too.  The actual header is the row
     # containing the greatest number of distinct daily columns.
     best = max(candidates, key=lambda values: len(values))
     return sorted(best.values(), key=lambda item: item["date"])
+
+
+def _find_weekday_columns(sheet) -> list[dict[str, Any]]:
+    """Resolve weekday-only headers against an explicit, bounded title range."""
+    weekday_rows = []
+    for row in sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, 8)):
+        found = []
+        for cell in row:
+            match = re.fullmatch(r"(?:星期|周|礼拜)\s*([一二三四五六日天])", _clean(cell.value))
+            if match:
+                weekday = "一二三四五六日".index(match.group(1).replace("天", "日"))
+                found.append((cell.column, weekday))
+        if found:
+            weekday_rows.append(found)
+    if not weekday_rows:
+        return []
+    columns = max(weekday_rows, key=len)
+    match = re.search(
+        r"(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?"
+        r"\s*(?:[—–－\-~～]+|至|到)\s*"
+        r"(?:(20\d{2})\s*年\s*)?(?:(\d{1,2})\s*月\s*)?(\d{1,2})\s*[日号]?",
+        _find_title(sheet),
+    )
+    if not match:
+        raise RecipeImportError("列头只有星期，请在标题写明日期范围，例如“2026年9月7日—9月11日食谱”。")
+    start_year, start_month, start_day, end_year, end_month, end_day = match.groups()
+    try:
+        start = date(int(start_year), int(start_month), int(start_day))
+        end = date(int(end_year or start_year), int(end_month or start_month), int(end_day))
+    except ValueError as exc:
+        raise RecipeImportError("标题中的日期无效，请核对食谱起止日期。") from exc
+    if not 0 <= (end - start).days <= 6:
+        raise RecipeImportError("标题日期范围须为连续 1 至 7 天；跨年时请写明结束年份。")
+    dates = {day.weekday(): day for day in (start + timedelta(days=i) for i in range((end-start).days + 1))}
+    if len({weekday for _, weekday in columns}) != len(columns):
+        raise RecipeImportError("星期列重复，无法确定日期，请为每一列填写具体日期。")
+    result = []
+    for column, weekday in columns:
+        if weekday not in dates:
+            raise RecipeImportError(f"{DAY_LABELS[weekday]}不在标题日期范围内，请核对日期或星期列头。")
+        result.append({"column": column, "date": dates[weekday], "day_label": DAY_LABELS[weekday]})
+    return sorted(result, key=lambda item: item["date"])
 
 
 def _extract_days(sheet, date_columns: list[dict[str, Any]], warnings: list[str]) -> list[dict[str, Any]]:
