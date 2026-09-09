@@ -84,13 +84,15 @@ def _match(row):
     return None, ""
 
 
-def classify_batches(client, pending, groups):
+def classify_batches(client, pending, groups, progress=None):
     """Validate each batch independently; never discard successful earlier batches."""
     proposals, failures, accepted = [], [], []
     for offset in range(0, len(pending), 20):
         batch = pending[offset:offset + 20]
         code = "service_unavailable"
         for attempt in range(2):
+            if progress:
+                progress(offset // 20 + 1, (len(pending) + 19) // 20, attempt + 1)
             try:
                 rows = request_classification(client, batch, groups)
                 # Preserve the overall new-group limit and parent consistency.
@@ -127,7 +129,11 @@ def make_plan(recipe):
     plan["classification_errors"] = []
     plan["creation_blocked"] = bool(pending) and not frappe.has_permission("Item", ptype="create")
     if pending and frappe.has_permission("Item", ptype="create"):
-        plan["proposals"], plan["classification_errors"] = classify_batches(HarnessIngredientClient(), pending, groups)
+        def progress(batch, batches, attempt):
+            _state(recipe, {"status": "running", "stage": "classifying", "revision": plan["revision"],
+                "batch": batch, "batches": batches, "attempt": attempt,
+                "message": f"正在分类第 {batch}/{batches} 批食材（第 {attempt} 次尝试），尚未写入物料。"})
+        plan["proposals"], plan["classification_errors"] = classify_batches(HarnessIngredientClient(), pending, groups, progress)
         plan["classification_failed"] = bool(plan["classification_errors"])
     return plan
 
@@ -242,6 +248,8 @@ def run_sync(recipe, revision):
         if not frappe.db.get_value("User", actor, "enabled"):
             raise frappe.PermissionError()
         with frappe.cache.lock("tjy-ingredient-master-sync", timeout=180, blocking_timeout=10):
+            _state(recipe, {"status": "running", "stage": "applying", "revision": revision,
+                "message": "分类已结束，正在校验权限、匹配或创建物料及分类；最终结果以提交完成为准。"})
             result = apply_plan(plan)
             frappe.db.commit()  # Commit before releasing the cross-recipe creation lock.
         _state(recipe, result)

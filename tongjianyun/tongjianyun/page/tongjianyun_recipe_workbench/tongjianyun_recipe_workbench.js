@@ -769,10 +769,20 @@ class TongjianyunRecipePage {
         if (!recipe) return;
         const dialog = new frappe.ui.Dialog({ title: "食材物料匹配结果", fields: [{ fieldtype: "HTML", fieldname: "result" }],
             primary_action_label: "刷新状态", primary_action: () => refresh() });
+        let timer = null;
+        let closed = false;
+        let loading = false;
+        dialog.$wrapper.on("hidden.bs.modal", () => {
+            closed = true;
+            clearTimeout(timer);
+        });
         const refresh = async () => {
-            dialog.fields_dict.result.$wrapper.text("正在读取状态...");
+            if (closed || loading) return;
+            clearTimeout(timer);
+            loading = true;
             try {
                 const response = await frappe.call({ method: "tongjianyun.recipe_item_sync.get_sync_status", args: { recipe } });
+                if (closed) return;
                 const data = response.message || {};
                 const labels = { queued: "已排队", running: "处理中", completed: "匹配完成", partial: "部分完成，需核对", failed: "同步失败", needs_review: "待核对，尚未匹配", stale: "食材已变化", not_started: "尚未开始" };
                 dialog.fields_dict.result.$wrapper.html(`<p>${escapeHtml(labels[data.status] || data.status || "")}</p>
@@ -781,10 +791,17 @@ class TongjianyunRecipePage {
                     <p>已匹配 ${Object.keys(data.mappings || {}).length} 项；本次新建物料 ${(data.created_items || []).length} 个；新建分类 ${(data.created_groups || []).length} 个。</p>
                     ${(data.unresolved || []).map(row => `<p><strong>${escapeHtml(row.ingredient)}</strong>：${escapeHtml(row.reason)}</p>`).join("")}
                     <p class="text-muted">采购数量与毛料换算系数仍需在 ERP 采购预览中核对。失败或待处理项目可在核对后重新保存食谱重试。</p>`);
+                if (["queued", "running"].includes(data.status)) {
+                    dialog.fields_dict.result.$wrapper.append('<p class="text-muted" role="status">后台正在处理，此窗口每 5 秒自动更新；关闭窗口不影响后台任务。</p>');
+                    timer = setTimeout(refresh, 5000);
+                }
             } catch (error) {
-                dialog.fields_dict.result.$wrapper.text("无法读取匹配结果，请检查账号权限。");
+                if (!closed) dialog.fields_dict.result.$wrapper.text("无法读取匹配结果，请检查账号权限或网络后点击刷新状态。");
+            } finally {
+                loading = false;
             }
         };
+        dialog.fields_dict.result.$wrapper.text("正在读取状态...");
         dialog.show();
         await refresh();
     }

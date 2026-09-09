@@ -5,6 +5,14 @@ from tongjianyun import recipe_item_sync as service
 
 
 class TestRecipeItemSync(unittest.TestCase):
+    def test_progress_reports_batch_and_retry_without_payload(self):
+        progress = MagicMock()
+        with patch.object(service, "request_classification", side_effect=[
+                ValueError("private"), [], []]), patch.object(service, "validate_proposals"):
+            service.classify_batches(None, [{"key": str(i)} for i in range(21)], [], progress)
+        self.assertEqual([call.args for call in progress.call_args_list], [(1, 2, 1), (1, 2, 2), (2, 2, 1)])
+        self.assertNotIn("private", str(progress.call_args_list))
+
     def test_batch_failure_preserves_other_successes(self):
         pending = [{"key": str(i)} for i in range(41)]
         with patch.object(service, "request_classification", side_effect=[
