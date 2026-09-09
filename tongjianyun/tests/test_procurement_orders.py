@@ -17,6 +17,7 @@ class OrderTests(unittest.TestCase):
         order = MagicMock(docstatus=0)
         order.name = 'PO1'
         with ExitStack() as stack:
+            stack.enter_context(patch.object(service, 'nowdate', return_value='2026-09-09'))
             stack.enter_context(patch.dict('sys.modules', {'erpnext.stock.doctype.material_request.mapper': mapper}))
             stack.enter_context(patch.object(service, '_permission'))
             stack.enter_context(patch.object(service, '_read', side_effect=lambda dt, n: request if dt == 'Material Request' else order if dt == 'Purchase Order' else MagicMock(disabled=disabled)))
