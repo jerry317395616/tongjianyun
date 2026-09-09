@@ -872,6 +872,8 @@ class TongjianyunRecipePage {
                     title: "核对食材与备餐人数", size: "extra-large",
                     fields: [
                         {fieldtype: "HTML", options: `<p>已自动使用公司：${escapeHtml(scope.company)}；收货仓库：${escapeHtml(scope.warehouse)}。只创建采购需求草稿，不扣库存、不提交订单。</p>`},
+                        {fieldname: "include_history", label: "包含过去日期（历史补录）", fieldtype: "Check", default: 0,
+                            description: "默认只生成今天及之后的需求，过去日期的食材和人数不参与计算。勾选后包含过去日期；历史需求不代表已采购、已入库或已付款。"},
                         {fieldtype: "HTML", options: "<p>只需处理未匹配项。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率，不能直接按净料采购。更换物料后请点击“更新库存单位”。</p>"},
                         {fieldname: "batch_resolve", label: "批量处理未匹配食材", fieldtype: "Button", click: () => this.resolveIngredients(recipe, scope.company, dialog)},
                         {fieldname: "ingredients", label: "食材匹配（同名仅为候选）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
@@ -904,7 +906,7 @@ class TongjianyunRecipePage {
                                 {fieldname: "key", fieldtype: "Data", hidden: 1},
                                 {fieldname: "date", label: "日期", fieldtype: "Date", read_only: 1, in_list_view: 1, columns: 2},
                                 {fieldname: "meal_label", label: "餐次", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 2},
-                                {fieldname: "count", label: "预计备餐人数", fieldtype: "Data", in_list_view: 1, columns: 2, reqd: 1},
+                                {fieldname: "count", label: "预计备餐人数", fieldtype: "Data", in_list_view: 1, columns: 2},
                                 {fieldname: "basis", label: "来源", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 4},
                             ]},
                         {fieldname: "confirmed", label: "已核对食材规格、采购毛料换算和各餐适用人数", fieldtype: "Check", reqd: 1},
@@ -916,11 +918,14 @@ class TongjianyunRecipePage {
                             item_code: row.item_code, uom: row.uom, factor: row.factor,
                         }]));
                         const meals = Object.fromEntries(values.meals.map(row => [row.key, row.count]));
-                        const args = {recipe, ...scope, mappings: JSON.stringify(mappings), meals: JSON.stringify(meals)};
+                        const args = {recipe, ...scope, include_history: values.include_history ? 1 : 0, mappings: JSON.stringify(mappings), meals: JSON.stringify(meals)};
                         const plan = await call("preview", args);
+                        const dateNotice = `<p>单据日期：${escapeHtml(plan.transaction_date)}</p>` +
+                            (plan.excluded_dates?.length ? `<p>已排除过去日期：${plan.excluded_dates.map(escapeHtml).join("、")}</p>` : "") +
+                            (plan.historical_dates?.length ? `<p class="text-danger">历史补录日期：${plan.historical_dates.map(escapeHtml).join("、")}。为保留原用餐日期并符合 ERPNext 校验，单据日期设为最早补录日期；实际创建时间仍由系统记录。这不代表已采购、已入库或已付款，请核对原有采购记录，勿重复采购。</p>` : "");
                         const review = new frappe.ui.Dialog({
                             title: `采购需求预览 · ${plan.lines.length} 行`, size: "large",
-                            fields: [{fieldtype: "HTML", options: `<p>这是总需求，尚未扣除库存及在途采购。创建后只保存为 ERPNext 草稿，由采购人员审核。</p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th>数量</th><th>单位</th></tr></thead><tbody>${plan.lines.map(line => `<tr><td>${escapeHtml(line.schedule_date)}</td><td>${escapeHtml(line.item_name)}</td><td>${escapeHtml(String(line.qty))}</td><td>${escapeHtml(line.uom)}</td></tr>`).join("")}</tbody></table>`}],
+                            fields: [{fieldtype: "HTML", options: `${dateNotice}<p>这是总需求，尚未扣除库存及在途采购。创建后只保存为 ERPNext 草稿，由采购人员审核。</p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th>数量</th><th>单位</th></tr></thead><tbody>${plan.lines.map(line => `<tr><td>${escapeHtml(line.schedule_date)}</td><td>${escapeHtml(line.item_name)}</td><td>${escapeHtml(String(line.qty))}</td><td>${escapeHtml(line.uom)}</td></tr>`).join("")}</tbody></table>`}],
                             primary_action_label: "确认创建草稿",
                             primary_action: async () => {
                                 review.get_primary_btn().prop("disabled", true);

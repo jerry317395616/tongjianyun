@@ -164,7 +164,11 @@ def prepare(recipe, company):
             "meals": sorted(meals.values(), key=lambda r: r["key"])}
 
 
-def _plan(recipe, company, warehouse, mappings, meals):
+def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
+    if str(include_history) not in ("0", "1"):
+        frappe.throw("历史补录选项无效，请重新预览。")
+    include_history = str(include_history) == "1"
+    today = getdate(nowdate())
     _read("Company", company)
     wh = _read("Warehouse", warehouse)
     if wh.company != company or wh.is_group or wh.disabled:
@@ -174,7 +178,11 @@ def _plan(recipe, company, warehouse, mappings, meals):
     if not isinstance(mappings, dict) or not isinstance(meals, dict):
         frappe.throw("食材匹配和分餐人数格式无效，请重新打开采购预览。")
     lines, checked = {}, {}
+    excluded_dates = set()
     for row in source:
+        if getdate(row["date"]) < today and not include_history:
+            excluded_dates.add(row["date"])
+            continue
         from tongjianyun.recipe_product_decisions import read_decision
         from tongjianyun.ingredient_resolution import requires_product_confirmation
         if requires_product_confirmation(row["ingredient_name"]):
@@ -198,31 +206,41 @@ def _plan(recipe, company, warehouse, mappings, meals):
             number(amount * count * factor, zero=True)
         except (ValueError, TypeError, OverflowError):
             frappe.throw("请完整填写非负整数人数、正数换算系数，并核对食谱用量；不接受无效或无限大数值。")
-        if getdate(row["date"]) < getdate(nowdate()):
-            frappe.throw("食谱含过去日期，不能按过去日期新建采购需求；请使用当前或未来食谱。")
         checked[row["key"]] = {"item_code": item.name, "uom": item.stock_uom, "factor": factor}
         key = (row["date"], item.name)
         line = lines.setdefault(key, {"schedule_date": row["date"], "item_code": item.name,
             "item_name": item.item_name, "uom": item.stock_uom, "qty": 0.0, "warehouse": warehouse})
         line["qty"] += amount * count * factor
     result = [dict(line, qty=round(line["qty"], 6)) for _, line in sorted(lines.items()) if line["qty"] > 0]
+    if not result and excluded_dates:
+        frappe.throw("今天及之后没有有效采购需求。若需补录过去的需求，请勾选“包含过去日期（历史补录）”后重新预览。")
     if not result or any(line["qty"] <= 0 for line in result):
         frappe.throw("需求为空或小于支持精度，请核对人数、用量与换算。")
     for line in result:
         uom = _read("UOM", line["uom"])
         if uom.must_be_whole_number and not float(line["qty"]).is_integer():
             frappe.throw("库存单位要求整数数量，请核对包装规格和换算，不能自动取整改变需求。")
+    historical_dates = sorted({line["schedule_date"] for line in result if getdate(line["schedule_date"]) < today})
+    for line in result:
+        if line["schedule_date"] in historical_dates:
+            line["description"] = f"历史需求补录；原用餐日期：{line['schedule_date']}。不代表已采购、已入库或已付款，请勿重复采购。"
+    # ERPNext requires required-by dates >= transaction_date. The preview
+    # explicitly discloses backdating; original meal dates remain unchanged.
+    transaction_date = historical_dates[0] if historical_dates else today.isoformat()
     plan = {"recipe": doc.name, "company": company, "warehouse": warehouse,
+            "include_history": int(include_history), "as_of_date": today.isoformat(),
+            "historical_dates": historical_dates, "excluded_dates": sorted(excluded_dates),
+            "transaction_date": transaction_date,
             "revision": digest(source), "mappings": checked, "meals": meals, "lines": result}
     plan["token"] = digest(plan)
     return plan
 
 
 @frappe.whitelist()
-def preview(recipe, company, warehouse, mappings, meals):
+def preview(recipe, company, warehouse, mappings, meals, include_history=0):
     _permission("Material Request", "create")
     _permission(TRACE, "create")
-    return _plan(recipe, company, warehouse, mappings, meals)
+    return _plan(recipe, company, warehouse, mappings, meals, include_history)
 
 
 @frappe.whitelist()
@@ -246,14 +264,14 @@ def revision_impact(recipe):
 
 
 @frappe.whitelist(methods=["POST"])
-def create_request(recipe, company, warehouse, mappings, meals, token, confirmed=0):
+def create_request(recipe, company, warehouse, mappings, meals, token, confirmed=0, include_history=0):
     if str(confirmed) != "1":
         frappe.throw("请明确确认物料、备餐人数及采购毛料换算。")
     _permission("Material Request", "create")
     _permission(TRACE, "create")
     _permission(TRACE, "write")
     _permission(TRACE, "read")
-    plan = _plan(recipe, company, warehouse, mappings, meals)
+    plan = _plan(recipe, company, warehouse, mappings, meals, include_history)
     if token != plan["token"]:
         frappe.throw("食谱或参数已变化，请重新预览。")
     trace_key = KIND + "::" + digest([recipe, company])[:32]
@@ -271,7 +289,7 @@ def create_request(recipe, company, warehouse, mappings, meals, token, confirmed
         "record_json": json.dumps(plan, ensure_ascii=False)})
     trace.insert()
     request = frappe.get_doc({"doctype": "Material Request", "material_request_type": "Purchase",
-        "company": company, "transaction_date": nowdate(), "set_warehouse": warehouse,
+        "company": company, "transaction_date": plan["transaction_date"], "set_warehouse": warehouse,
         "items": plan["lines"]})
     request.insert()
     plan["material_request"] = request.name
