@@ -867,15 +867,27 @@ class TongjianyunRecipePage {
         })).message;
         try {
                 const scope = await call("default_scope", {recipe});
-                const prepared = await call("prepare", {recipe, company: scope.company});
+                let prepared = await call("prepare", {recipe, company: scope.company});
+                if (prepared.ingredients.some(row => !row.item_code)) {
+                    prepared = await this.autoMatchProcurementItems(recipe, scope.company);
+                    if (!prepared) return;
+                }
                 const dialog = new frappe.ui.Dialog({
                     title: "核对食材与备餐人数", size: "extra-large",
                     fields: [
                         {fieldtype: "HTML", options: `<p>已自动使用公司：${escapeHtml(scope.company)}；收货仓库：${escapeHtml(scope.warehouse)}。只创建采购需求草稿，不扣库存、不提交订单。</p>`},
                         {fieldname: "include_history", label: "包含过去日期（历史补录）", fieldtype: "Check", default: 0,
                             description: "默认只生成今天及之后的需求，过去日期的食材和人数不参与计算。勾选后包含过去日期；历史需求不代表已采购、已入库或已付款。"},
-                        {fieldtype: "HTML", options: "<p>只需处理未匹配项。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率，不能直接按净料采购。更换物料后请点击“更新库存单位”。</p>"},
-                        {fieldname: "batch_resolve", label: "批量处理未匹配食材", fieldtype: "Button", click: () => this.resolveIngredients(recipe, scope.company, dialog)},
+                        {fieldtype: "HTML", options: "<p>缺少的食材物料由系统自动分类建档，无需手工新建。请核对备餐人数及毛料换算系数；异常原因显示在来源栏，可重试自动处理。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率。更换物料后请点击“更新库存单位”。</p>"},
+                        {fieldname: "batch_resolve", label: "重试自动匹配建档", fieldtype: "Button", click: async () => {
+                            const updated = await this.autoMatchProcurementItems(recipe, scope.company);
+                            if (!updated) return;
+                            const byKey = Object.fromEntries(updated.ingredients.map(row => [row.key, row]));
+                            for (const row of dialog.fields_dict.ingredients.df.data) {
+                                if (!row.item_code && byKey[row.key]) Object.assign(row, byKey[row.key]);
+                            }
+                            dialog.fields_dict.ingredients.grid.refresh();
+                        }},
                         {fieldname: "ingredients", label: "食材匹配（同名仅为候选）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
                             data: prepared.ingredients, fields: [
                                 {fieldname: "key", fieldtype: "Data", hidden: 1},
@@ -896,10 +908,6 @@ class TongjianyunRecipePage {
                             }
                             dialog.fields_dict.ingredients.grid.refresh();
                             frappe.show_alert({message: "库存单位已更新，请核对换算系数。", indicator: "orange"});
-                        }},
-                        {fieldname: "new_item", label: "首次出现的食材：快速新建物料", fieldtype: "Button", click: () => {
-                            frappe.ui.form.make_quick_entry("Item", () => frappe.show_alert("物料已建立，请在匹配表中选择。"), null,
-                                {doctype: "Item", is_stock_item: 1, is_purchase_item: 1, is_sales_item: 0});
                         }},
                         {fieldname: "meals", label: "分餐人数（不是自动采用全园在册人数）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
                             data: prepared.meals.map(row => ({...row, count: row.count == null ? "" : String(row.count), meal_label: MEAL_LABELS[row.slot]})), fields: [
@@ -943,6 +951,55 @@ class TongjianyunRecipePage {
                 dialog.show();
         } catch (error) {
             frappe.msgprint("准备采购需求未完成。请检查默认公司、默认仓库及账号权限；本次未创建采购需求。");
+        }
+    }
+
+    async autoMatchProcurementItems(recipe, company) {
+        let closed = false;
+        const progress = new frappe.ui.Dialog({
+            title: "正在自动匹配食材并创建物料",
+            fields: [{fieldtype: "HTML", fieldname: "progress"}],
+            primary_action_label: "关闭（后台继续）",
+            primary_action: () => progress.hide(),
+        });
+        progress.onhide = () => { closed = true; };
+        const show = message => progress.fields_dict.progress.$wrapper.text(message);
+        progress.show();
+        show("正在检查已有物料。缺少的食材将由 AI 分类并自动建档，完成后继续准备采购需求，请勿重复操作。");
+        try {
+            let state = (await frappe.call({method: "tongjianyun.recipe_procurement.auto_match_items", args: {recipe}, type: "POST"})).message || {};
+            const deadline = Date.now() + 35 * 60 * 1000;
+            while (!closed && ["queued", "running"].includes(state.status)) {
+                show(state.message || "正在自动分类、创建物料，请稍候……");
+                if (Date.now() > deadline) {
+                    show("后台尚未结束，请稍后通过“食材物料匹配结果”查看进度。无需手动创建物料。");
+                    return null;
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                if (closed) return null;
+                state = (await frappe.call({method: "tongjianyun.recipe_item_sync.get_sync_status", args: {recipe}})).message || {};
+            }
+            if (closed) return null;
+            if (["stale", "blocked", "failed", "not_started"].includes(state.status)) {
+                show(state.message || "自动建档未完成，请稍后重试或联系管理员。无需手动创建物料。");
+                return null;
+            }
+            const prepared = (await frappe.call({method: "tongjianyun.recipe_procurement.prepare", args: {recipe, company}})).message;
+            if (closed) return null;
+            const unresolved = Object.fromEntries((state.unresolved || []).map(row => [row.key, row.reason]));
+            for (const row of prepared.ingredients) {
+                if (!row.item_code && unresolved[row.key]) row.basis = unresolved[row.key];
+            }
+            progress.hide();
+            if (prepared.ingredients.some(row => !row.item_code)) {
+                frappe.msgprint("自动建档已完成一轮处理。剩余异常原因已列在食材表中；汤粥等请通过“食材用途确认”处理，分类服务或权限问题请重试或联系管理员，无需手动新建物料。");
+            } else {
+                frappe.show_alert({message: "食材已自动匹配建档，继续核对备餐人数。", indicator: "green"});
+            }
+            return prepared;
+        } catch (error) {
+            if (!closed) show("暂时无法完成自动建档。可关闭后重新点击准备采购需求，已有成功结果会保留，不需要手动新建物料。");
+            return null;
         }
     }
 

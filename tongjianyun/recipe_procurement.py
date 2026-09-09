@@ -164,6 +164,18 @@ def prepare(recipe, company):
             "meals": sorted(meals.values(), key=lambda r: r["key"])}
 
 
+@frappe.whitelist(methods=["POST"])
+def auto_match_items(recipe):
+    """Procurement reuses the audited Codex sync, never a second Item creator."""
+    _permission("Material Request", "create")
+    _source(recipe)
+    from tongjianyun.recipe_item_sync import get_sync_status, schedule_after_save
+    state = get_sync_status(recipe)
+    if state.get("status") in ("queued", "running"):
+        return state
+    return schedule_after_save(recipe)
+
+
 def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
     if str(include_history) not in ("0", "1"):
         frappe.throw("历史补录选项无效，请重新预览。")
