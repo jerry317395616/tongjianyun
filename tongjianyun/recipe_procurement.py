@@ -6,6 +6,7 @@ import json
 import math
 
 import frappe
+import frappe.defaults
 from frappe.utils import getdate, nowdate
 
 RECIPE = "Tongjianyun Recipe"
@@ -81,6 +82,24 @@ def _source(recipe):
     if not rows:
         frappe.throw("食谱没有食材明细。")
     return doc, rows
+
+
+@frappe.whitelist()
+def default_scope(recipe):
+    """Use ERPNext defaults without offering arbitrary companies or warehouses."""
+    _permission("Material Request", "create")
+    _read(RECIPE, recipe)
+    company = frappe.defaults.get_user_default("company") or frappe.defaults.get_global_default("company")
+    if not company:
+        frappe.throw("尚未配置默认公司，请联系管理员设置 ERPNext 默认公司。")
+    company_doc = _read("Company", company)
+    warehouse = company_doc.default_warehouse
+    if not warehouse:
+        frappe.throw("默认公司尚未配置收货仓库，请联系管理员设置公司的默认仓库。")
+    wh = _read("Warehouse", warehouse)
+    if wh.company != company or wh.is_group or wh.disabled:
+        frappe.throw("默认仓库不可用或不属于默认公司，请联系管理员修正配置。")
+    return {"company": company, "warehouse": warehouse}
 
 
 @frappe.whitelist()

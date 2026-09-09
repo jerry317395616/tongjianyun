@@ -865,21 +865,13 @@ class TongjianyunRecipePage {
         const call = async (method, args) => (await frappe.call({
             method: `tongjianyun.recipe_procurement.${method}`, args, freeze: true,
         })).message;
-        const setup = new frappe.ui.Dialog({
-            title: "准备采购需求 · 选择业务范围",
-            fields: [
-                {fieldtype: "HTML", options: "生成的是按天总需求草稿，不扣库存、不提交订单。不会自动扣减在途采购或推定食材可食率。"},
-                {fieldname: "company", label: "公司", fieldtype: "Link", options: "Company", reqd: 1},
-                {fieldname: "warehouse", label: "收货仓库", fieldtype: "Link", options: "Warehouse", reqd: 1,
-                    get_query: () => ({filters: {company: setup.get_value("company"), is_group: 0, disabled: 0}})},
-            ],
-            primary_action_label: "匹配食材",
-            primary_action: async (scope) => {
+        try {
+                const scope = await call("default_scope", {recipe});
                 const prepared = await call("prepare", {recipe, company: scope.company});
-                setup.hide();
                 const dialog = new frappe.ui.Dialog({
                     title: "核对食材与备餐人数", size: "extra-large",
                     fields: [
+                        {fieldtype: "HTML", options: `<p>已自动使用公司：${escapeHtml(scope.company)}；收货仓库：${escapeHtml(scope.warehouse)}。只创建采购需求草稿，不扣库存、不提交订单。</p>`},
                         {fieldtype: "HTML", options: "<p>只需处理未匹配项。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率，不能直接按净料采购。更换物料后请点击“更新库存单位”。</p>"},
                         {fieldname: "batch_resolve", label: "批量处理未匹配食材", fieldtype: "Button", click: () => this.resolveIngredients(recipe, scope.company, dialog)},
                         {fieldname: "ingredients", label: "食材匹配（同名仅为候选）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
@@ -944,9 +936,9 @@ class TongjianyunRecipePage {
                     },
                 });
                 dialog.show();
-            },
-        });
-        setup.show();
+        } catch (error) {
+            frappe.msgprint("准备采购需求未完成。请检查默认公司、默认仓库及账号权限；本次未创建采购需求。");
+        }
     }
 
     async resolveIngredients(recipe, company, parentDialog) {
