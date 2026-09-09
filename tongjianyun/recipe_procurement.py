@@ -327,6 +327,19 @@ def create_request(recipe, company, warehouse, mappings, meals, token, confirmed
     return {"name": request.name, "existing": False}
 
 
+def _daily_order_groups(request, rows):
+    """Use source demand dates, never the mapper's rescheduled delivery dates."""
+    source_dates = {item.name: item.schedule_date for item in request.items}
+    grouped = {}
+    for row in rows:
+        source_date = source_dates.get(row["material_request_item"])
+        if not source_date:
+            frappe.throw("物料需求明细缺少原始日期，请先核对，不能自动合并采购。")
+        key = (getdate(source_date).isoformat(), row["supplier"])
+        grouped.setdefault(key, {})[row["material_request_item"]] = row["qty"]
+    return grouped
+
+
 def complete_purchase_request(name):
     """Submit demand and map draft orders using ERPNext, in the caller transaction."""
     from erpnext.stock.doctype.material_request.mapper import (
@@ -361,20 +374,20 @@ def complete_purchase_request(name):
         if supplier.disabled:
             frappe.throw("默认供应商已停用，请联系管理员。")
         row["qty"] = row["pending_qty"]
+    grouped = _daily_order_groups(request, rows)
     if request.docstatus == 0:
         request.check_permission("submit")
         request.submit()
-    grouped = {}
-    for row in rows:
-        grouped.setdefault(row["supplier"], {})[row["material_request_item"]] = row["qty"]
     orders = []
-    for supplier, quantities in grouped.items():
+    for (recipe_date, supplier), quantities in sorted(grouped.items()):
         order = make_purchase_order(name, args={"supplier": supplier,
             "filtered_children": list(quantities), "requested_qty": quantities})
         # ERPNext clears past dates; normalize both retained and rescheduled dates
         # before its min(schedule_date) validation (date/string mix otherwise fails).
         for item in order.items:
             item.schedule_date = getdate(item.schedule_date or nowdate())
+            item.description = f"食谱日期：{recipe_date}<br>" + (item.description or "")
+        order.title = f"{recipe_date} · {order.supplier_name or supplier}"
         order.insert()
         orders.append(order.name)
     return {"name": name, "purchase_orders": orders, "existing": False}

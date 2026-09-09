@@ -983,7 +983,7 @@ class TongjianyunRecipePage {
                                     const result = await call("create_purchase", {...args, token: plan.token, confirmed: 1});
                                     review.hide(); dialog.hide();
                                     frappe.set_route("Form", "Purchase Order", result.purchase_orders[0]);
-                                    frappe.msgprint(result.existing ? "已打开已有采购订单，未重复创建。" : `物料需求已提交，已生成 ${result.purchase_orders.length} 张采购订单草稿。价格、交期仍需核对；未自动提交订单、扣库存或付款。`);
+                                    frappe.msgprint({title: "采购订单", message: (result.existing ? "已找到已有采购订单，未重复创建或拆改单据。" : `物料需求已提交，已按食谱日期和供应商生成 ${result.purchase_orders.length} 张订单草稿。价格、交期仍需核对；未自动下单、扣库存或付款。`) + "<br>" + result.purchase_orders.map(name => frappe.utils.get_form_link("Purchase Order", name, true)).join("<br>")});
                                 } finally { review.get_primary_btn().prop("disabled", false); }
                             },
                         });
