@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from html import escape
 
 import frappe
 import frappe.defaults
@@ -40,6 +41,28 @@ def conversion(source, target):
         return 1.0
     a, b = UNITS.get(source), UNITS.get(target)
     return a[1] / b[1] if a and b and a[0] == b[0] else None
+
+
+def checked_quantity(row, mapping, meals):
+    ingredient = escape(str(row['ingredient_name']))
+    context = escape(str(row['date']) + ' ' + str(row['slot']))
+    try:
+        factor = number(mapping.get('factor'))
+    except (ValueError, TypeError, OverflowError):
+        frappe.throw(f"{ingredient}：食谱单位为 {escape(str(row.get('unit') or '未填写'))}，物料库存单位为 {escape(str(mapping.get('uom') or '未填写'))}，缺少有效换算关系。请确认自制/外购及每份含量；这不是备餐人数问题。")
+    try:
+        count = number(meals.get(row['date'] + ':' + row['slot']), zero=True, integer=True)
+    except (ValueError, TypeError, OverflowError):
+        frappe.throw(f"{context}：备餐人数未填写或不是非负整数，请核对该餐次人数。")
+    try:
+        amount = number(row['amount'], zero=True)
+    except (ValueError, TypeError, OverflowError):
+        frappe.throw(f"{context} {ingredient}：食谱用量无效，请修正为非负数。")
+    try:
+        number(amount * count * factor, zero=True)
+    except (ValueError, TypeError, OverflowError):
+        frappe.throw(f"{context} {ingredient}：计算结果超出有效范围，请核对用量、人数和单位。")
+    return factor, count, amount
 
 
 def _read(doctype, name):
@@ -211,13 +234,7 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
             frappe.throw("物料库存单位已变化，请重新匹配。")
         if not frappe.db.exists("UOM", item.stock_uom):
             frappe.throw(f"物料 {item.name} 引用的库存单位 {item.stock_uom} 不存在，请管理员先修复基础数据。")
-        try:
-            factor = number(mapping.get("factor"))
-            count = number(meals.get(row["date"] + ":" + row["slot"]), zero=True, integer=True)
-            amount = number(row["amount"], zero=True)
-            number(amount * count * factor, zero=True)
-        except (ValueError, TypeError, OverflowError):
-            frappe.throw("请完整填写非负整数人数、正数换算系数，并核对食谱用量；不接受无效或无限大数值。")
+        factor, count, amount = checked_quantity(row, mapping, meals)
         checked[row["key"]] = {"item_code": item.name, "uom": item.stock_uom, "factor": factor}
         key = (row["date"], item.name)
         line = lines.setdefault(key, {"schedule_date": row["date"], "item_code": item.name,

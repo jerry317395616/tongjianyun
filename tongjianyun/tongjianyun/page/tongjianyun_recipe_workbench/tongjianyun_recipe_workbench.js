@@ -899,6 +899,8 @@ class TongjianyunRecipePage {
                 const dialog = new frappe.ui.Dialog({
                     title: "准备采购 · 确认人数", size: "large",
                     fields: [
+                        {fieldtype: "HTML", options: prepared.ingredients.filter(row => !row.item_code || !(Number(row.factor) > 0)).map(row =>
+                            `<p class="text-danger">${escapeHtml(row.ingredient)}：${!row.item_code ? escapeHtml(row.basis || "自动匹配尚未完成，请重试或联系管理员。") : `食谱单位 ${escapeHtml(row.source_uom)}，库存单位 ${escapeHtml(row.uom)}，缺少换算关系。请确认自制/外购及每份含量，无需反复修改人数。`}</p>`).join("")},
                         {fieldtype: "HTML", options: `<p>公司、仓库已自动设置，请确认下面的备餐人数。</p><p>${prepared.ingredients.some(row => !row.item_code || !(Number(row.factor) > 0)) ? "部分食材仍有异常，原因可在下方食材明细查看；可重试自动处理或联系管理员。" : "食材已匹配，无需手工建档。"}</p><p class="text-muted">${escapeHtml(scope.company)} · ${escapeHtml(scope.warehouse)}；仅生成草稿，不自动采购或扣库存。</p>`},
                         {fieldname: "include_history", label: "包含过去日期（历史补录）", fieldtype: "Check", default: 0,
                             description: "默认只生成今天及之后的需求，过去日期的食材和人数不参与计算。勾选后包含过去日期；历史需求不代表已采购、已入库或已付款。"},
