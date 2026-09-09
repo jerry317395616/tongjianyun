@@ -43,8 +43,8 @@ class TestRecipeProcurement(unittest.TestCase):
         item = _dict(name="RICE", item_name="大米", stock_uom=unit, disabled=0,
                      is_purchase_item=1, has_variants=0, is_stock_item=1)
         warehouse = _dict(company="School", is_group=0, disabled=0)
-        rows = [dict(name="a", key="rice", date="2099-01-01", slot="breakfast", amount=50),
-                dict(name="b", key="rice", date="2099-01-01", slot="lunch", amount=100)]
+        rows = [dict(name="a", key="rice", ingredient_name="大米", date="2099-01-01", slot="breakfast", amount=50),
+                dict(name="b", key="rice", ingredient_name="大米", date="2099-01-01", slot="lunch", amount=100)]
         with patch.object(service, "_source", return_value=(_dict(name="WEEK"), rows)), \
              patch.object(service, "_read", side_effect=lambda dt, name: warehouse if dt == "Warehouse" else item), \
              patch.object(service, "_payload", side_effect=lambda v: v), \

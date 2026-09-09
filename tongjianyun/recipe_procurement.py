@@ -156,6 +156,12 @@ def _plan(recipe, company, warehouse, mappings, meals):
         frappe.throw("食材匹配和分餐人数格式无效，请重新打开采购预览。")
     lines, checked = {}, {}
     for row in source:
+        from tongjianyun.recipe_product_decisions import read_decision
+        from tongjianyun.ingredient_resolution import requires_product_confirmation
+        if requires_product_confirmation(row["ingredient_name"]):
+            decision = read_decision(recipe, row)
+            if decision and decision.get("mode") in ("自制", "暂时跳过"):
+                frappe.throw("存在自制配方待办或暂时跳过的食材，不能生成完整采购需求。请先处理：" + row["ingredient_name"])
         mapping = mappings.get(row["key"], {})
         if not isinstance(mapping, dict) or not mapping.get("item_code"):
             frappe.throw("存在未匹配的食材，请先选择物料。")

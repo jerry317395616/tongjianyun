@@ -490,6 +490,9 @@ class TongjianyunRecipePage {
             if (sync?.recipe) this.state.selectedRecipe = sync.recipe;
             frappe.show_alert({ message: sync?.message || "食谱已保存", indicator: sync?.status === "blocked" ? "orange" : "green" });
             this.showBrowse();
+            if (sync?.recipe && sync.status !== "blocked") {
+                frappe.show_alert({message: "后台正在处理食材；汤粥等项目可点击“食材用途确认”集中处理。", indicator: "blue"}, 10);
+            }
         } catch (error) {
             this.showError("食谱保存失败", error);
         } finally {
@@ -752,6 +755,11 @@ class TongjianyunRecipePage {
     }
 
     bindCommonActions() {
+        const syncButton = this.main.find('[data-action="item-sync"]');
+        if (syncButton.length && !this.main.find('[data-action="product-decisions"]').length) {
+            syncButton.after('<button class="tjy-outline-button" data-action="product-decisions">食材用途确认</button>');
+        }
+        this.main.find('[data-action="product-decisions"]').on("click", () => this.showProductDecisions());
         this.main.find('[data-action="item-sync"]').on("click", () => this.showItemSync());
         this.main.find('[data-action="erp-procurement"]').on("click", () => this.openProcurement());
         this.main.find('[data-action="library"]').on("click", () => this.showLibrary());
@@ -762,6 +770,38 @@ class TongjianyunRecipePage {
         this.main.find('[data-action="calendar"]').on("click", () => this.enterEdit());
         this.main.find('[data-action="previous"]').on("click", () => this.openAdjacentRecipe(-1));
         this.main.find('[data-action="next"]').on("click", () => this.openAdjacentRecipe(1));
+    }
+
+    async showProductDecisions() {
+        const recipe = this.state.selectedRecipe || this.state.payload?.recipe?.recipeId;
+        if (!recipe) return;
+        const response = await frappe.call({method: "tongjianyun.recipe_product_decisions.get_pending", args: {recipe}});
+        const pending = response.message;
+        if (!pending?.rows?.length) return frappe.msgprint("没有需要确认用途的食材。");
+        const dialog = new frappe.ui.Dialog({title: "食材用途确认", size: "extra-large", fields: [
+            {fieldtype: "HTML", options: "<p>不影响食谱保存。外购可选择已有物料；新建时填写分类和库存单位。自制项目保存为配方待办，暂不自动展开；暂时跳过仍会阻止完整采购。空白行不修改。</p>"},
+            {fieldtype: "Table", fieldname: "decisions", cannot_add_rows: true, cannot_delete_rows: true,
+                data: pending.rows.map(row => ({key: row.key, ingredient: row.ingredient, source_unit: row.unit,
+                    mode: row.decision?.mode || "", item_code: row.decision?.item_code || ""})),
+                fields: [
+                    {fieldtype: "Data", fieldname: "key", hidden: 1},
+                    {fieldtype: "Data", fieldname: "ingredient", label: "食材", read_only: 1, in_list_view: 1},
+                    {fieldtype: "Data", fieldname: "source_unit", label: "原单位", read_only: 1},
+                    {fieldtype: "Select", fieldname: "mode", label: "处理方式", options: "\n外购\n自制\n暂时跳过", in_list_view: 1},
+                    {fieldtype: "Link", fieldname: "item_code", label: "已有外购物料", options: "Item", in_list_view: 1},
+                    {fieldtype: "Link", fieldname: "item_group", label: "新建时的分类", options: "Item Group", in_list_view: 1},
+                    {fieldtype: "Link", fieldname: "uom", label: "新建时的库存单位", options: "UOM", in_list_view: 1}
+                ]}
+        ], primary_action_label: "确认并继续处理", primary_action: async values => {
+            const decisions = (values.decisions || []).filter(row => row.mode);
+            if (!decisions.length) return frappe.msgprint("请至少选择一项处理方式。");
+            await frappe.call({method: "tongjianyun.recipe_product_decisions.confirm",
+                args: {recipe, revision: pending.revision, decisions}, freeze: true});
+            dialog.hide();
+            frappe.show_alert({message: "确认已保存，后台将继续匹配；自制及跳过项目保留待办。", indicator: "green"});
+            await this.showItemSync();
+        }});
+        dialog.show();
     }
 
     async showItemSync() {

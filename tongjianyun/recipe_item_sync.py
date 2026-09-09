@@ -65,8 +65,17 @@ def schedule_after_save(recipe):
     return {"recipe": recipe, "status": "queued", "message": "食谱已保存，正在安排后台匹配食材物料。"}
 
 
-def _match(row):
+def _match(row, recipe=None):
     if requires_product_confirmation(row["ingredient"]):
+        if recipe:
+            from tongjianyun.recipe_product_decisions import read_decision, external_mapping
+            decision = read_decision(recipe, row)
+            if decision and decision.get("mode") == "外购":
+                return external_mapping(decision, row), ""
+            if decision and decision.get("mode") == "自制":
+                return None, "已确认园内自制，待补充或核对原料配方；不按外购成品采购。"
+            if decision and decision.get("mode") == "暂时跳过":
+                return None, "已暂时跳过，仍需处理后才能生成完整采购需求。"
         return None, "菜品或汤粥需确认是否外购，不自动建档。"
     matches = frappe.get_list("Item", filters={**FILTERS, "item_name": row["ingredient"]},
         fields=["name", "stock_uom"], limit_page_length=2)
@@ -118,7 +127,7 @@ def make_plan(recipe):
     plan = source_snapshot(recipe)
     pending = []
     for row in plan["ingredients"]:
-        mapping, reason = _match(row)
+        mapping, reason = _match(row, recipe)
         if mapping is None and not reason:
             pending.append(row)
     groups = [dict(row) for row in frappe.get_list("Item Group",
@@ -163,7 +172,7 @@ def apply_plan(plan):
         frappe.db.savepoint(savepoint)
         group_created = None
         try:
-            mapping, reason = _match(row)
+            mapping, reason = _match(row, current["recipe"])
             if not mapping and not reason:
                 proposal = by_key.get(row["key"])
                 if row["key"] in failed_keys:
