@@ -108,6 +108,27 @@ def _get_recipe_name(recipe: str) -> str:
     return recipe_name
 
 
+def _purchase_trace_blocks_deletion(row) -> bool:
+    """Keep audit traces, but only orphaned ERP request traces cease blocking."""
+    if row.record_type == "erp_recipe_auto_mapping":
+        return False
+    if row.record_type != "erp_recipe_request":
+        return True
+    try:
+        data = json.loads(row.record_json or "{}")
+    except (ValueError, TypeError):
+        return True
+    request = data.get("material_request") if isinstance(data, dict) else None
+    if not isinstance(request, str) or not request.strip():
+        return True  # Incomplete or corrupt traces require investigation.
+    if frappe.db.exists("Material Request", request):
+        return True  # Even cancelled documents remain business history.
+    for doctype in ("Purchase Order Item", "Purchase Receipt Item", "Purchase Invoice Item"):
+        if frappe.db.exists(doctype, {"material_request": request}):
+            return True
+    return False
+
+
 def _recipe_business_links(recipe_doc) -> list[dict[str, Any]]:
     """Return downstream business records that overlap or identify this recipe."""
 
@@ -126,22 +147,19 @@ def _recipe_business_links(recipe_doc) -> list[dict[str, Any]]:
     for doctype, label in RECIPE_EXECUTION_DOCTYPES:
         if not frappe.db.table_exists(doctype):
             continue
-        clauses: list[str] = []
-        values: list[Any] = []
+        filters = []
         for fieldname in ("record_id", "parent_id", "source", "record_json"):
             if not frappe.db.has_column(doctype, fieldname):
                 continue
             for token in recipe_tokens:
-                clauses.append(f"`{fieldname}` like %s")
-                values.append(f"%{token}%")
-        if not clauses:
+                filters.append([fieldname, "like", f"%{token}%"])
+        if not filters:
             continue
-        count = cint(
-            frappe.db.sql(
-                f"select count(*) from `tab{doctype}` where ({' or '.join(clauses)}) and coalesce(record_type, '') != %s",
-                tuple(values) + ("erp_recipe_auto_mapping",),
-            )[0][0]
-        )
+        # Integrity checks intentionally include records hidden by user permissions;
+        # only aggregate counts, never their contents, are exposed to the client.
+        rows = frappe.get_all(doctype, or_filters=filters,
+            fields=["record_type", "record_json"], limit_page_length=0)
+        count = sum(_purchase_trace_blocks_deletion(row) for row in rows)
         if count:
             links.append({"doctype": doctype, "label": label, "count": count})
 
