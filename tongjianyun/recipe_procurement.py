@@ -160,7 +160,7 @@ def prepare(recipe, company):
                 meal["count"] = confirmation.get("total_" + SLOTS[meal["slot"]] + "_count")
                 meal["basis"] = "全园已确认人数，请核对本食谱适用范围"
     from tongjianyun.ingredient_resolution import suggestions
-    return {"recipe": doc.name, "revision": digest(rows), "ingredients": suggestions(list(ingredients.values())),
+    return {"recipe": doc.name, "revision": digest(rows), "as_of_date": nowdate(), "ingredients": suggestions(list(ingredients.values())),
             "meals": sorted(meals.values(), key=lambda r: r["key"])}
 
 

@@ -846,6 +846,30 @@ class TongjianyunRecipePage {
         await refresh();
     }
 
+    procurementDayRows(meals) {
+        const days = {};
+        for (const meal of meals) {
+            const row = days[meal.date] ||= {date: meal.date};
+            row[meal.slot] = meal.count == null ? "" : String(meal.count);
+        }
+        return Object.values(days).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    procurementMealCounts(meals, days) {
+        const byDate = Object.fromEntries(days.map(row => [row.date, row]));
+        return Object.fromEntries(meals.map(meal => [meal.key, byDate[meal.date]?.[meal.slot] ?? ""]));
+    }
+
+    fillProcurementCounts(meals, days, count, includeHistory, today) {
+        const existing = new Set(meals.map(row => row.date + ":" + row.slot));
+        for (const row of days) {
+            if (!includeHistory && row.date < today) continue;
+            for (const slot of Object.keys(MEAL_LABELS)) {
+                if (existing.has(row.date + ":" + slot) && (row[slot] == null || row[slot] === "")) row[slot] = String(count);
+            }
+        }
+    }
+
     async openProcurement() {
         const recipe = this.state.selectedRecipe;
         if (!recipe) return;
@@ -873,11 +897,31 @@ class TongjianyunRecipePage {
                     if (!prepared) return;
                 }
                 const dialog = new frappe.ui.Dialog({
-                    title: "核对食材与备餐人数", size: "extra-large",
+                    title: "准备采购 · 确认人数", size: "large",
                     fields: [
-                        {fieldtype: "HTML", options: `<p>已自动使用公司：${escapeHtml(scope.company)}；收货仓库：${escapeHtml(scope.warehouse)}。只创建采购需求草稿，不扣库存、不提交订单。</p>`},
+                        {fieldtype: "HTML", options: `<p>公司、仓库已自动设置，请确认下面的备餐人数。</p><p>${prepared.ingredients.some(row => !row.item_code || !(Number(row.factor) > 0)) ? "部分食材仍有异常，原因可在下方食材明细查看；可重试自动处理或联系管理员。" : "食材已匹配，无需手工建档。"}</p><p class="text-muted">${escapeHtml(scope.company)} · ${escapeHtml(scope.warehouse)}；仅生成草稿，不自动采购或扣库存。</p>`},
                         {fieldname: "include_history", label: "包含过去日期（历史补录）", fieldtype: "Check", default: 0,
                             description: "默认只生成今天及之后的需求，过去日期的食材和人数不参与计算。勾选后包含过去日期；历史需求不代表已采购、已入库或已付款。"},
+                        {fieldname: "bulk_count", label: "统一备餐人数（各餐相同时填写）", fieldtype: "Data",
+                            description: "只补充未填写的人数，不覆盖已有数据；0 人会保留。"},
+                        {fieldname: "fill_counts", label: "填入空白人数", fieldtype: "Button", click: () => {
+                            const value = String(dialog.get_value("bulk_count") ?? "").trim();
+                            if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+                                frappe.msgprint("请填写 0 或正整数人数。"); return;
+                            }
+                            this.fillProcurementCounts(prepared.meals, dialog.fields_dict.meal_days.df.data,
+                                value, dialog.get_value("include_history"), prepared.as_of_date);
+                            dialog.fields_dict.meal_days.grid.refresh();
+                        }},
+                        {fieldname: "meal_days", label: "每天备餐人数", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
+                            description: "已有就餐确认人数已带出，请核对适用范围。空白需填写；食谱没有安排的餐次不参与采购。过去日期默认不参与。",
+                            data: this.procurementDayRows(prepared.meals), fields: [
+                                {fieldname: "date", label: "日期", fieldtype: "Date", read_only: 1, in_list_view: 1, columns: 2},
+                                ...Object.entries(MEAL_LABELS).filter(([slot]) => prepared.meals.some(meal => meal.slot === slot)).map(([slot, label]) =>
+                                    ({fieldname: slot, label, fieldtype: "Data", in_list_view: 1, columns: 1})),
+                            ]},
+                        {fieldtype: "HTML", options: "<p>点击下一步查看采购清单，最后确认后才生成草稿。</p>"},
+                        {fieldtype: "Section Break", label: "食材明细与高级设置（通常无需操作）", collapsible: 1},
                         {fieldtype: "HTML", options: "<p>缺少的食材物料由系统自动分类建档，无需手工新建。请核对备餐人数及毛料换算系数；异常原因显示在来源栏，可重试自动处理。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率。更换物料后请点击“更新库存单位”。</p>"},
                         {fieldname: "batch_resolve", label: "重试自动匹配建档", fieldtype: "Button", click: async () => {
                             const updated = await this.autoMatchProcurementItems(recipe, scope.company);
@@ -909,30 +953,26 @@ class TongjianyunRecipePage {
                             dialog.fields_dict.ingredients.grid.refresh();
                             frappe.show_alert({message: "库存单位已更新，请核对换算系数。", indicator: "orange"});
                         }},
-                        {fieldname: "meals", label: "分餐人数（不是自动采用全园在册人数）", fieldtype: "Table", cannot_add_rows: true, cannot_delete_rows: true,
-                            data: prepared.meals.map(row => ({...row, count: row.count == null ? "" : String(row.count), meal_label: MEAL_LABELS[row.slot]})), fields: [
-                                {fieldname: "key", fieldtype: "Data", hidden: 1},
-                                {fieldname: "date", label: "日期", fieldtype: "Date", read_only: 1, in_list_view: 1, columns: 2},
-                                {fieldname: "meal_label", label: "餐次", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 2},
-                                {fieldname: "count", label: "预计备餐人数", fieldtype: "Data", in_list_view: 1, columns: 2},
-                                {fieldname: "basis", label: "来源", fieldtype: "Data", read_only: 1, in_list_view: 1, columns: 4},
-                            ]},
-                        {fieldname: "confirmed", label: "已核对食材规格、采购毛料换算和各餐适用人数", fieldtype: "Check", reqd: 1},
                     ],
-                    primary_action_label: "预览采购需求",
+                    primary_action_label: "下一步 · 查看采购清单",
                     primary_action: async (values) => {
-                        if (!values.confirmed) { frappe.msgprint("请先核对并勾选确认。"); return; }
                         const mappings = Object.fromEntries(values.ingredients.map(row => [row.key, {
                             item_code: row.item_code, uom: row.uom, factor: row.factor,
                         }]));
-                        const meals = Object.fromEntries(values.meals.map(row => [row.key, row.count]));
+                        const meals = this.procurementMealCounts(prepared.meals, values.meal_days);
+                        const selectedMeals = prepared.meals.filter(row => values.include_history || row.date >= prepared.as_of_date);
+                        const missing = selectedMeals.filter(row => !/^\d+$/.test(String(meals[row.key])));
+                        if (missing.length) {
+                            frappe.msgprint(`还需填写 ${missing.length} 个餐次的人数，例如 ${escapeHtml(missing[0].date)} ${escapeHtml(MEAL_LABELS[missing[0].slot])}。各餐人数相同时，可使用“统一备餐人数”。`);
+                            return;
+                        }
                         const args = {recipe, ...scope, include_history: values.include_history ? 1 : 0, mappings: JSON.stringify(mappings), meals: JSON.stringify(meals)};
                         const plan = await call("preview", args);
                         const dateNotice = `<p>单据日期：${escapeHtml(plan.transaction_date)}</p>` +
                             (plan.excluded_dates?.length ? `<p>已排除过去日期：${plan.excluded_dates.map(escapeHtml).join("、")}</p>` : "") +
                             (plan.historical_dates?.length ? `<p class="text-danger">历史补录日期：${plan.historical_dates.map(escapeHtml).join("、")}。为保留原用餐日期并符合 ERPNext 校验，单据日期设为最早补录日期；实际创建时间仍由系统记录。这不代表已采购、已入库或已付款，请核对原有采购记录，勿重复采购。</p>` : "");
                         const review = new frappe.ui.Dialog({
-                            title: `采购需求预览 · ${plan.lines.length} 行`, size: "large",
+                            title: "确认采购清单", size: "large",
                             fields: [{fieldtype: "HTML", options: `${dateNotice}<p>这是总需求，尚未扣除库存及在途采购。创建后只保存为 ERPNext 草稿，由采购人员审核。</p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th>数量</th><th>单位</th></tr></thead><tbody>${plan.lines.map(line => `<tr><td>${escapeHtml(line.schedule_date)}</td><td>${escapeHtml(line.item_name)}</td><td>${escapeHtml(String(line.qty))}</td><td>${escapeHtml(line.uom)}</td></tr>`).join("")}</tbody></table>`}],
                             primary_action_label: "确认创建草稿",
                             primary_action: async () => {
