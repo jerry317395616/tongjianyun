@@ -4,7 +4,7 @@ import json
 import frappe
 
 from tongjianyun.ingredient_classification import request_classification, ClassificationUnavailable, validate_proposals
-from tongjianyun.harness_ingredient_client import HarnessIngredientClient
+from tongjianyun.codex_ingredient_client import CodexIngredientClient
 from tongjianyun.ingredient_resolution import FILTERS, requires_product_confirmation
 from tongjianyun.recipe_procurement import TRACE, _permission, _read, conversion, digest
 
@@ -133,7 +133,7 @@ def make_plan(recipe):
             _state(recipe, {"status": "running", "stage": "classifying", "revision": plan["revision"],
                 "batch": batch, "batches": batches, "attempt": attempt,
                 "message": f"正在分类第 {batch}/{batches} 批食材（第 {attempt} 次尝试），尚未写入物料。"})
-        plan["proposals"], plan["classification_errors"] = classify_batches(HarnessIngredientClient(), pending, groups, progress)
+        plan["proposals"], plan["classification_errors"] = classify_batches(CodexIngredientClient(), pending, groups, progress)
         plan["classification_failed"] = bool(plan["classification_errors"])
     return plan
 
@@ -212,7 +212,7 @@ def apply_plan(plan):
     key = KIND + "::" + digest(current["recipe"])[:32]
     receipt = _read(TRACE, key) if frappe.db.exists(TRACE, key) else frappe.get_doc({"doctype": TRACE, "data_key": key})
     receipt.update({"record_type": KIND, "record_id": current["revision"], "parent_id": current["recipe"],
-        "title": "食谱食材自动匹配", "status": result["status"], "source": "Harness / ERPNext standard ORM",
+        "title": "食谱食材自动匹配", "status": result["status"], "source": "Source Codex + local Qwen / ERPNext standard ORM",
         "record_json": json.dumps(result, ensure_ascii=False)})
     receipt.save() if not receipt.is_new() else receipt.insert()
     return result

@@ -78,7 +78,7 @@ def validate_proposals(result, ingredients, groups):
 def preview_recipe(recipe):
     """Internal read-only preview. Not exposed as an unauthenticated model proxy."""
     import frappe
-    from tongjianyun.harness_ingredient_client import HarnessIngredientClient
+    from tongjianyun.codex_ingredient_client import CodexIngredientClient
     from tongjianyun.recipe_procurement import _permission, _read, digest
 
     _permission("Item Group", "read")
@@ -96,5 +96,8 @@ def preview_recipe(recipe):
     groups = [dict(r) for r in frappe.get_list("Item Group",
         fields=["name", "is_group", "parent_item_group"], limit_page_length=0)]
     source = [{"key": key, **value} for key, value in sorted(ingredients.items())]
-    rows = request_classification(HarnessIngredientClient(), source, groups)
+    rows = []
+    for offset in range(0, len(source), 20):
+        rows.extend(request_classification(CodexIngredientClient(), source[offset:offset + 20], groups))
+    rows = validate_proposals({"rows": rows}, source, groups)
     return {"recipe": recipe, "revision": digest(source), "rows": rows, "read_only": True}
