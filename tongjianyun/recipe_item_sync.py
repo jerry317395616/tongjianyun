@@ -43,7 +43,9 @@ def source_snapshot(recipe, *, require_write=True, allow_empty=False):
         fields=["record_id", "modified"], limit_page_length=0)
     if len(decisions) != frappe.db.count(TRACE, decision_filters):
         frappe.throw("无法读取完整食材确认记录。", frappe.PermissionError)
-    metadata = {field: doc.get(field) for field in ("week_start", "week_end", "workflow_status", "modified")}
+    # Publishing or changing a title does not alter ingredient processing. The
+    # parent modified value is checked separately under the apply-time row lock.
+    metadata = {field: doc.get(field) for field in ("week_start", "week_end")}
     metadata["decisions"] = sorted((dict(row) for row in decisions), key=digest)
     revision = content_revision(metadata, raw, dishes)
     return {"recipe": recipe, "revision": revision, "ingredients": source}
