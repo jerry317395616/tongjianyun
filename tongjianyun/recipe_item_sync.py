@@ -12,21 +12,41 @@ KIND = "erp_recipe_auto_mapping"
 INGREDIENT = "Tongjianyun Recipe Ingredient"
 
 
-def source_snapshot(recipe):
+def content_revision(metadata, ingredients, dishes):
+    """Order-independent fingerprint including quantities and meal placement."""
+    return digest({"metadata": metadata,
+        "ingredients": sorted((dict(row) for row in ingredients), key=digest),
+        "dishes": sorted((dict(row) for row in dishes), key=digest)})
+
+
+def source_snapshot(recipe, *, require_write=True, allow_empty=False):
     doc = _read("Tongjianyun Recipe", recipe)
-    doc.check_permission("write")
+    if require_write:
+        doc.check_permission("write")
     if doc.is_deleted:
         frappe.throw("食谱已删除。")
     raw = frappe.get_list(INGREDIENT, filters={"recipe": recipe},
-        fields=["ingredient_name", "unit"], limit_page_length=0)
+        fields=["ingredient_name", "unit", "amount", "recipe_dish"], limit_page_length=0)
     if len(raw) != frappe.db.count(INGREDIENT, {"recipe": recipe}):
         frappe.throw("无法读取完整食材明细。", frappe.PermissionError)
     rows = {digest([r.ingredient_name, r.unit])[:24]: {
         "ingredient": r.ingredient_name, "unit": r.unit} for r in raw}
-    if not 0 < len(rows) <= 200:
+    if len(rows) > 200 or (not rows and not allow_empty):
         frappe.throw("自动匹配支持 1 至 200 项不同食材。")
+    dishes = frappe.get_list("Tongjianyun Recipe Dish", filters={"recipe": recipe},
+        fields=["name", "dish_name", "meal_date", "meal_slot"], limit_page_length=0)
+    if len(dishes) != frappe.db.count("Tongjianyun Recipe Dish", {"recipe": recipe}):
+        frappe.throw("无法读取完整菜品明细。", frappe.PermissionError)
     source = [{"key": key, **row} for key, row in sorted(rows.items())]
-    return {"recipe": recipe, "revision": digest(source), "ingredients": source}
+    decision_filters = {"parent_id": recipe, "record_type": "erp_recipe_product_decision"}
+    decisions = frappe.get_list(TRACE, filters=decision_filters,
+        fields=["record_id", "modified"], limit_page_length=0)
+    if len(decisions) != frappe.db.count(TRACE, decision_filters):
+        frappe.throw("无法读取完整食材确认记录。", frappe.PermissionError)
+    metadata = {field: doc.get(field) for field in ("week_start", "week_end", "workflow_status", "modified")}
+    metadata["decisions"] = sorted((dict(row) for row in decisions), key=digest)
+    revision = content_revision(metadata, raw, dishes)
+    return {"recipe": recipe, "revision": revision, "ingredients": source}
 
 
 def _cache_key(recipe):
@@ -152,6 +172,11 @@ def apply_plan(plan):
     _permission("Item", "read")
     _permission(TRACE, "read")
     _permission(TRACE, "create")
+    # Recipe saves update this parent before rebuilding details. Hold its row lock
+    # through the caller's commit so an older plan cannot race a newer save.
+    locked_modified = frappe.db.get_value("Tongjianyun Recipe", plan["recipe"], "modified", for_update=True)
+    if str(_read("Tongjianyun Recipe", plan["recipe"]).modified) != str(locked_modified):
+        frappe.throw("食谱已并发更新，请重新保存后重试。")
     current = source_snapshot(plan["recipe"])
     if current["revision"] != plan["revision"]:
         frappe.throw("食材已改变，旧任务已停止，请重新保存。")
@@ -281,10 +306,15 @@ def get_sync_status(recipe):
         state = frappe.cache.get_value(_cache_key(recipe))
     except Exception:
         state = None
-    if state:
+    current = source_snapshot(recipe, require_write=False, allow_empty=True)
+    if state and state.get("revision") == current["revision"]:
         return state
     _permission(TRACE, "read")
     key = KIND + "::" + digest(recipe)[:32]
     if frappe.db.exists(TRACE, key):
-        return json.loads(_read(TRACE, key).record_json)
+        saved = json.loads(_read(TRACE, key).record_json)
+        if saved.get("revision") == current["revision"]:
+            return saved
+        return {"status": "stale", "revision": current["revision"],
+            "message": "食谱已修改，旧匹配结果不代表当前版本。请等待新任务，或重新保存后重试。"}
     return {"status": "not_started", "message": "尚无自动匹配记录；保存食谱后将触发匹配。"}

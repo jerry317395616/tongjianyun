@@ -849,6 +849,19 @@ class TongjianyunRecipePage {
     async openProcurement() {
         const recipe = this.state.selectedRecipe;
         if (!recipe) return;
+        try {
+            const response = await frappe.call({method: "tongjianyun.recipe_procurement.revision_impact", args: {recipe}});
+            const impact = response.message || {};
+            if (impact.requests?.length) {
+                frappe.msgprint({title: "已有采购需求，请先核对", message:
+                    `<p>${escapeHtml(impact.message || "")}</p>` + impact.requests.map(row =>
+                        `<p><a href="/desk/material-request/${encodeURIComponent(row.name)}">${escapeHtml(row.name)}</a>：${row.changed ? "食谱已变更，原单需核对" : "食谱内容与生成时一致"}（${({0:"草稿",1:"已提交",2:"已取消"})[row.docstatus] || "请查看原单"}）</p>`).join("")});
+                return;
+            }
+        } catch (error) {
+            frappe.msgprint("无法核对已有采购需求，请检查权限后重试；本次未生成采购单。");
+            return;
+        }
         const call = async (method, args) => (await frappe.call({
             method: `tongjianyun.recipe_procurement.${method}`, args, freeze: true,
         })).message;

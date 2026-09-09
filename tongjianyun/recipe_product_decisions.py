@@ -40,6 +40,10 @@ def get_pending(recipe):
 @frappe.whitelist(methods=["POST"])
 def confirm(recipe, revision, decisions):
     from tongjianyun.recipe_item_sync import source_snapshot, schedule_after_save
+    _read("Tongjianyun Recipe", recipe).check_permission("write")
+    locked_modified = frappe.db.get_value("Tongjianyun Recipe", recipe, "modified", for_update=True)
+    if str(_read("Tongjianyun Recipe", recipe).modified) != str(locked_modified):
+        frappe.throw("食谱已并发更新，请重新打开确认窗口。")
     snapshot = source_snapshot(recipe)
     if snapshot["revision"] != revision:
         frappe.throw("食材已变化，请重新打开待确认窗口。")

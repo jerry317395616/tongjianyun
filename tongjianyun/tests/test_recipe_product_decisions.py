@@ -32,6 +32,8 @@ class TestProductDecisions(unittest.TestCase):
 
     def test_stale_confirmation_rejected_before_writes(self):
         with patch.object(sync, "source_snapshot", return_value={"revision": "new"}), \
+             patch.object(decisions, "_read", return_value=MagicMock(modified="v2")), \
+             patch.object(decisions.frappe, "db", MagicMock(get_value=MagicMock(return_value="v2"))), \
              patch.object(decisions.frappe, "throw", side_effect=ValueError), \
              patch.object(decisions.frappe, "get_doc") as write:
             with self.assertRaises(ValueError):

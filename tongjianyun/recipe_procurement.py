@@ -206,6 +206,26 @@ def preview(recipe, company, warehouse, mappings, meals):
     return _plan(recipe, company, warehouse, mappings, meals)
 
 
+@frappe.whitelist()
+def revision_impact(recipe):
+    """Read-only warning for existing requests; never revise submitted documents."""
+    doc = _read(RECIPE, recipe)
+    _permission(TRACE, "read")
+    _permission("Material Request", "read")
+    current_revision = None
+    if not doc.is_deleted and doc.workflow_status == "已发布":
+        _, rows = _source(recipe)
+        current_revision = digest(rows)
+    output = []
+    for row in frappe.get_list(TRACE, filters={"parent_id": recipe, "record_type": KIND},
+            fields=["name"], limit_page_length=0):
+        saved = json.loads(_read(TRACE, row.name).record_json)
+        request = _read("Material Request", saved["material_request"])
+        output.append({"name": request.name, "docstatus": request.docstatus,
+            "changed": current_revision is None or current_revision != saved.get("revision")})
+    return {"requests": output, "message": "食谱修改不会覆盖原采购需求、订单或库存。发现差异后请核对原单并走修订流程。"}
+
+
 @frappe.whitelist(methods=["POST"])
 def create_request(recipe, company, warehouse, mappings, meals, token, confirmed=0):
     if str(confirmed) != "1":
