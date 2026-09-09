@@ -325,3 +325,64 @@ def create_request(recipe, company, warehouse, mappings, meals, token, confirmed
     trace.record_json = json.dumps(plan, ensure_ascii=False)
     trace.save()
     return {"name": request.name, "existing": False}
+
+
+def complete_purchase_request(name):
+    """Submit demand and map draft orders using ERPNext, in the caller transaction."""
+    from erpnext.stock.doctype.material_request.mapper import (
+        get_item_default_suppliers, make_purchase_order,
+    )
+    _permission("Purchase Order", "create")
+    request = _read("Material Request", name)
+    # Serialize all automated continuations for this request, including retries.
+    frappe.db.get_value("Material Request", name, "name", for_update=True)
+    request.reload()
+    if request.docstatus == 2 or request.material_request_type != "Purchase":
+        frappe.throw("仅能处理未取消的采购物料需求。")
+    # Draft orders do not increment ordered_qty. Check links before mapping again.
+    linked = frappe.get_all("Purchase Order Item", filters={"material_request": name},
+                            fields=["parent"], limit_page_length=0)
+    orders = []
+    for order_name in sorted({row.parent for row in linked}):
+        order = _read("Purchase Order", order_name)
+        if order.docstatus != 2:
+            orders.append(order.name)
+    if orders:
+        return {"name": name, "purchase_orders": orders, "existing": True}
+    fallback = frappe.defaults.get_global_default("tongjianyun_supplier::" + request.company)
+    rows = get_item_default_suppliers(name)
+    if not rows:
+        frappe.throw("该需求已无待采购数量，请核对已有订单或收货记录。")
+    for row in rows:
+        row["supplier"] = row.get("supplier") or fallback
+        if not row["supplier"]:
+            frappe.throw("尚未配置食材默认供应商，请联系管理员。")
+        supplier = _read("Supplier", row["supplier"])
+        if supplier.disabled:
+            frappe.throw("默认供应商已停用，请联系管理员。")
+        row["qty"] = row["pending_qty"]
+    if request.docstatus == 0:
+        request.check_permission("submit")
+        request.submit()
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row["supplier"], {})[row["material_request_item"]] = row["qty"]
+    orders = []
+    for supplier, quantities in grouped.items():
+        order = make_purchase_order(name, args={"supplier": supplier,
+            "filtered_children": list(quantities), "requested_qty": quantities})
+        # ERPNext clears past dates; normalize both retained and rescheduled dates
+        # before its min(schedule_date) validation (date/string mix otherwise fails).
+        for item in order.items:
+            item.schedule_date = getdate(item.schedule_date or nowdate())
+        order.insert()
+        orders.append(order.name)
+    return {"name": name, "purchase_orders": orders, "existing": False}
+
+
+@frappe.whitelist(methods=["POST"])
+def create_purchase(recipe, company, warehouse, mappings, meals, token, confirmed=0, include_history=0):
+    """One explicit user confirmation; any failure rolls back demand and orders."""
+    _permission("Purchase Order", "create")
+    result = create_request(recipe, company, warehouse, mappings, meals, token, confirmed, include_history)
+    return complete_purchase_request(result["name"])

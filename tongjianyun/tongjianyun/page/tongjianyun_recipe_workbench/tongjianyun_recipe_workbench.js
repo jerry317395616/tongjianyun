@@ -901,7 +901,7 @@ class TongjianyunRecipePage {
                     fields: [
                         {fieldtype: "HTML", options: prepared.ingredients.filter(row => !row.item_code || !(Number(row.factor) > 0)).map(row =>
                             `<p class="text-danger">${escapeHtml(row.ingredient)}：${!row.item_code ? escapeHtml(row.basis || "自动匹配尚未完成，请重试或联系管理员。") : `食谱单位 ${escapeHtml(row.source_uom)}，库存单位 ${escapeHtml(row.uom)}，缺少换算关系。请确认自制/外购及每份含量，无需反复修改人数。`}</p>`).join("")},
-                        {fieldtype: "HTML", options: `<p>公司、仓库已自动设置，请确认下面的备餐人数。</p><p>${prepared.ingredients.some(row => !row.item_code || !(Number(row.factor) > 0)) ? "部分食材仍有异常，原因可在下方食材明细查看；可重试自动处理或联系管理员。" : "食材已匹配，无需手工建档。"}</p><p class="text-muted">${escapeHtml(scope.company)} · ${escapeHtml(scope.warehouse)}；仅生成草稿，不自动采购或扣库存。</p>`},
+                        {fieldtype: "HTML", options: `<p>公司、仓库已自动设置，请确认下面的备餐人数。</p><p>${prepared.ingredients.some(row => !row.item_code || !(Number(row.factor) > 0)) ? "部分食材仍有异常，原因可在下方食材明细查看；可重试自动处理或联系管理员。" : "食材已匹配，无需手工建档。"}</p><p class="text-muted">${escapeHtml(scope.company)} · ${escapeHtml(scope.warehouse)}；自动提交需求，创建采购订单草稿，不自动下单或扣库存。</p>`},
                         {fieldname: "include_history", label: "包含过去日期（历史补录）", fieldtype: "Check", default: 0,
                             description: "默认只生成今天及之后的需求，过去日期的食材和人数不参与计算。勾选后包含过去日期；历史需求不代表已采购、已入库或已付款。"},
                         {fieldname: "bulk_count", label: "统一备餐人数（各餐相同时填写）", fieldtype: "Data",
@@ -922,7 +922,7 @@ class TongjianyunRecipePage {
                                 ...Object.entries(MEAL_LABELS).filter(([slot]) => prepared.meals.some(meal => meal.slot === slot)).map(([slot, label]) =>
                                     ({fieldname: slot, label, fieldtype: "Data", in_list_view: 1, columns: 1})),
                             ]},
-                        {fieldtype: "HTML", options: "<p>点击下一步查看采购清单，最后确认后才生成草稿。</p>"},
+                        {fieldtype: "HTML", options: "<p>确认清单后自动提交物料需求，并按默认供应商创建采购订单草稿；不自动下单、收货或付款。</p>"},
                         {fieldtype: "Section Break", label: "食材明细与高级设置（通常无需操作）", collapsible: 1},
                         {fieldtype: "HTML", options: "<p>缺少的食材物料由系统自动分类建档，无需手工新建。请核对备餐人数及毛料换算系数；异常原因显示在来源栏，可重试自动处理。换算系数＝每 1 个食谱单位所需的采购毛料库存单位数量；净料需另计可食率。更换物料后请点击“更新库存单位”。</p>"},
                         {fieldname: "batch_resolve", label: "重试自动匹配建档", fieldtype: "Button", click: async () => {
@@ -975,15 +975,15 @@ class TongjianyunRecipePage {
                             (plan.historical_dates?.length ? `<p class="text-danger">历史补录日期：${plan.historical_dates.map(escapeHtml).join("、")}。为保留原用餐日期并符合 ERPNext 校验，单据日期设为最早补录日期；实际创建时间仍由系统记录。这不代表已采购、已入库或已付款，请核对原有采购记录，勿重复采购。</p>` : "");
                         const review = new frappe.ui.Dialog({
                             title: "确认采购清单", size: "large",
-                            fields: [{fieldtype: "HTML", options: `${dateNotice}<p>这是总需求，尚未扣除库存及在途采购。创建后只保存为 ERPNext 草稿，由采购人员审核。</p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th>数量</th><th>单位</th></tr></thead><tbody>${plan.lines.map(line => `<tr><td>${escapeHtml(line.schedule_date)}</td><td>${escapeHtml(line.item_name)}</td><td>${escapeHtml(String(line.qty))}</td><td>${escapeHtml(line.uom)}</td></tr>`).join("")}</tbody></table>`}],
-                            primary_action_label: "确认创建草稿",
+                            fields: [{fieldtype: "HTML", options: `${dateNotice}<p>这是总需求，尚未扣除库存及在途采购。确认后自动提交物料需求，并按默认供应商生成采购订单草稿。订单价格需核对；历史需求的订单交期按 ERPNext 规则调整为今天，不表示已经采购。</p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th>数量</th><th>单位</th></tr></thead><tbody>${plan.lines.map(line => `<tr><td>${escapeHtml(line.schedule_date)}</td><td>${escapeHtml(line.item_name)}</td><td>${escapeHtml(String(line.qty))}</td><td>${escapeHtml(line.uom)}</td></tr>`).join("")}</tbody></table>`}],
+                            primary_action_label: "确认 · 自动准备采购订单",
                             primary_action: async () => {
                                 review.get_primary_btn().prop("disabled", true);
                                 try {
-                                    const result = await call("create_request", {...args, token: plan.token, confirmed: 1});
+                                    const result = await call("create_purchase", {...args, token: plan.token, confirmed: 1});
                                     review.hide(); dialog.hide();
-                                    frappe.set_route("Form", "Material Request", result.name);
-                                    frappe.show_alert(result.existing ? "已打开原有需求，未重复创建。" : "采购需求草稿已创建，尚未提交。");
+                                    frappe.set_route("Form", "Purchase Order", result.purchase_orders[0]);
+                                    frappe.msgprint(result.existing ? "已打开已有采购订单，未重复创建。" : `物料需求已提交，已生成 ${result.purchase_orders.length} 张采购订单草稿。价格、交期仍需核对；未自动提交订单、扣库存或付款。`);
                                 } finally { review.get_primary_btn().prop("disabled", false); }
                             },
                         });
