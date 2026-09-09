@@ -48,7 +48,8 @@ class CodexIngredientClient:
             raise ClassificationUnavailable("Codex 分类未完成或结果校验失败，未创建物料。") from None
 
     async def _bounded(self, payload):
-        async with asyncio.timeout(150):
+        # 10 batches x 2 attempts must fit the existing 1800-second RQ job budget.
+        async with asyncio.timeout(75):
             return await self._run(payload)
 
     async def _run(self, payload):
