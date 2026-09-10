@@ -151,6 +151,149 @@ def _default_buying_price_list():
     return price_list
 
 
+def _price_key(item_code, uom):
+    return digest([item_code, uom])[:24]
+
+
+def _price_list_currency(price_list, company):
+    return (
+        frappe.db.get_value("Price List", price_list, "currency")
+        or frappe.db.get_value("Company", company, "default_currency")
+        or "CNY"
+    )
+
+
+def _current_buying_price(item_code, price_list, uom):
+    """Read the effective buying price used by Tongjianyun's one-click flow."""
+    today = getdate(nowdate())
+    rows = frappe.get_all(
+        "Item Price",
+        filters={"item_code": item_code, "price_list": price_list, "buying": 1},
+        fields=["name", "price_list_rate", "uom", "valid_from", "valid_upto"],
+        order_by="valid_from desc, modified desc, creation desc",
+        limit_page_length=50,
+    )
+    candidates = []
+    for row in rows:
+        if row.uom and row.uom != uom:
+            continue
+        if row.valid_from and getdate(row.valid_from) > today:
+            continue
+        if row.valid_upto and getdate(row.valid_upto) < today:
+            continue
+        rate = float(row.price_list_rate or 0)
+        if rate > 0:
+            candidates.append((0 if row.uom == uom else 1, rate))
+    if not candidates:
+        return 0.0
+    candidates.sort(key=lambda item: item[0])
+    return candidates[0][1]
+
+
+def _plan_price_index(plan):
+    index = {}
+    for line in plan["lines"]:
+        key = _price_key(line["item_code"], line["uom"])
+        index.setdefault(key, {"item_code": line["item_code"], "item_name": line["item_name"], "uom": line["uom"]})
+    return index
+
+
+def _attach_line_prices(plan):
+    for line in plan["lines"]:
+        price_key = _price_key(line["item_code"], line["uom"])
+        rate = _current_buying_price(line["item_code"], plan["buying_price_list"], line["uom"])
+        line["price_key"] = price_key
+        line["unit_price"] = rate
+        line["amount"] = round(float(line["qty"] or 0) * rate, 6) if rate > 0 else 0
+    return plan
+
+
+def _apply_plan_rates(plan):
+    for line in plan["lines"]:
+        rate = _current_buying_price(line["item_code"], plan["buying_price_list"], line["uom"])
+        if rate > 0:
+            line["price_list_rate"] = rate
+            line["rate"] = rate
+            line["amount"] = round(float(line["qty"] or 0) * rate, 6)
+    return plan
+
+
+def _generic_item_price(item_code, price_list, uom):
+    rows = frappe.get_all(
+        "Item Price",
+        filters={"item_code": item_code, "price_list": price_list, "buying": 1, "uom": uom},
+        fields=["name"],
+        order_by="modified desc, creation desc",
+        limit_page_length=20,
+    )
+    for row in rows:
+        doc = frappe.get_doc("Item Price", row.name)
+        if not doc.get("supplier"):
+            return doc
+    return None
+
+
+def _upsert_buying_prices(plan, prices):
+    prices = _payload(prices or {})
+    if not prices:
+        return {"created": 0, "updated": 0, "unchanged": 0}
+    if not isinstance(prices, dict):
+        frappe.throw("采购单价格式无效，请重新打开采购清单。")
+
+    _permission("Item Price", "read")
+    _permission("Item Price", "create")
+    _permission("Item Price", "write")
+    price_index = _plan_price_index(plan)
+    currency = _price_list_currency(plan["buying_price_list"], plan["company"])
+    created = updated = unchanged = 0
+    for key, raw_price in prices.items():
+        key = str(key)
+        if key not in price_index:
+            frappe.throw("采购单价与当前清单不匹配，请重新预览。")
+        try:
+            rate = number(raw_price)
+        except (TypeError, ValueError, OverflowError):
+            frappe.throw(f"{escape(price_index[key]['item_name'])}：采购单价必须是正数。")
+        row = price_index[key]
+        item_price = _generic_item_price(row["item_code"], plan["buying_price_list"], row["uom"])
+        if item_price:
+            item_price.check_permission("write")
+            if float(item_price.price_list_rate or 0) == rate and item_price.currency == currency:
+                unchanged += 1
+                continue
+            item_price.price_list_rate = rate
+            item_price.currency = currency
+            item_price.save()
+            updated += 1
+        else:
+            doc = frappe.get_doc({
+                "doctype": "Item Price",
+                "item_code": row["item_code"],
+                "price_list": plan["buying_price_list"],
+                "price_list_rate": rate,
+                "currency": currency,
+                "uom": row["uom"],
+                "buying": 1,
+                "selling": 0,
+            })
+            doc.insert()
+            created += 1
+    return {"created": created, "updated": updated, "unchanged": unchanged}
+
+
+def _validate_plan_prices(plan):
+    missing = []
+    for row in _plan_price_index(plan).values():
+        if _current_buying_price(row["item_code"], plan["buying_price_list"], row["uom"]) <= 0:
+            missing.append(row["item_name"])
+    if missing:
+        frappe.throw(
+            "请在确认采购清单中补齐采购单价："
+            + "、".join(escape(name) for name in missing[:12])
+            + (" 等" if len(missing) > 12 else "")
+        )
+
+
 @frappe.whitelist()
 def prepare(recipe, company):
     _permission("Item", "read")
@@ -298,7 +441,8 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
 @frappe.whitelist()
 def preview(recipe, company, warehouse, mappings, meals, include_history=0):
     _permission("Material Request", "create")
-    return _plan(recipe, company, warehouse, mappings, meals, include_history)
+    plan = _plan(recipe, company, warehouse, mappings, meals, include_history)
+    return _attach_line_prices(plan)
 
 
 @frappe.whitelist()
@@ -334,6 +478,7 @@ def create_request(recipe, company, warehouse, mappings, meals, token, confirmed
     plan = _plan(recipe, company, warehouse, mappings, meals, include_history)
     if token != plan["token"]:
         frappe.throw("食谱或参数已变化，请重新预览。")
+    _apply_plan_rates(plan)
     trace_available = _trace_available()
     trace_key = KIND + "::" + digest([recipe, company])[:32]
     # Retain the old idempotency trace only on sites that still have its DocType.
@@ -548,7 +693,7 @@ def _ensure_purchase_invoice(order):
     if any(float(item.qty or 0) > 0 and float(item.rate or 0) <= 0 for item in invoice.items):
         frappe.throw(
             f"采购订单 {order.name} 尚未配置有效采购价，无法自动开票和付款。"
-            "请先在 ERPNext 的 Item Price（Standard Buying）或供应商价格规则中配置价格。"
+            "请返回童健云采购清单直接填写单价，系统会自动保存到 ERPNext 默认采购价格表。"
         )
     # Stock was already updated by Purchase Receipt. Never duplicate it from the invoice.
     invoice.update_stock = 0
@@ -638,10 +783,19 @@ def complete_purchase_cycle(name):
 
 
 @frappe.whitelist(methods=["POST"])
-def create_purchase(recipe, company, warehouse, mappings, meals, token, confirmed=0, include_history=0):
+def create_purchase(recipe, company, warehouse, mappings, meals, token, confirmed=0, include_history=0, prices=None):
     """One explicit confirmation; complete the ERPNext procurement cycle."""
+    if str(confirmed) != "1":
+        frappe.throw("请明确确认物料、备餐人数、采购毛料换算及采购单价。")
+    plan = _plan(recipe, company, warehouse, mappings, meals, include_history)
+    if token != plan["token"]:
+        frappe.throw("食谱或参数已变化，请重新预览。")
+    price_result = _upsert_buying_prices(plan, prices)
+    _validate_plan_prices(plan)
     result = create_request(recipe, company, warehouse, mappings, meals, token, confirmed, include_history)
-    return complete_purchase_cycle(result["name"])
+    cycle = complete_purchase_cycle(result["name"])
+    cycle["price_updates"] = price_result
+    return cycle
 
 
 @frappe.whitelist()

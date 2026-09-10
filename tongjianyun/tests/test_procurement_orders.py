@@ -61,6 +61,52 @@ class OrderTests(unittest.TestCase):
              self.assertRaises(ValueError):
             service._default_buying_price_list()
 
+    def test_upsert_buying_prices_creates_generic_item_price(self):
+        plan = {"company": "School", "buying_price_list": "Standard Buying",
+                "lines": [_dict(item_code="ITEM-1", item_name="苹果", uom="g", qty=10)]}
+        price_key = service._price_key("ITEM-1", "g")
+        created = []
+
+        def make_doc(payload, name=None):
+            doc = MagicMock()
+            for key, value in payload.items():
+                setattr(doc, key, value)
+            doc.insert.side_effect = lambda: created.append(doc)
+            return doc
+
+        db = MagicMock()
+        db.get_value.return_value = "CNY"
+        with patch.object(service, "_permission"), \
+             patch.object(service.frappe, "get_all", return_value=[]), \
+             patch.object(service.frappe, "get_doc", side_effect=make_doc), \
+             patch.object(service.frappe, "db", db):
+            result = service._upsert_buying_prices(plan, {price_key: "0.02"})
+
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(created[0].doctype, "Item Price")
+        self.assertEqual(created[0].item_code, "ITEM-1")
+        self.assertEqual(created[0].price_list_rate, 0.02)
+        self.assertEqual(created[0].uom, "g")
+        created[0].insert.assert_called_once()
+
+    def test_upsert_buying_prices_updates_existing_generic_item_price(self):
+        plan = {"company": "School", "buying_price_list": "Standard Buying",
+                "lines": [_dict(item_code="ITEM-1", item_name="苹果", uom="g", qty=10)]}
+        price_doc = MagicMock(price_list_rate=0.01, currency="CNY")
+        price_doc.get.return_value = None
+        db = MagicMock()
+        db.get_value.return_value = "CNY"
+        with patch.object(service, "_permission"), \
+             patch.object(service.frappe, "get_all", return_value=[_dict(name="PRICE-1")]), \
+             patch.object(service.frappe, "get_doc", return_value=price_doc), \
+             patch.object(service.frappe, "db", db):
+            result = service._upsert_buying_prices(plan, {service._price_key("ITEM-1", "g"): 0.03})
+
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(price_doc.price_list_rate, 0.03)
+        price_doc.check_permission.assert_called_once_with("write")
+        price_doc.save.assert_called_once()
+
     def test_date_and_supplier_partition(self):
         request = MagicMock()
         request.items = [_dict(name=str(i), schedule_date=date) for i, date in enumerate(

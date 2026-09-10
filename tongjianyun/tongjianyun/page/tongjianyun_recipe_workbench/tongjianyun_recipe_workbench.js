@@ -991,17 +991,54 @@ class TongjianyunRecipePage {
                         const dateNotice = `<p>单据日期：${escapeHtml(plan.transaction_date)}</p>` +
                             (plan.excluded_dates?.length ? `<p>已排除过去日期：${plan.excluded_dates.map(escapeHtml).join("、")}</p>` : "") +
                             (plan.historical_dates?.length ? `<p class="text-danger">历史补录日期：${plan.historical_dates.map(escapeHtml).join("、")}。为保留原用餐日期并符合 ERPNext 校验，单据日期设为最早补录日期；实际创建时间仍由系统记录。这不代表已采购、已入库或已付款，请核对原有采购记录，勿重复采购。</p>` : "");
+                        const purchaseRows = plan.lines.map(line => {
+                            const unitPrice = Number(line.unit_price || 0);
+                            const amount = Number(line.amount || (unitPrice > 0 ? Number(line.qty || 0) * unitPrice : 0));
+                            const priceValue = unitPrice > 0 ? String(unitPrice) : "";
+                            return `<tr>
+                                <td>${escapeHtml(line.schedule_date)}</td>
+                                <td>${escapeHtml(line.item_name)}</td>
+                                <td class="text-right">${escapeHtml(String(line.qty))}</td>
+                                <td>${escapeHtml(line.uom)}</td>
+                                <td style="min-width: 140px;">
+                                    <input class="form-control input-sm tjy-procurement-price" type="number" min="0" step="0.000001"
+                                        data-price-key="${escapeHtml(line.price_key)}"
+                                        data-label="${escapeHtml(line.item_name)}"
+                                        data-qty="${escapeHtml(String(line.qty))}"
+                                        value="${escapeHtml(priceValue)}" placeholder="填单价">
+                                </td>
+                                <td class="text-right tjy-procurement-amount">${amount > 0 ? escapeHtml(amount.toFixed(2)) : "-"}</td>
+                            </tr>`;
+                        }).join("");
                         const review = new frappe.ui.Dialog({
                             title: "确认采购清单", size: "large",
-                            fields: [{fieldtype: "HTML", options: `${dateNotice}<p>这是总需求，尚未扣除库存及在途采购。确认后系统将按默认供应商和默认账户一键完成：提交物料需求、采购订单、采购收货、采购发票和付款记录。数量、价格、税费及默认财务账户必须已配置正确。</p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th>数量</th><th>单位</th></tr></thead><tbody>${plan.lines.map(line => `<tr><td>${escapeHtml(line.schedule_date)}</td><td>${escapeHtml(line.item_name)}</td><td>${escapeHtml(String(line.qty))}</td><td>${escapeHtml(line.uom)}</td></tr>`).join("")}</tbody></table>`}],
+                            fields: [{fieldtype: "HTML", options: `${dateNotice}<p>这是总需求，尚未扣除库存及在途采购。请在这里直接填写采购单价；同一种物料出现多天时，任意一行填写后会自动同步。确认后系统会把单价保存到 ERPNext 默认采购价格表，并按默认供应商和默认账户一键完成：提交物料需求、采购订单、采购收货、采购发票和付款记录。</p><p class="text-muted tjy-procurement-price-summary"></p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th class="text-right">数量</th><th>单位</th><th>单价</th><th class="text-right">金额</th></tr></thead><tbody>${purchaseRows}</tbody><tfoot><tr><th colspan="5" class="text-right">预计合计</th><th class="text-right tjy-procurement-total">-</th></tr></tfoot></table>`}],
                             primary_action_label: "确认 · 一键完成采购闭环",
                             primary_action: async () => {
+                                const prices = {};
+                                const missingPrices = [];
+                                review.$wrapper.find(".tjy-procurement-price").each(function () {
+                                    const key = this.dataset.priceKey;
+                                    const label = this.dataset.label || "物料";
+                                    const value = Number(String(this.value || "").trim());
+                                    if (!(Number.isFinite(value) && value > 0)) {
+                                        if (!missingPrices.some(row => row.key === key)) missingPrices.push({key, label});
+                                        return;
+                                    }
+                                    prices[key] = value;
+                                });
+                                if (missingPrices.length) {
+                                    frappe.msgprint(`请先补齐采购单价，例如：${escapeHtml(missingPrices[0].label)}。`);
+                                    return;
+                                }
                                 review.get_primary_btn().prop("disabled", true);
                                 try {
-                                    const result = await call("create_purchase", {...args, token: plan.token, confirmed: 1});
+                                    const result = await call("create_purchase", {...args, token: plan.token, confirmed: 1, prices: JSON.stringify(prices)});
                                     review.hide(); dialog.hide();
+                                    const priceUpdates = result.price_updates || {};
                                     frappe.msgprint({title: "采购闭环已完成", message:
                                         `${result.existing ? "已复用已有单据，未重复创建。" : "已按食谱日期和默认供应商完成采购闭环。"}<br>` +
+                                        `采购价：新建 ${priceUpdates.created || 0} 条，更新 ${priceUpdates.updated || 0} 条，沿用 ${priceUpdates.unchanged || 0} 条。<br>` +
                                         `采购订单：${result.purchase_orders.map(name => frappe.utils.get_form_link("Purchase Order", name, true)).join("、")}<br>` +
                                         `采购收货：${result.purchase_receipts.map(name => frappe.utils.get_form_link("Purchase Receipt", name, true)).join("、")}<br>` +
                                         `采购发票：${result.purchase_invoices.map(name => frappe.utils.get_form_link("Purchase Invoice", name, true)).join("、")}<br>` +
@@ -1010,6 +1047,37 @@ class TongjianyunRecipePage {
                             },
                         });
                         review.show();
+                        const updateReviewAmounts = () => {
+                            let total = 0;
+                            const missingKeys = new Set();
+                            review.$wrapper.find(".tjy-procurement-price").each(function () {
+                                const key = this.dataset.priceKey;
+                                const qty = Number(this.dataset.qty || 0);
+                                const price = Number(String(this.value || "").trim());
+                                const amountCell = $(this).closest("tr").find(".tjy-procurement-amount");
+                                if (Number.isFinite(price) && price > 0) {
+                                    const amount = qty * price;
+                                    total += amount;
+                                    amountCell.text(amount.toFixed(2));
+                                } else {
+                                    missingKeys.add(key);
+                                    amountCell.text("-");
+                                }
+                            });
+                            review.$wrapper.find(".tjy-procurement-total").text(total > 0 ? total.toFixed(2) : "-");
+                            review.$wrapper.find(".tjy-procurement-price-summary").text(
+                                missingKeys.size ? `还有 ${missingKeys.size} 种物料未填写单价；填完后可一键完成采购闭环。` : "单价已补齐，点击确认即可自动完成。"
+                            );
+                        };
+                        review.$wrapper.on("input", ".tjy-procurement-price", function () {
+                            const key = this.dataset.priceKey;
+                            const value = this.value;
+                            review.$wrapper.find(".tjy-procurement-price").each(function () {
+                                if (this.dataset.priceKey === key) this.value = value;
+                            });
+                            updateReviewAmounts();
+                        });
+                        updateReviewAmounts();
                     },
                 });
                 dialog.show();

@@ -1,5 +1,5 @@
 (() => {
-    const recipePageVersion = "20260910-one-click-procurement-1";
+    const recipePageVersion = "20260910-price-entry-1";
     const versionKey = "tongjianyun_recipe_page_version";
     const reloadKey = `${versionKey}_reloaded`;
     const cachedPages = ["tongjianyun-recipe-workbench", "tongjianyun-workbench", "weekly-recipe-nutrition-sheet"];
