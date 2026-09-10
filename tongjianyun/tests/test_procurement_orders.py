@@ -7,7 +7,8 @@ from tongjianyun import recipe_procurement as service
 
 class OrderTests(unittest.TestCase):
     def run_case(self, status=0, linked=False, fallback='SUP', disabled=False):
-        request = MagicMock(docstatus=status, material_request_type='Purchase', company='School')
+        request = MagicMock(docstatus=status, material_request_type='Purchase', company='School',
+                            buying_price_list='Standard Buying')
         request.items = [_dict(name='ROW1', schedule_date='2026-09-07')]
         mapper = MagicMock()
         mapper.get_item_default_suppliers.return_value = [{'supplier': None, 'pending_qty': 3, 'material_request_item': 'ROW1'}]
@@ -21,6 +22,7 @@ class OrderTests(unittest.TestCase):
             stack.enter_context(patch.object(service, 'nowdate', return_value='2026-09-09'))
             stack.enter_context(patch.dict('sys.modules', {'erpnext.stock.doctype.material_request.mapper': mapper}))
             stack.enter_context(patch.object(service, '_permission'))
+            stack.enter_context(patch.object(service, '_default_buying_price_list', return_value='Standard Buying'))
             stack.enter_context(patch.object(service, '_read', side_effect=lambda dt, n: request if dt == 'Material Request' else order if dt == 'Purchase Order' else MagicMock(disabled=disabled)))
             stack.enter_context(patch.object(service.frappe, 'db', MagicMock()))
             stack.enter_context(patch.object(service.frappe, 'get_all', return_value=[_dict(parent='PO1')] if linked else []))
@@ -34,10 +36,30 @@ class OrderTests(unittest.TestCase):
         request.submit.assert_called_once()
         self.assertEqual(result['purchase_orders'], ['PO1'])
         self.assertEqual(mapper.make_purchase_order.call_args.kwargs['args']['supplier'], 'SUP')
+        self.assertEqual(mapper.make_purchase_order.return_value.buying_price_list, 'Standard Buying')
         import datetime
         self.assertTrue(all(isinstance(r.schedule_date, datetime.date) for r in mapper.make_purchase_order.return_value.items))
         self.assertTrue(mapper.make_purchase_order.return_value.title.startswith('2026-09-07'))
         self.assertIn('食谱日期：2026-09-07', mapper.make_purchase_order.return_value.items[0].description)
+
+    def test_default_buying_price_list_must_be_enabled_for_buying(self):
+        db = MagicMock()
+        db.get_single_value.return_value = 'Standard Buying'
+        db.get_value.return_value = _dict(enabled=1, buying=1)
+        with patch.object(service.frappe.defaults, 'get_user_default', return_value=None), \
+             patch.object(service.frappe.defaults, 'get_global_default', return_value=None), \
+             patch.object(service.frappe, 'db', db):
+            self.assertEqual(service._default_buying_price_list(), 'Standard Buying')
+
+        db = MagicMock()
+        db.get_single_value.return_value = 'Wrong'
+        db.get_value.return_value = _dict(enabled=1, buying=0)
+        with patch.object(service.frappe.defaults, 'get_user_default', return_value=None), \
+             patch.object(service.frappe.defaults, 'get_global_default', return_value=None), \
+             patch.object(service.frappe, 'db', db), \
+             patch.object(service.frappe, 'throw', side_effect=ValueError), \
+             self.assertRaises(ValueError):
+            service._default_buying_price_list()
 
     def test_date_and_supplier_partition(self):
         request = MagicMock()

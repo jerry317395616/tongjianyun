@@ -137,6 +137,20 @@ def default_scope(recipe):
     return {"company": company, "warehouse": warehouse}
 
 
+def _default_buying_price_list():
+    price_list = (
+        frappe.defaults.get_user_default("buying_price_list")
+        or frappe.defaults.get_global_default("buying_price_list")
+        or frappe.db.get_single_value("Buying Settings", "buying_price_list")
+    )
+    if not price_list:
+        frappe.throw("尚未配置默认采购价格表，请联系管理员设置 ERPNext Buying Settings。")
+    row = frappe.db.get_value("Price List", price_list, ["enabled", "buying"], as_dict=True)
+    if not row or not row.enabled or not row.buying:
+        frappe.throw("默认采购价格表不可用，请联系管理员修正 ERPNext 价格表配置。")
+    return price_list
+
+
 @frappe.whitelist()
 def prepare(recipe, company):
     _permission("Item", "read")
@@ -223,6 +237,7 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
     wh = _read("Warehouse", warehouse)
     if wh.company != company or wh.is_group or wh.disabled:
         frappe.throw("请选择所属公司的有效明细仓库。")
+    buying_price_list = _default_buying_price_list()
     doc, source = _source(recipe)
     mappings, meals = _payload(mappings), _payload(meals)
     if not isinstance(mappings, dict) or not isinstance(meals, dict):
@@ -274,7 +289,7 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
     plan = {"recipe": doc.name, "company": company, "warehouse": warehouse,
             "include_history": int(include_history), "as_of_date": today.isoformat(),
             "historical_dates": historical_dates, "excluded_dates": sorted(excluded_dates),
-            "transaction_date": transaction_date,
+            "transaction_date": transaction_date, "buying_price_list": buying_price_list,
             "revision": digest(source), "mappings": checked, "meals": meals, "lines": result}
     plan["token"] = digest(plan)
     return plan
@@ -350,7 +365,7 @@ def create_request(recipe, company, warehouse, mappings, meals, token, confirmed
             return {"name": existing_rows[0].name, "existing": True}
     request = frappe.get_doc({"doctype": "Material Request", "title": title, "material_request_type": "Purchase",
         "company": company, "transaction_date": plan["transaction_date"], "set_warehouse": warehouse,
-        "items": plan["lines"]})
+        "buying_price_list": plan["buying_price_list"], "items": plan["lines"]})
     request.insert()
     if trace_available:
         plan["material_request"] = request.name
@@ -426,15 +441,23 @@ def _create_purchase_orders(name):
         request.check_permission("submit")
         request.submit()
     orders = []
+    source_rates = {row.name: float(row.rate or 0) for row in request.items}
     for (recipe_date, supplier), quantities in sorted(grouped.items()):
         order = make_purchase_order(name, args={"supplier": supplier,
             "filtered_children": list(quantities), "requested_qty": quantities})
+        order.buying_price_list = request.buying_price_list or _default_buying_price_list()
         # ERPNext clears past dates; normalize both retained and rescheduled dates
         # before its min(schedule_date) validation (date/string mix otherwise fails).
         for item in order.items:
             item.schedule_date = getdate(item.schedule_date or nowdate())
             item.description = f"食谱日期：{recipe_date}<br>" + (item.description or "")
+            source_rate = source_rates.get(item.material_request_item)
+            if source_rate is not None:
+                item.price_list_rate = source_rate
+                item.rate = source_rate
         order.title = f"{recipe_date} · {order.supplier_name or supplier}"
+        order.run_method("set_missing_values")
+        order.run_method("calculate_taxes_and_totals")
         order.insert()
         orders.append(order.name)
     return orders
