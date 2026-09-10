@@ -8,7 +8,7 @@ from html import escape
 
 import frappe
 import frappe.defaults
-from frappe.utils import getdate, nowdate
+from frappe.utils import flt, getdate, nowdate
 
 RECIPE = "Tongjianyun Recipe"
 TRACE = "Tongjianyun Food Purchase"
@@ -198,7 +198,23 @@ def _plan_price_index(plan):
     return index
 
 
+def _purchase_rate_precision(plan):
+    """Read the existing ERPNext precision across the entire document chain."""
+    from frappe.model.meta import get_field_precision
+
+    currency = _price_list_currency(plan["buying_price_list"], plan["company"])
+    return min(
+        get_field_precision(frappe.get_meta(doctype).get_field("rate"), currency=currency)
+        for doctype in (
+            "Material Request Item", "Purchase Order Item",
+            "Purchase Receipt Item", "Purchase Invoice Item",
+        )
+    )
+
+
 def _attach_line_prices(plan):
+    plan["price_precision"] = _purchase_rate_precision(plan)
+    plan["price_currency"] = _price_list_currency(plan["buying_price_list"], plan["company"])
     for line in plan["lines"]:
         price_key = _price_key(line["item_code"], line["uom"])
         rate = _current_buying_price(line["item_code"], plan["buying_price_list"], line["uom"])
@@ -281,11 +297,27 @@ def _upsert_buying_prices(plan, prices):
     return {"created": created, "updated": updated, "unchanged": unchanged}
 
 
-def _validate_plan_prices(plan):
+def _validate_plan_prices(plan, prices=None):
+    supplied = _payload(prices or {})
+    if not isinstance(supplied, dict):
+        frappe.throw("采购单价格式无效，请重新打开采购清单。")
+    precision = _purchase_rate_precision(plan)
     missing = []
-    for row in _plan_price_index(plan).values():
-        if _current_buying_price(row["item_code"], plan["buying_price_list"], row["uom"]) <= 0:
+    for key, row in _plan_price_index(plan).items():
+        raw_rate = supplied.get(key) if key in supplied else _current_buying_price(
+            row["item_code"], plan["buying_price_list"], row["uom"]
+        )
+        try:
+            rate = number(raw_rate)
+        except (TypeError, ValueError, OverflowError):
             missing.append(row["item_name"])
+            continue
+        if flt(rate, precision) <= 0:
+            frappe.throw(
+                f"{escape(row['item_name'])}：单价 {rate:g} / {escape(row['uom'])} 过小，"
+                f"当前采购单据保留 {precision} 位小数，会被舍入为 0。"
+                "请在采购清单核对单价及计价单位后重试；本次未新建采购、收货、发票或付款单据。"
+            )
     if missing:
         frappe.throw(
             "请在确认采购清单中补齐采购单价："
@@ -790,6 +822,8 @@ def create_purchase(recipe, company, warehouse, mappings, meals, token, confirme
     plan = _plan(recipe, company, warehouse, mappings, meals, include_history)
     if token != plan["token"]:
         frappe.throw("食谱或参数已变化，请重新预览。")
+    # Validate the submitted rates before writing prices or creating any documents.
+    _validate_plan_prices(plan, prices)
     price_result = _upsert_buying_prices(plan, prices)
     _validate_plan_prices(plan)
     result = create_request(recipe, company, warehouse, mappings, meals, token, confirmed, include_history)

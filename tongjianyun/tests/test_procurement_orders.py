@@ -6,6 +6,16 @@ from tongjianyun import recipe_procurement as service
 
 
 class OrderTests(unittest.TestCase):
+    def setUp(self):
+        # Exercise Frappe's real rounding without requiring an initialized site.
+        settings = patch.object(service.frappe, "get_system_settings", return_value="Banker's Rounding")
+        settings.start()
+        self.addCleanup(settings.stop)
+
+    @staticmethod
+    def reject(message, *args, **kwargs):
+        raise ValueError(message)
+
     def run_case(self, status=0, linked=False, fallback='SUP', disabled=False):
         request = MagicMock(docstatus=status, material_request_type='Purchase', company='School',
                             buying_price_list='Standard Buying')
@@ -116,6 +126,38 @@ class OrderTests(unittest.TestCase):
         self.assertEqual(len(grouped), 3)
         self.assertEqual(grouped[('2026-09-07', 'A')], {'0': 2, '3': 2})
         self.assertEqual(grouped[('2026-09-08', 'A')], {'1': 2})
+
+    def test_tiny_submitted_rate_rejected_before_any_price_or_order_write(self):
+        plan = {"token": "current", "company": "School", "buying_price_list": "Standard Buying",
+                "lines": [_dict(item_code="CELERY", item_name="西芹", uom="g", qty=1650)]}
+        with patch.object(service, "_plan", return_value=plan), \
+             patch.object(service, "_purchase_rate_precision", return_value=2), \
+             patch.object(service, "_upsert_buying_prices") as save_prices, \
+             patch.object(service, "create_request") as create_request, \
+             patch.object(service.frappe, "throw", side_effect=self.reject), \
+             self.assertRaisesRegex(ValueError, "西芹.*舍入为 0"):
+            service.create_purchase("R", "School", "W", {}, {}, "current", confirmed=1,
+                                    prices={service._price_key("CELERY", "g"): 0.000003})
+        save_prices.assert_not_called()
+        create_request.assert_not_called()
+
+    def test_existing_price_also_checked_for_rounding_to_zero(self):
+        plan = {"company": "School", "buying_price_list": "Standard Buying",
+                "lines": [_dict(item_code="CELERY", item_name="西芹", uom="g", qty=1650)]}
+        with patch.object(service, "_purchase_rate_precision", return_value=2), \
+             patch.object(service, "_current_buying_price", return_value=0.000003), \
+             patch.object(service.frappe, "throw", side_effect=self.reject), \
+             self.assertRaisesRegex(ValueError, "舍入为 0"):
+            service._validate_plan_prices(plan)
+
+    def test_rate_validation_uses_site_precision_and_accepts_supported_prices(self):
+        plan = {"company": "School", "buying_price_list": "Standard Buying",
+                "lines": [_dict(item_code="CELERY", item_name="西芹", uom="g", qty=1650)]}
+        for precision, rate in [(2, 0.02), (6, 0.000003)]:
+            with self.subTest(precision=precision), \
+                 patch.object(service, "_purchase_rate_precision", return_value=precision), \
+                 patch.object(service.frappe, "throw", side_effect=ValueError):
+                service._validate_plan_prices(plan, {service._price_key("CELERY", "g"): rate})
 
     def test_missing_source_date_rejected(self):
         request = MagicMock(items=[])

@@ -37,7 +37,8 @@ function bindRecipeLibrarySidebarLink(controller) {
 }
 
 function procurementErrorMessage(error) {
-    const sources = [error?._server_messages, error?.response?._server_messages].filter(Boolean);
+    const response = error?.responseJSON || error?.response || {};
+    const sources = [error?._server_messages, response._server_messages].filter(Boolean);
     for (const source of sources) {
         try {
             const outer = typeof source === "string" ? JSON.parse(source) : source;
@@ -51,7 +52,10 @@ function procurementErrorMessage(error) {
             // Continue to the next known Frappe error shape.
         }
     }
-    return error?.message || "服务器未返回详细错误。";
+    if (error?.status === 0 || error?.statusText === "timeout") {
+        return "连接中断或请求超时，尚未确认处理结果。请稍后核对采购订单再重试。";
+    }
+    return response.message || error?.message || (error?.status ? `服务器返回错误（HTTP ${error.status}），请稍后重试。` : "服务器未返回详细错误。");
 }
 
 class TongjianyunRecipePage {
@@ -901,11 +905,12 @@ class TongjianyunRecipePage {
                 return;
             }
         } catch (error) {
-            frappe.msgprint("无法核对已有采购需求，请检查权限后重试；本次未生成采购单。");
+            frappe.msgprint({title: "无法核对已有采购需求", message:
+                `${escapeHtml(procurementErrorMessage(error))}<br>本次未生成采购单。`});
             return;
         }
-        const call = async (method, args) => (await frappe.call({
-            method: `tongjianyun.recipe_procurement.${method}`, args, freeze: true,
+        const call = async (method, args, options = {}) => (await frappe.call({
+            method: `tongjianyun.recipe_procurement.${method}`, args, freeze: true, ...options,
         })).message;
         try {
                 const scope = await call("default_scope", {recipe});
@@ -988,6 +993,8 @@ class TongjianyunRecipePage {
                         }
                         const args = {recipe, ...scope, include_history: values.include_history ? 1 : 0, mappings: JSON.stringify(mappings), meals: JSON.stringify(meals)};
                         const plan = await call("preview", args);
+                        const pricePrecision = Number.isInteger(plan.price_precision) ? plan.price_precision : 2;
+                        const priceCurrency = plan.price_currency || "CNY";
                         const dateNotice = `<p>单据日期：${escapeHtml(plan.transaction_date)}</p>` +
                             (plan.excluded_dates?.length ? `<p>已排除过去日期：${plan.excluded_dates.map(escapeHtml).join("、")}</p>` : "") +
                             (plan.historical_dates?.length ? `<p class="text-danger">历史补录日期：${plan.historical_dates.map(escapeHtml).join("、")}。为保留原用餐日期并符合 ERPNext 校验，单据日期设为最早补录日期；实际创建时间仍由系统记录。这不代表已采购、已入库或已付款，请核对原有采购记录，勿重复采购。</p>` : "");
@@ -1001,11 +1008,14 @@ class TongjianyunRecipePage {
                                 <td class="text-right">${escapeHtml(String(line.qty))}</td>
                                 <td>${escapeHtml(line.uom)}</td>
                                 <td style="min-width: 140px;">
-                                    <input class="form-control input-sm tjy-procurement-price" type="number" min="0" step="0.000001"
+                                    <input class="form-control input-sm tjy-procurement-price" type="text" inputmode="decimal"
+                                        aria-label="${escapeHtml(line.item_name)}单价（${escapeHtml(priceCurrency)}/${escapeHtml(line.uom)}）"
                                         data-price-key="${escapeHtml(line.price_key)}"
                                         data-label="${escapeHtml(line.item_name)}"
+                                        data-uom="${escapeHtml(line.uom)}"
                                         data-qty="${escapeHtml(String(line.qty))}"
                                         value="${escapeHtml(priceValue)}" placeholder="填单价">
+                                    <small class="text-muted">${escapeHtml(priceCurrency)}/${escapeHtml(line.uom)}</small>
                                 </td>
                                 <td class="text-right tjy-procurement-amount">${amount > 0 ? escapeHtml(amount.toFixed(2)) : "-"}</td>
                             </tr>`;
@@ -1014,26 +1024,39 @@ class TongjianyunRecipePage {
                             title: "确认采购清单", size: "large",
                             fields: [{fieldtype: "HTML", options: `${dateNotice}<p>这是总需求，尚未扣除库存及在途采购。请在这里直接填写采购单价；同一种物料出现多天时，任意一行填写后会自动同步。确认后系统会把单价保存到 ERPNext 默认采购价格表，并按默认供应商和默认账户一键完成：提交物料需求、采购订单、采购收货、采购发票和付款记录。</p><p class="text-muted tjy-procurement-price-summary"></p><table class="table table-bordered"><thead><tr><th>日期</th><th>物料</th><th class="text-right">数量</th><th>单位</th><th>单价</th><th class="text-right">金额</th></tr></thead><tbody>${purchaseRows}</tbody><tfoot><tr><th colspan="5" class="text-right">预计合计</th><th class="text-right tjy-procurement-total">-</th></tr></tfoot></table>`}],
                             primary_action_label: "确认 · 一键完成采购闭环",
+                            primary_action_loading_label: "正在完成采购，请稍候…",
                             primary_action: async () => {
+                                if (review.procurementSubmitting) return;
                                 const prices = {};
                                 const missingPrices = [];
                                 review.$wrapper.find(".tjy-procurement-price").each(function () {
                                     const key = this.dataset.priceKey;
                                     const label = this.dataset.label || "物料";
                                     const value = Number(String(this.value || "").trim());
-                                    if (!(Number.isFinite(value) && value > 0)) {
-                                        if (!missingPrices.some(row => row.key === key)) missingPrices.push({key, label});
+                                    const invalid = !(Number.isFinite(value) && value > 0);
+                                    const tooSmall = !invalid && flt(value, pricePrecision) <= 0;
+                                    if (invalid || tooSmall) {
+                                        if (!missingPrices.some(row => row.key === key)) missingPrices.push({key, label, tooSmall, value, uom: this.dataset.uom, input: this});
                                         return;
                                     }
                                     prices[key] = value;
                                 });
                                 if (missingPrices.length) {
-                                    frappe.msgprint(`请先补齐采购单价，例如：${escapeHtml(missingPrices[0].label)}。`);
+                                    const first = missingPrices[0];
+                                    showReviewStatus(first.tooSmall
+                                        ? `${first.label}：单价 ${first.value} ${priceCurrency}/${first.uom} 过小，采购单据保留 ${pricePrecision} 位小数后为 0。请核对单价及计价单位。`
+                                        : `请先补齐有效采购单价，例如：${first.label}。`, "danger");
+                                    first.input.focus();
+                                    first.input.scrollIntoView({block: "center"});
                                     return;
                                 }
+                                review.procurementSubmitting = true;
                                 review.get_primary_btn().prop("disabled", true);
+                                showReviewStatus("正在保存单价并处理采购、收货、发票和付款记录，请稍候…", "info");
                                 try {
-                                    const result = await call("create_purchase", {...args, token: plan.token, confirmed: 1, prices: JSON.stringify(prices)});
+                                    const result = await call("create_purchase", {...args, token: plan.token, confirmed: 1, prices: JSON.stringify(prices)}, {
+                                        freeze_message: "正在完成采购闭环，请稍候…",
+                                    });
                                     review.hide(); dialog.hide();
                                     const priceUpdates = result.price_updates || {};
                                     frappe.msgprint({title: "采购闭环已完成", message:
@@ -1043,9 +1066,17 @@ class TongjianyunRecipePage {
                                         `采购收货：${result.purchase_receipts.map(name => frappe.utils.get_form_link("Purchase Receipt", name, true)).join("、")}<br>` +
                                         `采购发票：${result.purchase_invoices.map(name => frappe.utils.get_form_link("Purchase Invoice", name, true)).join("、")}<br>` +
                                         `付款记录：${result.payment_entries.length ? result.payment_entries.map(name => frappe.utils.get_form_link("Payment Entry", name, true)).join("、") : "无需付款（发票金额为 0）"}`});
-                                } finally { review.get_primary_btn().prop("disabled", false); }
+                                } catch (error) {
+                                    showReviewStatus(`采购闭环未完成：${procurementErrorMessage(error)} 已保留填写的单价。`, "danger");
+                                } finally {
+                                    review.procurementSubmitting = false;
+                                    review.get_primary_btn().prop("disabled", false);
+                                }
                             },
                         });
+                        const reviewStatus = $('<div class="tjy-procurement-status hide" role="status" aria-live="polite" style="width:100%; text-align:left; margin-bottom:8px; white-space:normal;"></div>').prependTo(review.footer);
+                        const showReviewStatus = (message, kind) => reviewStatus
+                            .removeClass("hide text-danger text-info").addClass(`text-${kind}`).text(message);
                         review.show();
                         const updateReviewAmounts = () => {
                             let total = 0;
@@ -1055,8 +1086,8 @@ class TongjianyunRecipePage {
                                 const qty = Number(this.dataset.qty || 0);
                                 const price = Number(String(this.value || "").trim());
                                 const amountCell = $(this).closest("tr").find(".tjy-procurement-amount");
-                                if (Number.isFinite(price) && price > 0) {
-                                    const amount = qty * price;
+                                if (Number.isFinite(price) && price > 0 && flt(price, pricePrecision) > 0) {
+                                    const amount = qty * flt(price, pricePrecision);
                                     total += amount;
                                     amountCell.text(amount.toFixed(2));
                                 } else {
@@ -1066,12 +1097,13 @@ class TongjianyunRecipePage {
                             });
                             review.$wrapper.find(".tjy-procurement-total").text(total > 0 ? total.toFixed(2) : "-");
                             review.$wrapper.find(".tjy-procurement-price-summary").text(
-                                missingKeys.size ? `还有 ${missingKeys.size} 种物料未填写单价；填完后可一键完成采购闭环。` : "单价已补齐，点击确认即可自动完成。"
+                                missingKeys.size ? `还有 ${missingKeys.size} 种物料的单价未填写或过小；请核对后再确认。` : "单价已补齐，点击确认即可自动完成。"
                             );
                         };
                         review.$wrapper.on("input", ".tjy-procurement-price", function () {
                             const key = this.dataset.priceKey;
                             const value = this.value;
+                            reviewStatus.addClass("hide");
                             review.$wrapper.find(".tjy-procurement-price").each(function () {
                                 if (this.dataset.priceKey === key) this.value = value;
                             });
