@@ -241,12 +241,11 @@ class TongjianyunOperationsWorkbench {
 
     quickActions() {
         return [
-            { icon: "users", tone: "green", title: "今日就餐确认", hint: "核对考勤、请假与就餐人数", type: "DocType", route: "Tongjianyun Daily Meal Confirmation" },
-            { icon: "recipe", tone: "blue", title: "食谱计划", hint: "创建、导入和维护每周食谱", type: "Page", route: "tongjianyun-recipe-workbench" },
+            { icon: "meal", tone: "green", title: "今日出勤", hint: "记录幼儿出勤状态，确认备餐", type: "Page", route: "meal-attendance-teacher" },
+            { icon: "meal", tone: "amber", title: "今日备餐", hint: "查看用餐人数，确认备餐完成", type: "Page", route: "meal-kitchen-dashboard" },
             { icon: "chart", tone: "violet", title: "周食谱营养分析", hint: "查看带量食谱与营养评价", type: "Page", route: "weekly-recipe-nutrition-sheet" },
             { icon: "chart", tone: "green", title: "食材营养统计", hint: "按食材查看全部营养指标贡献", type: "Report", route: "Ingredient Nutrition Statistics" },
             { icon: "chart", tone: "cyan", title: "营养计算规则", hint: "版本化维护营养公式、阈值与供能目标", type: "DocType", route: "Tongjianyun Nutrition Rule Set" },
-            { icon: "cart", tone: "amber", title: "食材采购", hint: "跟踪采购任务与执行状态", type: "DocType", route: "Tongjianyun Food Purchase" },
             { icon: "supplier", tone: "cyan", title: "班级管理", hint: "维护班级、学年与在班幼儿", type: "DocType", route: "Student Group" },
             { icon: "meal", tone: "rose", title: "就餐调整记录", hint: "记录临时停餐与餐次调整", type: "DocType", route: "Tongjianyun Daily Meal Adjustment" },
             { icon: "users", tone: "orange", title: "幼儿档案", hint: "维护幼儿基础信息与入园状态", type: "DocType", route: "Student" },
