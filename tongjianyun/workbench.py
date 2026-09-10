@@ -297,9 +297,22 @@ def install() -> None:
     frappe.flags.in_patch = True
     try:
         workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
+
+        # Update sidebar_items
         workspace.set("sidebar_items", [])
         for item in _sidebar_items():
             workspace.append("sidebar_items", item)
+
+        # Update shortcuts
+        workspace.set("shortcuts", [])
+        for item in _shortcuts():
+            workspace.append("shortcuts", item)
+
+        # Update shortcuts section in content
+        workspace.set("links", [])
+        for item in _workspace_links():
+            workspace.append("links", item)
+
         workspace.save(ignore_permissions=True)
         frappe.db.commit()
     finally:
@@ -311,10 +324,14 @@ def _sidebar_items() -> list[dict[str, Any]]:
     return [
         _sidebar_link("首页", "Workspace", WORKSPACE_NAME, "home", default=1),
         _sidebar_link("业务工作台", "Page", "tongjianyun-workbench", "layout-dashboard"),
-        _section("就餐管理", "calendar-check"),
+        _section("出勤管理", "calendar-check"),
+        _sidebar_link("今日出勤（教师端）", "Page", "meal-attendance-teacher", child=1),
+        _sidebar_link("今日备餐（厨房端）", "Page", "meal-kitchen-dashboard", child=1),
         _sidebar_link("今日就餐确认", "DocType", CONFIRMATION_DOCTYPE, child=1),
         _sidebar_link("就餐调整记录", "DocType", "Tongjianyun Daily Meal Adjustment", child=1),
+        _sidebar_link("月度结算", "Page", "meal-finance-settlement", child=1),
         _sidebar_link("月度就餐统计", "DocType", "Tongjianyun Meal Attendance", child=1),
+        _sidebar_link("园长看板", "Page", "director-dashboard", child=1),
         _section("膳食营养", "salad"),
         _sidebar_link("食谱计划", "Page", "tongjianyun-recipe-workbench", child=1),
         _sidebar_link("周食谱营养分析", "Page", "weekly-recipe-nutrition-sheet", child=1),
@@ -322,6 +339,7 @@ def _sidebar_items() -> list[dict[str, Any]]:
         _sidebar_link("营养计算规则", "DocType", NUTRITION_RULE_DOCTYPE, child=1),
         _section("食安执行", "shield-check"),
         _sidebar_link("食材采购", "DocType", PURCHASE_DOCTYPE, child=1),
+        _sidebar_link("一周采购订单", "Page", "weekly-purchase-orders", child=1),
     ]
 
 
@@ -360,18 +378,24 @@ def _section(label: str, icon: str):
 def _shortcuts() -> list[dict[str, Any]]:
     return [
         {"type": "Page", "link_to": "tongjianyun-workbench", "label": "业务工作台", "color": "Green", "stats_filter": "[]"},
+        {"type": "Page", "link_to": "meal-attendance-teacher", "doc_view": "", "label": "今日出勤", "color": "Blue", "stats_filter": "[]"},
+        {"type": "Page", "link_to": "meal-kitchen-dashboard", "doc_view": "", "label": "今日备餐", "color": "Orange", "stats_filter": "[]"},
         {"type": "DocType", "link_to": CONFIRMATION_DOCTYPE, "doc_view": "List", "label": "今日就餐确认", "color": "Blue", "stats_filter": "[]"},
         {"type": "Page", "link_to": "tongjianyun-recipe-workbench", "label": "食谱计划", "color": "Green", "stats_filter": "[]"},
         {"type": "DocType", "link_to": PURCHASE_DOCTYPE, "doc_view": "List", "label": "食材采购", "color": "Orange", "stats_filter": "[]"},
+        {"type": "Page", "link_to": "meal-finance-settlement", "doc_view": "", "label": "月度结算", "color": "Purple", "stats_filter": "[]"},
     ]
 
 
 def _workspace_content() -> list[dict[str, Any]]:
     return [
         {"id": "tjyWorkbench", "type": "shortcut", "data": {"shortcut_name": "业务工作台", "col": 3}},
+        {"id": "tjyTeacherAttendance", "type": "shortcut", "data": {"shortcut_name": "今日出勤", "col": 3}},
+        {"id": "tjyKitchenDashboard", "type": "shortcut", "data": {"shortcut_name": "今日备餐", "col": 3}},
         {"id": "tjyAttendance", "type": "shortcut", "data": {"shortcut_name": "今日就餐确认", "col": 3}},
         {"id": "tjyRecipe", "type": "shortcut", "data": {"shortcut_name": "食谱计划", "col": 3}},
         {"id": "tjyPurchase", "type": "shortcut", "data": {"shortcut_name": "食材采购", "col": 3}},
+        {"id": "tjyFinanceSettlement", "type": "shortcut", "data": {"shortcut_name": "月度结算", "col": 3}},
         {"id": "tjySpacer", "type": "spacer", "data": {"col": 12}},
         {"id": "tjyAttendanceCard", "type": "card", "data": {"card_name": "就餐管理", "col": 4}},
         {"id": "tjyMealCard", "type": "card", "data": {"card_name": "膳食营养", "col": 4}},
@@ -401,6 +425,7 @@ def _workspace_links() -> list[dict[str, Any]]:
             "食安执行",
             [
                 ("食材采购", "DocType", PURCHASE_DOCTYPE),
+                ("一周采购订单", "Page", "weekly-purchase-orders"),
             ],
         ),
     ]
