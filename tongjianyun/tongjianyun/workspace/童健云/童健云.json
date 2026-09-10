@@ -1,0 +1,411 @@
+{
+ "app": "tongjianyun",
+ "charts": [
+  {
+   "chart_name": "\u8fd130\u5929\u5c31\u9910\u786e\u8ba4\u8d8b\u52bf",
+   "label": "\u8fd130\u5929\u5c31\u9910\u786e\u8ba4\u8d8b\u52bf"
+  },
+  {
+   "chart_name": "\u98df\u8c31\u72b6\u6001\u5206\u5e03",
+   "label": "\u98df\u8c31\u72b6\u6001\u5206\u5e03"
+  }
+ ],
+ "content": "[{\"id\":\"tjyOverviewHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>\u4eca\u65e5\u8fd0\u8425</b></span>\",\"col\":12}},{\"id\":\"tjyTodayConfirmation\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"\u4eca\u65e5\u786e\u8ba4\u5355\",\"col\":3}},{\"id\":\"tjyPendingConfirmation\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"\u4eca\u65e5\u5f85\u786e\u8ba4\",\"col\":3}},{\"id\":\"tjyActiveRecipes\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"\u6709\u6548\u98df\u8c31\",\"col\":3}},{\"id\":\"tjyMonthlyAdjustments\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"\u672c\u6708\u5c31\u9910\u8c03\u6574\",\"col\":3}},{\"id\":\"tjyQuickSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyQuickHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>\u5feb\u6377\u5165\u53e3</b></span>\",\"col\":12}},{\"id\":\"tjyWorkbench\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"\u4e1a\u52a1\u5de5\u4f5c\u53f0\",\"col\":4}},{\"id\":\"tjyDailyConfirmation\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"\u4eca\u65e5\u5c31\u9910\u786e\u8ba4\",\"col\":4}},{\"id\":\"tjyRecipe\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"\u98df\u8c31\u8ba1\u5212\",\"col\":4}},{\"id\":\"tjyNutrition\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"\u5468\u98df\u8c31\u8425\u517b\u5206\u6790\",\"col\":4}},{\"id\":\"tjyPurchase\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"\u98df\u6750\u91c7\u8d2d\",\"col\":4}},{\"id\":\"tjyAttendance\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"\u6708\u5ea6\u5c31\u9910\u7edf\u8ba1\",\"col\":4}},{\"id\":\"tjyChartSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyChartHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>\u6570\u636e\u8d8b\u52bf</b></span>\",\"col\":12}},{\"id\":\"tjyConfirmationTrend\",\"type\":\"chart\",\"data\":{\"chart_name\":\"\u8fd130\u5929\u5c31\u9910\u786e\u8ba4\u8d8b\u52bf\",\"col\":6}},{\"id\":\"tjyRecipeStatus\",\"type\":\"chart\",\"data\":{\"chart_name\":\"\u98df\u8c31\u72b6\u6001\u5206\u5e03\",\"col\":6}},{\"id\":\"tjyRecentSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyRecentHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>\u6700\u8fd1\u4e1a\u52a1</b></span>\",\"col\":12}},{\"id\":\"tjyRecentConfirmation\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"\u8fd1\u671f\u5c31\u9910\u786e\u8ba4\",\"col\":4}},{\"id\":\"tjyRecentAdjustment\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"\u672c\u5468\u5c31\u9910\u8c03\u6574\",\"col\":4}},{\"id\":\"tjyRecentRecipe\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"\u6700\u8fd1\u98df\u8c31\",\"col\":4}},{\"id\":\"tjyNavSpacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"tjyNavHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>\u529f\u80fd\u5bfc\u822a</b></span>\",\"col\":12}},{\"id\":\"tjyMealCard\",\"type\":\"card\",\"data\":{\"card_name\":\"\u5c31\u9910\u7ba1\u7406\",\"col\":4}},{\"id\":\"tjyNutritionCard\",\"type\":\"card\",\"data\":{\"card_name\":\"\u81b3\u98df\u8425\u517b\",\"col\":4}},{\"id\":\"tjySafetyCard\",\"type\":\"card\",\"data\":{\"card_name\":\"\u98df\u5b89\u6267\u884c\",\"col\":4}}]",
+ "creation": "2026-08-29 16:20:18.344490",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "heart",
+ "idx": 1,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "\u7ae5\u5065\u4e91",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u5c31\u9910\u7ba1\u7406",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u4eca\u65e5\u5c31\u9910\u786e\u8ba4",
+   "link_count": 0,
+   "link_to": "Tongjianyun Daily Meal Confirmation",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u5c31\u9910\u8c03\u6574\u8bb0\u5f55",
+   "link_count": 0,
+   "link_to": "Tongjianyun Daily Meal Adjustment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u6708\u5ea6\u5c31\u9910\u7edf\u8ba1",
+   "link_count": 0,
+   "link_to": "Tongjianyun Meal Attendance",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u81b3\u98df\u8425\u517b",
+   "link_count": 4,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u98df\u8c31\u8ba1\u5212",
+   "link_count": 0,
+   "link_to": "tongjianyun-recipe-workbench",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u5468\u98df\u8c31\u8425\u517b\u5206\u6790",
+   "link_count": 0,
+   "link_to": "weekly-recipe-nutrition-sheet",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "\u98df\u6750\u8425\u517b\u7edf\u8ba1",
+   "link_count": 0,
+   "link_to": "Ingredient Nutrition Statistics",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u8425\u517b\u8ba1\u7b97\u89c4\u5219",
+   "link_count": 0,
+   "link_to": "Tongjianyun Nutrition Rule Set",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u98df\u5b89\u6267\u884c",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "\u4e00\u5468\u91c7\u8d2d\u8ba2\u5355",
+   "link_count": 0,
+   "link_to": "weekly-orders",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-09-10 13:39:31.923634",
+ "modified_by": "Administrator",
+ "module": "Tongjianyun",
+ "name": "\u7ae5\u5065\u4e91",
+ "number_cards": [
+  {
+   "label": "\u4eca\u65e5\u786e\u8ba4\u5355",
+   "number_card_name": "\u4eca\u65e5\u786e\u8ba4\u5355"
+  },
+  {
+   "label": "\u4eca\u65e5\u5f85\u786e\u8ba4",
+   "number_card_name": "\u4eca\u65e5\u5f85\u786e\u8ba4"
+  },
+  {
+   "label": "\u6709\u6548\u98df\u8c31",
+   "number_card_name": "\u6709\u6548\u98df\u8c31"
+  },
+  {
+   "label": "\u672c\u6708\u5c31\u9910\u8c03\u6574",
+   "number_card_name": "\u672c\u6708\u5c31\u9910\u8c03\u6574"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "Tongjianyun Daily Meal Confirmation",
+   "label": "\u8fd1\u671f\u5c31\u9910\u786e\u8ba4",
+   "quick_list_filter": "{\"meal_date\":[\"Timespan\",\"this week\"]}"
+  },
+  {
+   "document_type": "Tongjianyun Daily Meal Adjustment",
+   "label": "\u672c\u5468\u5c31\u9910\u8c03\u6574",
+   "quick_list_filter": "{\"meal_date\":[\"Timespan\",\"this week\"]}"
+  },
+  {
+   "document_type": "Tongjianyun Recipe",
+   "label": "\u6700\u8fd1\u98df\u8c31",
+   "quick_list_filter": "{\"is_deleted\":0}"
+  }
+ ],
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "Green",
+   "doc_view": "",
+   "label": "\u4e1a\u52a1\u5de5\u4f5c\u53f0",
+   "link_to": "tongjianyun-workbench",
+   "stats_filter": "[]",
+   "type": "Page"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "\u4eca\u65e5\u5c31\u9910\u786e\u8ba4",
+   "link_to": "Tongjianyun Daily Meal Confirmation",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "",
+   "label": "\u98df\u8c31\u8ba1\u5212",
+   "link_to": "tongjianyun-recipe-workbench",
+   "stats_filter": "[]",
+   "type": "Page"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "label": "\u5468\u98df\u8c31\u8425\u517b\u5206\u6790",
+   "link_to": "weekly-recipe-nutrition-sheet",
+   "stats_filter": "[]",
+   "type": "Page"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "\u98df\u6750\u91c7\u8d2d",
+   "link_to": "Tongjianyun Food Purchase",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Cyan",
+   "doc_view": "List",
+   "label": "\u6708\u5ea6\u5c31\u9910\u7edf\u8ba1",
+   "link_to": "Tongjianyun Meal Attendance",
+   "stats_filter": "[]",
+   "type": "DocType"
+  }
+ ],
+ "sidebar_items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "default_workspace": 1,
+   "icon": "home",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u9996\u9875",
+   "link_to": "\u7ae5\u5065\u4e91",
+   "link_type": "Workspace",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "layout-dashboard",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u4e1a\u52a1\u5de5\u4f5c\u53f0",
+   "link_to": "tongjianyun-workbench",
+   "link_type": "Page",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "calendar-check",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "\u5c31\u9910\u7ba1\u7406",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 1,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u4eca\u65e5\u5c31\u9910\u786e\u8ba4",
+   "link_to": "Tongjianyun Daily Meal Confirmation",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u5c31\u9910\u8c03\u6574\u8bb0\u5f55",
+   "link_to": "Tongjianyun Daily Meal Adjustment",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u6708\u5ea6\u5c31\u9910\u7edf\u8ba1",
+   "link_to": "Tongjianyun Meal Attendance",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "salad",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "\u81b3\u98df\u8425\u517b",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 1,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u98df\u8c31\u8ba1\u5212",
+   "link_to": "tongjianyun-recipe-workbench",
+   "link_type": "Page",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u5468\u98df\u8c31\u8425\u517b\u5206\u6790",
+   "link_to": "weekly-recipe-nutrition-sheet",
+   "link_type": "Page",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u98df\u6750\u8425\u517b\u7edf\u8ba1",
+   "link_to": "Ingredient Nutrition Statistics",
+   "link_type": "Report",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u8425\u517b\u8ba1\u7b97\u89c4\u5219",
+   "link_to": "Tongjianyun Nutrition Rule Set",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "shield-check",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "\u98df\u5b89\u6267\u884c",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 1,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u4e00\u5468\u91c7\u8d2d\u8ba2\u5355",
+   "link_to": "weekly-orders",
+   "link_type": "Page",
+   "open_in_new_tab": 1,
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "standard": 1,
+ "title": "\u7ae5\u5065\u4e91",
+ "type": "Workspace"
+}

@@ -338,7 +338,6 @@ def _sidebar_items() -> list[dict[str, Any]]:
         _sidebar_link("食材营养统计", "Report", "Ingredient Nutrition Statistics", child=1),
         _sidebar_link("营养计算规则", "DocType", NUTRITION_RULE_DOCTYPE, child=1),
         _section("食安执行", "shield-check"),
-        _sidebar_link("食材采购", "DocType", PURCHASE_DOCTYPE, child=1),
         _sidebar_link("一周采购订单", "Page", "weekly-orders", child=1),
     ]
 
@@ -382,7 +381,6 @@ def _shortcuts() -> list[dict[str, Any]]:
         {"type": "Page", "link_to": "meal-kitchen-dashboard", "doc_view": "", "label": "今日备餐", "color": "Orange", "stats_filter": "[]"},
         {"type": "DocType", "link_to": CONFIRMATION_DOCTYPE, "doc_view": "List", "label": "今日就餐确认", "color": "Blue", "stats_filter": "[]"},
         {"type": "Page", "link_to": "tongjianyun-recipe-workbench", "label": "食谱计划", "color": "Green", "stats_filter": "[]"},
-        {"type": "DocType", "link_to": PURCHASE_DOCTYPE, "doc_view": "List", "label": "食材采购", "color": "Orange", "stats_filter": "[]"},
         {"type": "Page", "link_to": "meal-finance-settlement", "doc_view": "", "label": "月度结算", "color": "Purple", "stats_filter": "[]"},
     ]
 
@@ -394,7 +392,6 @@ def _workspace_content() -> list[dict[str, Any]]:
         {"id": "tjyKitchenDashboard", "type": "shortcut", "data": {"shortcut_name": "今日备餐", "col": 3}},
         {"id": "tjyAttendance", "type": "shortcut", "data": {"shortcut_name": "今日就餐确认", "col": 3}},
         {"id": "tjyRecipe", "type": "shortcut", "data": {"shortcut_name": "食谱计划", "col": 3}},
-        {"id": "tjyPurchase", "type": "shortcut", "data": {"shortcut_name": "食材采购", "col": 3}},
         {"id": "tjyFinanceSettlement", "type": "shortcut", "data": {"shortcut_name": "月度结算", "col": 3}},
         {"id": "tjySpacer", "type": "spacer", "data": {"col": 12}},
         {"id": "tjyAttendanceCard", "type": "card", "data": {"card_name": "就餐管理", "col": 4}},
@@ -424,7 +421,6 @@ def _workspace_links() -> list[dict[str, Any]]:
         (
             "食安执行",
             [
-                ("食材采购", "DocType", PURCHASE_DOCTYPE),
                 ("一周采购订单", "Page", "weekly-orders"),
             ],
         ),
