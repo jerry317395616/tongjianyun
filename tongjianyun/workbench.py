@@ -339,7 +339,7 @@ def _sidebar_items() -> list[dict[str, Any]]:
         _sidebar_link("营养计算规则", "DocType", NUTRITION_RULE_DOCTYPE, child=1),
         _section("食安执行", "shield-check"),
         _sidebar_link("食材采购", "DocType", PURCHASE_DOCTYPE, child=1),
-        _sidebar_link("一周采购订单", "URL", "/desk/weekly_purchase_orders", child=1),
+        _sidebar_link("一周采购订单", "Page", "weekly-orders", child=1),
     ]
 
 
@@ -425,7 +425,7 @@ def _workspace_links() -> list[dict[str, Any]]:
             "食安执行",
             [
                 ("食材采购", "DocType", PURCHASE_DOCTYPE),
-                ("一周采购订单", "URL", "/desk/weekly_purchase_orders"),
+                ("一周采购订单", "Page", "weekly-orders"),
             ],
         ),
     ]
