@@ -68,3 +68,43 @@ class OrderTests(unittest.TestCase):
         for kwargs in ({'fallback': None}, {'disabled': True}, {'status': 2}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 self.run_case(**kwargs)
+
+    def test_complete_purchase_cycle_submits_all_documents(self):
+        request = MagicMock(docstatus=1, material_request_type="Purchase")
+        order = MagicMock(doctype="Purchase Order", docstatus=0)
+        order.name = "PO1"
+        receipt = MagicMock(docstatus=1)
+        receipt.name = "PR1"
+        invoice = MagicMock(docstatus=1)
+        invoice.name = "PI1"
+        payment = MagicMock(docstatus=1)
+        payment.name = "PE1"
+        with patch.object(service, "_permission"), \
+             patch.object(service, "_read", return_value=request), \
+             patch.object(service, "_active_purchase_orders", return_value=[order]), \
+             patch.object(service, "_ensure_purchase_receipt", return_value=receipt), \
+             patch.object(service, "_ensure_purchase_invoice", return_value=invoice), \
+             patch.object(service, "_ensure_payment_entry", return_value=payment), \
+             patch.object(service.frappe, "db", MagicMock()):
+            result = service.complete_purchase_cycle("MR1")
+
+        order.check_permission.assert_called_once_with("submit")
+        order.submit.assert_called_once()
+        self.assertEqual(result["purchase_orders"], ["PO1"])
+        self.assertEqual(result["purchase_receipts"], ["PR1"])
+        self.assertEqual(result["purchase_invoices"], ["PI1"])
+        self.assertEqual(result["payment_entries"], ["PE1"])
+        self.assertEqual(result["status"], "已完成")
+
+    def test_zero_rate_invoice_is_rejected_before_insert(self):
+        order = MagicMock(per_billed=0)
+        order.name = "PO1"
+        invoice = MagicMock(items=[_dict(qty=1, rate=0)])
+        mapper = MagicMock()
+        mapper.make_purchase_invoice.return_value = invoice
+        with patch.dict("sys.modules", {"erpnext.buying.doctype.purchase_order.mapper": mapper}), \
+             patch.object(service, "_linked_active_documents", return_value=[]), \
+             patch.object(service.frappe, "throw", side_effect=ValueError), \
+             self.assertRaises(ValueError):
+            service._ensure_purchase_invoice(order)
+        invoice.insert.assert_not_called()

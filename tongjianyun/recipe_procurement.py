@@ -43,6 +43,18 @@ def conversion(source, target):
     return a[1] / b[1] if a and b and a[0] == b[0] else None
 
 
+def _doctype_available(doctype):
+    """Check registered metadata, not just a table left by a retired DocType."""
+    try:
+        return bool(frappe.db.exists("DocType", doctype))
+    except Exception:
+        return False
+
+
+def _trace_available():
+    return _doctype_available(TRACE)
+
+
 def checked_quantity(row, mapping, meals):
     ingredient = escape(str(row['ingredient_name']))
     context = escape(str(row['date']) + ' ' + str(row['slot']))
@@ -128,21 +140,24 @@ def default_scope(recipe):
 @frappe.whitelist()
 def prepare(recipe, company):
     _permission("Item", "read")
-    _permission(TRACE, "read")
+    trace_available = _trace_available()
+    if trace_available:
+        _permission(TRACE, "read")
     _read("Company", company)
     doc, rows = _source(recipe)
     remembered = {}
-    for entry in frappe.get_list(TRACE, filters={"record_type": ["in", [KIND, "erp_recipe_mapping"]]}, fields=["name"],
-                                order_by="creation desc", limit_page_length=100):
-        trace = _read(TRACE, entry.name)
-        data = json.loads(trace.record_json)
-        if data.get("company") == company:
-            for key, mapping in data.get("mappings", {}).items():
-                remembered.setdefault(key, mapping)
+    if trace_available:
+        for entry in frappe.get_list(TRACE, filters={"record_type": ["in", [KIND, "erp_recipe_mapping"]]}, fields=["name"],
+                                    order_by="creation desc", limit_page_length=100):
+            trace = _read(TRACE, entry.name)
+            data = json.loads(trace.record_json)
+            if data.get("company") == company:
+                for key, mapping in data.get("mappings", {}).items():
+                    remembered.setdefault(key, mapping)
     # Automatic matches are unit conversions only; explicit human/company mappings win.
     from tongjianyun.recipe_item_sync import KIND as AUTO_KIND
     auto_key = AUTO_KIND + "::" + digest(recipe)[:32]
-    if frappe.db.exists(TRACE, auto_key):
+    if trace_available and frappe.db.exists(TRACE, auto_key):
         auto_data = json.loads(_read(TRACE, auto_key).record_json)
         for key, mapping in auto_data.get("mappings", {}).items():
             remembered.setdefault(key, {**mapping, "automatic": True})
@@ -268,7 +283,6 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
 @frappe.whitelist()
 def preview(recipe, company, warehouse, mappings, meals, include_history=0):
     _permission("Material Request", "create")
-    _permission(TRACE, "create")
     return _plan(recipe, company, warehouse, mappings, meals, include_history)
 
 
@@ -276,12 +290,17 @@ def preview(recipe, company, warehouse, mappings, meals, include_history=0):
 def revision_impact(recipe):
     """Read-only warning for existing requests; never revise submitted documents."""
     doc = _read(RECIPE, recipe)
-    _permission(TRACE, "read")
     _permission("Material Request", "read")
     current_revision = None
     if not doc.is_deleted and doc.workflow_status == "已发布":
         _, rows = _source(recipe)
         current_revision = digest(rows)
+    if not _trace_available():
+        return {
+            "requests": [],
+            "message": "采购需求已改用 ERPNext 标准物料需求和采购订单；当前食谱没有旧采购追踪记录。",
+        }
+    _permission(TRACE, "read")
     output = []
     for row in frappe.get_list(TRACE, filters={"parent_id": recipe, "record_type": KIND},
             fields=["name"], limit_page_length=0):
@@ -297,33 +316,49 @@ def create_request(recipe, company, warehouse, mappings, meals, token, confirmed
     if str(confirmed) != "1":
         frappe.throw("请明确确认物料、备餐人数及采购毛料换算。")
     _permission("Material Request", "create")
-    _permission(TRACE, "create")
-    _permission(TRACE, "write")
-    _permission(TRACE, "read")
     plan = _plan(recipe, company, warehouse, mappings, meals, include_history)
     if token != plan["token"]:
         frappe.throw("食谱或参数已变化，请重新预览。")
+    trace_available = _trace_available()
     trace_key = KIND + "::" + digest([recipe, company])[:32]
-    # A transaction-scoped unique trace also protects against double-clicks and concurrent requests.
-    if frappe.db.exists(TRACE, trace_key):
-        existing = _read(TRACE, trace_key)
-        saved = json.loads(existing.record_json)
-        mr = _read("Material Request", saved["material_request"])
-        if saved["token"] != token:
-            frappe.throw("此食谱已生成采购需求。请先核对原单及修订方案，系统不会重复采购或覆盖原单。")
-        return {"name": mr.name, "existing": True}
-    trace = frappe.get_doc({"doctype": TRACE, "data_key": trace_key, "record_type": KIND,
-        "record_id": plan["token"], "title": "食谱采购需求 · " + recipe,
-        "status": "草稿", "parent_id": recipe, "source": "ERPNext Material Request",
-        "record_json": json.dumps(plan, ensure_ascii=False)})
-    trace.insert()
-    request = frappe.get_doc({"doctype": "Material Request", "material_request_type": "Purchase",
+    # Retain the old idempotency trace only on sites that still have its DocType.
+    if trace_available:
+        _permission(TRACE, "create")
+        _permission(TRACE, "write")
+        _permission(TRACE, "read")
+        if frappe.db.exists(TRACE, trace_key):
+            existing = _read(TRACE, trace_key)
+            saved = json.loads(existing.record_json)
+            mr = _read("Material Request", saved["material_request"])
+            if saved["token"] != token:
+                frappe.throw("此食谱已生成采购需求。请先核对原单及修订方案，系统不会重复采购或覆盖原单。")
+            return {"name": mr.name, "existing": True}
+    title = "童健云食谱采购 · " + recipe
+    if not trace_available:
+        existing_rows = frappe.get_list(
+            "Material Request",
+            filters={
+                "title": title,
+                "company": company,
+                "material_request_type": "Purchase",
+                "docstatus": ["<", 2],
+            },
+            fields=["name"],
+            limit_page_length=1,
+        )
+        if existing_rows:
+            return {"name": existing_rows[0].name, "existing": True}
+    request = frappe.get_doc({"doctype": "Material Request", "title": title, "material_request_type": "Purchase",
         "company": company, "transaction_date": plan["transaction_date"], "set_warehouse": warehouse,
         "items": plan["lines"]})
     request.insert()
-    plan["material_request"] = request.name
-    trace.record_json = json.dumps(plan, ensure_ascii=False)
-    trace.save()
+    if trace_available:
+        plan["material_request"] = request.name
+        trace = frappe.get_doc({"doctype": TRACE, "data_key": trace_key, "record_type": KIND,
+            "record_id": plan["token"], "title": title,
+            "status": "草稿", "parent_id": recipe, "source": "ERPNext Material Request",
+            "record_json": json.dumps(plan, ensure_ascii=False)})
+        trace.insert()
     return {"name": request.name, "existing": False}
 
 
@@ -340,8 +375,24 @@ def _daily_order_groups(request, rows):
     return grouped
 
 
-def complete_purchase_request(name):
-    """Submit demand and map draft orders using ERPNext, in the caller transaction."""
+def _active_purchase_orders(name):
+    """Return non-cancelled purchase orders linked to a material request."""
+    linked = frappe.get_all(
+        "Purchase Order Item",
+        filters={"material_request": name},
+        fields=["parent"],
+        limit_page_length=0,
+    )
+    orders = []
+    for order_name in sorted({row.parent for row in linked if row.parent}):
+        order = _read("Purchase Order", order_name)
+        if order.docstatus != 2:
+            orders.append(order)
+    return orders
+
+
+def _create_purchase_orders(name):
+    """Submit demand and map daily draft orders using ERPNext."""
     from erpnext.stock.doctype.material_request.mapper import (
         get_item_default_suppliers, make_purchase_order,
     )
@@ -352,16 +403,12 @@ def complete_purchase_request(name):
     request.reload()
     if request.docstatus == 2 or request.material_request_type != "Purchase":
         frappe.throw("仅能处理未取消的采购物料需求。")
-    # Draft orders do not increment ordered_qty. Check links before mapping again.
-    linked = frappe.get_all("Purchase Order Item", filters={"material_request": name},
-                            fields=["parent"], limit_page_length=0)
-    orders = []
-    for order_name in sorted({row.parent for row in linked}):
-        order = _read("Purchase Order", order_name)
-        if order.docstatus != 2:
-            orders.append(order.name)
-    if orders:
-        return {"name": name, "purchase_orders": orders, "existing": True}
+    # A retry may arrive after another worker has already created the orders.
+    # Re-check while holding the request lock so concurrent clicks cannot
+    # create a second set of purchase orders.
+    existing = _active_purchase_orders(name)
+    if existing:
+        return [order.name for order in existing]
     fallback = frappe.defaults.get_global_default("tongjianyun_supplier::" + request.company)
     rows = get_item_default_suppliers(name)
     if not rows:
@@ -390,12 +437,217 @@ def complete_purchase_request(name):
         order.title = f"{recipe_date} · {order.supplier_name or supplier}"
         order.insert()
         orders.append(order.name)
+    return orders
+
+
+def complete_purchase_request(name):
+    """Create daily purchase-order drafts without submitting them."""
+    existing = _active_purchase_orders(name)
+    if existing:
+        return {"name": name, "purchase_orders": [order.name for order in existing], "existing": True}
+    orders = _create_purchase_orders(name)
     return {"name": name, "purchase_orders": orders, "existing": False}
+
+
+def _submit_if_draft(doc):
+    """Submit a document once while preserving ERPNext permissions and hooks."""
+    if doc.docstatus == 2:
+        frappe.throw(f"{doc.doctype} {doc.name} 已取消，不能继续自动处理。")
+    if doc.docstatus == 0:
+        doc.check_permission("submit")
+        doc.submit()
+    return doc
+
+
+def _linked_active_documents(child_doctype, filters, parent_doctype):
+    """Find existing non-cancelled downstream documents through ERPNext child links."""
+    rows = frappe.get_all(child_doctype, filters=filters, fields=["parent"], limit_page_length=0)
+    documents = []
+    for parent in sorted({row.parent for row in rows if row.parent}):
+        doc = _read(parent_doctype, parent)
+        if doc.docstatus != 2:
+            documents.append(doc)
+    return documents
+
+
+def _ensure_purchase_receipt(order):
+    """Receive all pending PO quantity, reusing or extending prior receipts."""
+    from erpnext.buying.doctype.purchase_order.mapper import make_purchase_receipt
+
+    receipts = _linked_active_documents(
+        "Purchase Receipt Item",
+        {"purchase_order": order.name},
+        "Purchase Receipt",
+    )
+    for receipt in receipts:
+        _submit_if_draft(receipt)
+
+    order.reload()
+    pending = any(
+        float(item.qty or 0) > float(item.received_qty or 0)
+        for item in order.items
+    )
+    if not pending:
+        if receipts:
+            return receipts[-1]
+        frappe.throw(f"采购订单 {order.name} 没有待收货数量，无法自动入库。")
+
+    receipt = make_purchase_receipt(order.name)
+    if not receipt.items:
+        frappe.throw(f"采购订单 {order.name} 没有可收货明细，无法自动入库。")
+    receipt.posting_date = nowdate()
+    receipt.insert()
+    receipt.submit()
+    return receipt
+
+
+def _ensure_purchase_invoice(order):
+    """Create an invoice for all unbilled PO quantity without double billing."""
+    from erpnext.buying.doctype.purchase_order.mapper import make_purchase_invoice
+
+    invoices = _linked_active_documents(
+        "Purchase Invoice Item",
+        {"purchase_order": order.name},
+        "Purchase Invoice",
+    )
+    for invoice in invoices:
+        _submit_if_draft(invoice)
+
+    order.reload()
+    if float(order.per_billed or 0) >= 100:
+        if invoices:
+            return invoices[-1]
+        frappe.throw(f"采购订单 {order.name} 已全部开票，但未找到关联采购发票。")
+
+    invoice = make_purchase_invoice(order.name)
+    if not invoice.items:
+        frappe.throw(f"采购订单 {order.name} 没有可开票明细，无法自动开票。")
+    if any(float(item.qty or 0) > 0 and float(item.rate or 0) <= 0 for item in invoice.items):
+        frappe.throw(
+            f"采购订单 {order.name} 尚未配置有效采购价，无法自动开票和付款。"
+            "请先在 ERPNext 的 Item Price（Standard Buying）或供应商价格规则中配置价格。"
+        )
+    # Stock was already updated by Purchase Receipt. Never duplicate it from the invoice.
+    invoice.update_stock = 0
+    invoice.posting_date = nowdate()
+    invoice.bill_date = nowdate()
+    invoice.insert()
+    invoice.submit()
+    return invoice
+
+
+def _ensure_payment_entry(invoice):
+    """Pay the invoice once using ERPNext's configured default bank or cash account."""
+    from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+
+    payments = _linked_active_documents(
+        "Payment Entry Reference",
+        {
+            "reference_doctype": "Purchase Invoice",
+            "reference_name": invoice.name,
+            "parenttype": "Payment Entry",
+        },
+        "Payment Entry",
+    )
+    for payment in payments:
+        _submit_if_draft(payment)
+    if payments:
+        return payments[-1]
+
+    invoice.reload()
+    if float(invoice.outstanding_amount or 0) <= 0:
+        return None
+
+    payment = get_payment_entry("Purchase Invoice", invoice.name)
+    payment.insert()
+    payment.submit()
+    return payment
+
+
+def complete_purchase_cycle(name):
+    """Run the complete one-click ERPNext procurement cycle in one transaction."""
+    request = _read("Material Request", name)
+    required_permissions = [
+        ("Purchase Order", "create"),
+        ("Purchase Order", "submit"),
+        ("Purchase Receipt", "create"),
+        ("Purchase Receipt", "submit"),
+        ("Purchase Invoice", "create"),
+        ("Purchase Invoice", "submit"),
+        ("Payment Entry", "create"),
+        ("Payment Entry", "submit"),
+    ]
+    if request.docstatus == 0:
+        required_permissions.insert(0, ("Material Request", "submit"))
+    for doctype, action in required_permissions:
+        _permission(doctype, action)
+
+    frappe.db.get_value("Material Request", name, "name", for_update=True)
+    request.reload()
+    if request.docstatus == 2 or request.material_request_type != "Purchase":
+        frappe.throw("仅能处理未取消的采购物料需求。")
+
+    orders = _active_purchase_orders(name)
+    existing = bool(orders)
+    if not orders:
+        orders = [_read("Purchase Order", order_name) for order_name in _create_purchase_orders(name)]
+
+    receipts, invoices, payments = [], [], []
+    for order in orders:
+        _submit_if_draft(order)
+        receipt = _ensure_purchase_receipt(order)
+        invoice = _ensure_purchase_invoice(order)
+        payment = _ensure_payment_entry(invoice)
+        receipts.append(receipt.name)
+        invoices.append(invoice.name)
+        if payment:
+            payments.append(payment.name)
+
+    return {
+        "name": name,
+        "existing": existing,
+        "purchase_orders": [order.name for order in orders],
+        "purchase_receipts": receipts,
+        "purchase_invoices": invoices,
+        "payment_entries": payments,
+        "status": "已完成",
+    }
 
 
 @frappe.whitelist(methods=["POST"])
 def create_purchase(recipe, company, warehouse, mappings, meals, token, confirmed=0, include_history=0):
-    """One explicit user confirmation; any failure rolls back demand and orders."""
-    _permission("Purchase Order", "create")
+    """One explicit confirmation; complete the ERPNext procurement cycle."""
     result = create_request(recipe, company, warehouse, mappings, meals, token, confirmed, include_history)
-    return complete_purchase_request(result["name"])
+    return complete_purchase_cycle(result["name"])
+
+
+@frappe.whitelist()
+def weekly_purchase_orders(start_date=None, end_date=None):
+    """Compact, date-grouped view for the one-week purchasing workflow."""
+    _permission("Purchase Order", "read")
+    start_date = getdate(start_date or nowdate())
+    end_date = getdate(end_date or start_date)
+    if (end_date - start_date).days > 7:
+        frappe.throw("一次最多查看 7 天采购订单。")
+    rows = frappe.get_list("Purchase Order", filters={"transaction_date": ["between", [start_date, end_date]], "docstatus": ["<", 2]},
+        fields=["name", "supplier", "supplier_name", "transaction_date", "schedule_date", "docstatus", "grand_total"],
+        order_by="transaction_date asc, creation asc", limit_page_length=100)
+    for row in rows:
+        row["status_label"] = "草稿" if row.docstatus == 0 else "已提交"
+    return {"orders": rows, "start_date": str(start_date), "end_date": str(end_date)}
+
+
+@frappe.whitelist(methods=["POST"])
+def submit_weekly_purchase_orders(names):
+    _permission("Purchase Order", "submit")
+    names = frappe.parse_json(names) if isinstance(names, str) else names
+    if not isinstance(names, list) or not names or len(names) > 7:
+        frappe.throw("请选择 1 至 7 张订单。")
+    result = []
+    for name in names:
+        order = frappe.get_doc("Purchase Order", name)
+        order.check_permission("submit")
+        if order.docstatus == 0:
+            order.submit()
+            result.append(name)
+    return {"submitted": result}

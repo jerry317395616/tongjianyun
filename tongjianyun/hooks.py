@@ -12,7 +12,7 @@ ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
 
 app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260821-nutrition-population-3"]
+app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260910-one-click-procurement-1"]
 
 add_to_apps_screen = [
     {
@@ -32,6 +32,8 @@ after_migrate = [
     "tongjianyun.recipe_storage.install",
     "tongjianyun.nutrition_rule_setup.install",
     "tongjianyun.workbench.install",
+    "tongjianyun.patches.v1_0.add_recipe_price_fields.execute",
+    "tongjianyun.meal_attendance_roles.install",
 ]
 
 override_doctype_class = {
@@ -41,6 +43,7 @@ override_doctype_class = {
 doctype_js = {
     "Student": "public/js/student.js",
     "Student Group": "public/js/student_group.js",
+    "Tongjianyun Recipe Ingredient": "public/js/recipe_ingredient_price.js",
 }
 
 override_whitelisted_methods = {
