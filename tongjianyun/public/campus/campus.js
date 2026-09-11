@@ -77,10 +77,10 @@ floor.castShadow = false;
 
 const zones = [
   { id: 'front', title: '招牌楼与玻璃走廊', description: '浅绿与浅黄相间的立面、封闭玻璃走廊和竖向园名招牌。楼层外观按照片简化；前后教学楼名称与房间对应关系尚未绑定。', source: '依据正面照片；尺寸、内部房间与屋顶待核实', target: [-5, 6, -17], eye: [-19, 17, 7], label: [-8, 16, -17] },
-  { id: 'side', title: '黄色侧楼', description: '沿院落一侧延伸的黄色建筑，保留窗户、空调、金属外廊和地面遮棚。楼内用途与房间分布尚未确认。', source: '依据视频侧楼画面；长度与连接关系为示意', target: [18, 5, -1], eye: [-10, 16, 18], label: [19, 13, 0] },
+  { id: 'side', title: '黄色侧楼', description: '沿院落一侧延伸的黄色建筑，保留窗户、空调、金属外廊和地面遮棚。端部与入口楼直接相连，形成连续转角。楼内用途与房间分布尚未确认。', source: '与入口楼相连：用户已确认；长度和尺寸仍为示意', target: [18, 5, -1], eye: [-10, 16, 10], label: [19, 13, 0] },
   { id: 'track', title: '彩色跑道', description: '红、黄、蓝、紫四条跑道沿院落一侧展开，旁边为绿色活动场地。没有采集人员位置，也没有用动画模拟幼儿活动。', source: '依据院内照片及视频；无实际距离标尺', target: [6, 0, 4], eye: [-9, 20, 25], label: [5, 1.5, 10] },
   { id: 'play', title: '滑梯与沿楼游乐区', description: '以彩色滑梯、木质攀爬、轮胎和沿楼遮棚表达照片中的户外游乐区域。设施造型为简化模型，并非设备资产清单。', source: '依据照片与视频；设备数量及细节未逐一核对', target: [13, 2, -8], eye: [-2, 11, 8], label: [13, 7, -10] },
-  { id: 'passage', title: '入口楼与楼下通道', description: '新增照片确认：入口是楼体底层的穿行通道，不是独立门廊。通道上方可见三层连续窗带，灰白色外墙，两侧楼体转折连接。已补充窗框、立柱、遮棚和通道尽头铁门；不加入照片中的人物。', source: '外观依据入口新照片；总长度、背面与园区连接位置待核实', target: [-10.5, 6.5, 20], eye: [-9, 10, -10], label: [-10.5, 15, 21] }
+  { id: 'passage', title: '入口楼与楼下通道', description: '入口楼延伸至黄色侧楼端部，形成连续转角，连接关系已由用户确认。底层保留穿行通道，上方为照片可见的三层窗带、灰白立面、遮棚和铁门。延伸段立面按已有外观简化，不代表实测窗户数量。', source: '与黄色侧楼相连：已确认；长度、背面及内部布局待核实', target: [1, 6, 20], eye: [-1, 42, -21], label: [0, 15, 21] }
 ];
 const groups = new Map();
 for (const zone of zones) {
@@ -149,10 +149,10 @@ for (let z = -12; z < 17; z += 4) cylinder(side, 13.25, 1.45, z, 0.1, 2.9, '#8e7
 
 const track = groups.get('track');
 ['#d55258', '#eac54a', '#389bd0', '#9273b7'].forEach((color, i) => {
-  box(track, 3.7 + i * 1.55, 0.055, 4, 1.51, 0.04, 34, color);
-  box(track, 2.925 + i * 1.55, 0.085, 4, 0.055, 0.025, 34, '#f9f5df');
+  box(track, 3.7 + i * 1.55, 0.055, 2.75, 1.51, 0.04, 31.5, color);
+  box(track, 2.925 + i * 1.55, 0.085, 2.75, 0.055, 0.025, 31.5, '#f9f5df');
 });
-box(track, 9.125, 0.085, 4, 0.055, 0.025, 34, '#f9f5df');
+box(track, 9.125, 0.085, 2.75, 0.055, 0.025, 31.5, '#f9f5df');
 line(track, [[-15, .09, 3], [-3, .09, 3], [-3, .09, 17], [-15, .09, 17], [-15, .09, 3]], '#e9eacf');
 line(track, [[-15, .09, 10], [-3, .09, 10]], '#e9eacf');
 const circle = [];
@@ -204,27 +204,28 @@ const passage = groups.get('passage');
 const plaster = '#d9ddd8', frame = '#e9efeb', glass = '#758e91';
 // Ground-floor side rooms leave a 4.8-unit wide opening through the centre.
 box(passage, -16, 2, 21, 6.2, 4, 4, '#b2c5c0');
-box(passage, -5, 2, 21, 6.2, 4, 4, '#b2c5c0');
-box(passage, -10.5, 8.65, 21, 17.2, 9.3, 4, plaster);
-box(passage, -10.5, 13.4, 21, 17.5, .2, 4.2, '#b7c1bd');
+// Confirmed topology: extend the building itself to the yellow wing at X=16.5..21.5.
+box(passage, 6.8, 2, 21, 29.4, 4, 4, '#b2c5c0');
+box(passage, 1.2, 8.65, 21, 40.6, 9.3, 4, plaster);
+box(passage, 1.2, 13.4, 21, 40.9, .2, 4.2, '#b7c1bd');
 // Court-facing facade is towards negative Z, matching the view into the gate.
 for (let level = 0; level < 3; level++) {
   const y = 5.6 + level * 3.1;
-  for (let bay = 0; bay < 4; bay++) {
+  for (let bay = 0; bay < 9; bay++) {
     const x = -16.8 + bay * 4.2;
     box(passage, x, y, 18.95, 3.7, 1.95, .12, glass);
     for (let mullion = 0; mullion <= 4; mullion++) box(passage, x - 1.85 + mullion * .925, y, 18.86, .055, 2.04, .05, frame);
     for (const dy of [-.99, .43, .99]) box(passage, x, y + dy, 18.84, 3.78, .06, .055, frame);
   }
 }
-for (const x of [-19, -14.7, -10.5, -6.3, -2]) {
+for (const x of [-19, -14.7, -10.5, -6.3, -2.1, 2.1, 6.3, 10.5, 14.7, 19, 21.4]) {
   box(passage, x, 8.6, 18.85, .24, 9.25, .24, '#c7d0cb');
 }
-// Short return wings show only the visible turn, not inferred full building lengths.
-for (const x of [-18.1, -2.9]) {
-  box(passage, x, 6.65, 17.2, 2, 13.3, 3.6, plaster);
-  box(passage, x, 13.4, 17.2, 2.15, .2, 3.7, '#b7c1bd');
-  const face = x < -10 ? x + 1.04 : x - 1.04;
+// Right return physically intersects the yellow wing's end; no detached bridge.
+for (const [x, width] of [[-18.1, 2], [19, 5]]) {
+  box(passage, x, 6.65, 17.2, width, 13.3, 3.6, plaster);
+  box(passage, x, 13.4, 17.2, width + .15, .2, 3.7, '#b7c1bd');
+  const face = x < -10 ? x + width / 2 + .04 : x - width / 2 - .04;
   for (let level = 0; level < 3; level++) {
     const y = 5.6 + level * 3.1;
     box(passage, face, y, 17.2, .08, 1.8, 2.6, glass);
@@ -242,7 +243,7 @@ for (const x of [-16.2, -4.8]) {
   box(passage, x, 4.5, 18.34, .7, .48, .04, '#929f99');
   box(passage, x, 1.8, 18.93, 2.2, 1.3, .08, '#6d8585');
 }
-const dashPoints = [[-19.4, .1, 15], [-1.6, .1, 15], [-1.6, .1, 23.4], [-19.4, .1, 23.4], [-19.4, .1, 15]];
+const dashPoints = [[-19.4, .1, 15], [-19.4, .1, 23.4], [21.7, .1, 23.4], [21.7, .1, 15]];
 const dash = new THREE.Line(new THREE.BufferGeometry().setFromPoints(dashPoints.map(p => new THREE.Vector3(...p))), new THREE.LineDashedMaterial({ color: '#be8848', dashSize: .4, gapSize: .25 }));
 dash.computeLineDistances(); passage.add(dash);
 
@@ -255,7 +256,7 @@ for (const [x, z, size] of [[-20, 13, 1.6], [-20, 18, 1.5], [-18, -4, 1.5]]) {
 const labels = new THREE.Group(); scene.add(labels);
 function makeLabel(zone) {
   const c = document.createElement('canvas'); c.width = 768; c.height = 104;
-  const ctx = c.getContext('2d'); ctx.fillStyle = zone.id === 'passage' ? '#996c34' : '#205547';
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#205547';
   ctx.beginPath(); ctx.roundRect(0, 0, 768, 104, 28); ctx.fill();
   ctx.font = '36px "Microsoft YaHei",sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(zone.title, 384, 66);
   const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace;
@@ -281,7 +282,7 @@ for (const [index, zone] of zones.entries()) {
   const number = document.createElement('small'); number.textContent = `0${index + 1}`; button.append(number, zone.title);
   button.addEventListener('click', () => select(zone.id)); document.getElementById('zones').append(button);
 }
-const views = {overview: {eye: [-37, 36, 48], target: [0, 3, 0]}, courtyard: {eye: [-7, 4.5, 18], target: [1, 5, -16]}, top: {eye: [0, 68, 0.1], target: [0, 0, 0]}};
+const views = {overview: {eye: [-48, 48, 66], target: [0, 3, 0]}, courtyard: {eye: [-7, 4.5, 18], target: [1, 5, -16]}, top: {eye: [0, 68, 0.1], target: [0, 0, 0]}};
 let transition = null;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function setView(name, eye, target) {
