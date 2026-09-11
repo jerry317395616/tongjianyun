@@ -341,6 +341,29 @@ def _validate_plan_prices(plan, prices=None):
 
 
 @frappe.whitelist()
+def _roster_estimate():
+    """Whole-school estimate only; never return a teacher's partial roster as a total."""
+    from tongjianyun.attendance_scope import is_manager, allowed_groups
+    from tongjianyun.daily_meals import _active_groups, _active_students
+    if not is_manager() or not frappe.has_permission("Student", "read"):
+        return None
+    groups = {g["name"] for g in _active_groups()}
+    if not groups or not groups.issubset(set(allowed_groups())):
+        return None
+    students = {student for group in groups for student in _active_students(group)}
+    readable = set(frappe.get_list("Student", filters={"enabled": 1}, pluck="name", limit_page_length=0))
+    if not students or not students.issubset(readable):
+        return None
+    return len(students)
+
+
+def _fill_roster_estimates(meals, today, count):
+    for meal in meals:
+        if meal["count"] is None and getdate(meal["date"]) >= getdate(today) and count is not None:
+            meal.update(count=count, count_source="student_roster",
+                        basis="启用班级中的启用学生去重汇总（预计备餐，非实际就餐）")
+
+
 def prepare(recipe, company, allow_draft=False):
     _permission("Item", "read")
     trace_available = _trace_available()
@@ -411,6 +434,8 @@ def prepare(recipe, company, allow_draft=False):
             if planned is not None:
                 meal["count"] = planned[SLOTS[meal["slot"]] + "_count"]
                 meal["basis"] = "各班学生就餐安排汇总（未全部实际确认，采购预计参考）"
+    if any(m["count"] is None and getdate(m["date"]) >= getdate(nowdate()) for m in meals.values()):
+        _fill_roster_estimates(meals.values(), nowdate(), _roster_estimate())
     from tongjianyun.ingredient_resolution import suggestions
     return {"recipe": doc.name, "revision": digest(rows), "as_of_date": nowdate(), "ingredients": suggestions(list(ingredients.values())),
             "meals": sorted(meals.values(), key=lambda r: r["key"])}

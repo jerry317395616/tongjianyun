@@ -841,9 +841,12 @@ class TongjianyunRecipePage {
             const response = await frappe.call({method: "tongjianyun.recipe_execution.inspect", args: {recipe}, freeze: true, freeze_message: "读取默认配置…"});
             const data = response.message;
             const missing = data.meals.filter(row => row.count === null || row.count === undefined);
+            const estimates = data.meals.filter(row => row.count_source === "student_roster");
+            const estimatedCounts = [...new Set(estimates.map(row => row.count))].join("、");
             const dialog = new frappe.ui.Dialog({title: "发布并完成采购结算", fields: [
-                {fieldtype: "HTML", options: `<p>默认公司：${escapeHtml(data.scope.company)}；收货仓库：${escapeHtml(data.scope.warehouse)}。</p><p>使用已维护的采购价格和默认供应商、账户。克/毫升库存数量保持不变，采购按公斤/升计价。${data.unmatched ? `另有 ${data.unmatched} 项食材将在后台匹配。` : "食材已匹配。"}</p><p>已确认餐次人数自动带入；${missing.length ? `${missing.length} 个餐次尚无确认人数，请填写统一备餐人数。` : "无需填写人数。"}</p>`},
-                {fieldtype: "Int", fieldname: "fallback_count", label: "未确认餐次的统一备餐人数", default: data.fallback_count, hidden: !missing.length, reqd: !!missing.length, description: "自动带回本食谱上次填写的人数；仅补空白，不覆盖已确认人数，0 人保留。"},
+                {fieldtype: "HTML", options: `<p>默认公司：${escapeHtml(data.scope.company)}；收货仓库：${escapeHtml(data.scope.warehouse)}。</p><p>使用已维护的采购价格和默认供应商、账户。克/毫升库存数量保持不变，采购按公斤/升计价。${data.unmatched ? `另有 ${data.unmatched} 项食材将在后台匹配。` : "食材已匹配。"}</p><p>已确认人数（含 0 人）和班级就餐安排优先。${estimates.length ? `${estimates.length} 个餐次已按学生档案默认预计 ${escapeHtml(estimatedCounts)} 人/餐，不会标记学生已就餐。` : ""}${missing.length ? `另有 ${missing.length} 个餐次无人数；历史日期不套用当前学生数，仅在纳入采购时需补录核对。` : "无需填写人数。"}</p>`},
+                {fieldtype: "Button", fieldname: "adjust_meals", label: "调整每天/每餐人数", click: () => { dialog.hide(); frappe.set_route("List", "Tongjianyun Daily Meal Confirmation"); }},
+                {fieldtype: "Int", fieldname: "fallback_count", label: "缺少人数餐次的统一备餐人数", default: data.fallback_count, hidden: !missing.length, description: "仅补所纳入日期的空白人数；历史补录请核对原始记录，不覆盖已确认人数或学生档案预计值，0 人保留。"},
                 {fieldtype: "Check", fieldname: "include_history", label: "包含过去日期（实际业务历史补录）", default: data.include_history || 0},
                 {fieldtype: "Check", fieldname: "facts", label: "我已核对人数及维护的价格，确认收货、发票和付款事实已发生，允许系统登记对应单据", default: 0, reqd: 1},
                 {fieldtype: "HTML", options: '<p class="text-muted">仅登记已发生的事实，不代表银行转账。未发生的业务请勿确认。结算完成不等于全公司关账。</p><div data-execution-error role="alert" style="color:#c53434"></div>'}
