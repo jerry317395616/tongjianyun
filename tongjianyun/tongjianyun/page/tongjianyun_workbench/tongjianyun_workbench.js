@@ -15,6 +15,7 @@ class TongjianyunOperationsWorkbench {
         this.page.set_primary_action("编制食谱", () => this.openRoute("Page", "tongjianyun-recipe-workbench"));
         this.page.add_menu_item("刷新工作台", () => this.load());
         this.page.add_inner_button("上传学生名单", () => this.uploadRoster());
+        this.page.add_inner_button("园区数字孪生", () => { window.location.href = "/tongjianyun-campus"; });
         this.page.add_menu_item("周食谱营养分析", () => this.openRoute("Page", "weekly-recipe-nutrition-sheet"));
         this.page.add_menu_item("食材营养统计", () => this.openRoute("Report", "Ingredient Nutrition Statistics"));
         this.page.add_menu_item("营养计算规则", () => this.openRoute("DocType", "Tongjianyun Nutrition Rule Set"));

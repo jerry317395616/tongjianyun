@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>临潼区幼儿园 · 园区数字孪生</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
+  <link rel="stylesheet" href="/assets/tongjianyun/campus/campus.css?v=1">
+  <script type="importmap">{"imports":{"three":"/assets/tongjianyun/campus/vendor/three.module.js"}}</script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/desk/tongjianyun-workbench"><img src="/assets/tongjianyun/images/tongjianyun-logo.svg" alt="">童健云 <span>/</span></a>
+    <div class="heading"><h1>园区数字孪生</h1><p>西安市临潼区幼儿园 · 东大街100号</p></div>
+    <span class="edition">空间示意版 01</span>
+    <a class="back" href="/desk/tongjianyun-workbench">返回业务工作台 ↗</a>
+  </header>
+  <main>
+    <section class="viewport" aria-label="幼儿园三维场景">
+      <div id="scene" tabindex="0" aria-label="三维园区，拖动旋转，滚轮缩放。也可以使用视角和区域按钮操作。"></div>
+      <div class="scene-heading"><span>CAMPUS EXPLORER</span><h2>在园区中，找到每个角落。</h2><p>照片与视频参考建模，非测绘结果</p></div>
+      <nav class="views" aria-label="切换视角">
+        <button data-view="overview" aria-pressed="true">鸟瞰</button><button data-view="courtyard" aria-pressed="false">院内</button><button data-view="top" aria-pressed="false">俯视</button>
+      </nav>
+      <div class="tools"><button id="reset" title="恢复初始视角">复位</button><button id="labels" aria-pressed="true">区域标注</button><button id="rotate" aria-pressed="false">自动环绕</button><button id="fullscreen">全屏</button></div>
+      <div id="loading" role="status">正在搭建三维园区…</div>
+      <div class="legend"><i></i>照片参考区域 <i class="pending"></i>位置待核实</div>
+      <p class="gesture">拖动旋转 · 滚轮缩放 · 右键平移 · 点击区域查看详情</p>
+    </section>
+    <aside>
+      <div class="aside-head"><span class="eyebrow">园区导览</span><h2>从全貌到细节</h2><p>选择一个区域，查看空间说明。</p></div>
+      <nav id="zones" aria-label="园区区域"></nav>
+      <section id="detail" aria-live="polite"><span class="eyebrow">当前选择</span><h3 id="zone-title">园区总览</h3><p id="zone-description">以实拍照片和视频为参考，复现招牌楼、玻璃走廊、黄色侧楼、彩色跑道与游乐区的主要外观。</p><span id="zone-source" class="source">尺寸、楼栋连接及室内布局尚未实测</span></section>
+      <section class="connection"><h3>业务与设备</h3><p>本版仅展示空间，不显示模拟人员、考勤或摄像头在线状态。</p><a href="/desk/tongjianyun-workbench">进入业务工作台 ↗</a><a href="/desk/tongjianyun-recipe-workbench">查看食谱计划 ↗</a><span>实时摄像头 / 人员定位：未接入</span></section>
+      <p class="footnote">通道位置为示意。不可用作施工图、消防疏散依据或实时安全监控。</p>
+    </aside>
+  </main>
+  <script type="module">
+    import('/assets/tongjianyun/campus/campus.js?v=1').catch(() => {
+      const box = document.getElementById('loading');
+      box.hidden = false;
+      box.textContent = '三维资源加载失败，请刷新页面或检查浏览器硬件加速。';
+    });
+  </script>
+</body>
+</html>
