@@ -1,0 +1,121 @@
+{
+  "doctype": "DocType",
+  "name": "Tongjianyun Student Meal Row",
+  "module": "Tongjianyun",
+  "engine": "InnoDB",
+  "field_order": [
+    "student",
+    "student_name",
+    "attendance_hint",
+    "breakfast_expected",
+    "breakfast",
+    "morning_snack_expected",
+    "morning_snack",
+    "lunch_expected",
+    "lunch",
+    "afternoon_snack_expected",
+    "afternoon_snack",
+    "dinner_expected",
+    "dinner"
+  ],
+  "fields": [
+    {
+      "fieldname": "student",
+      "fieldtype": "Link",
+      "options": "Student",
+      "label": "学生",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "student_name",
+      "fieldtype": "Data",
+      "label": "姓名",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "attendance_hint",
+      "fieldtype": "Data",
+      "label": "考勤参考（非就餐结论）",
+      "read_only": 1
+    },
+    {
+      "fieldname": "breakfast_expected",
+      "fieldtype": "Check",
+      "label": "早餐预计就餐",
+      "default": "0"
+    },
+    {
+      "fieldname": "breakfast",
+      "fieldtype": "Select",
+      "label": "早餐实际",
+      "options": "未确认\n已就餐\n未就餐\n不供餐",
+      "default": "未确认",
+      "reqd": 1,
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "morning_snack_expected",
+      "fieldtype": "Check",
+      "label": "早点预计就餐",
+      "default": "0"
+    },
+    {
+      "fieldname": "morning_snack",
+      "fieldtype": "Select",
+      "label": "早点实际",
+      "options": "未确认\n已就餐\n未就餐\n不供餐",
+      "default": "未确认",
+      "reqd": 1,
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "lunch_expected",
+      "fieldtype": "Check",
+      "label": "午餐预计就餐",
+      "default": "0"
+    },
+    {
+      "fieldname": "lunch",
+      "fieldtype": "Select",
+      "label": "午餐实际",
+      "options": "未确认\n已就餐\n未就餐\n不供餐",
+      "default": "未确认",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "afternoon_snack_expected",
+      "fieldtype": "Check",
+      "label": "午点预计就餐",
+      "default": "0"
+    },
+    {
+      "fieldname": "afternoon_snack",
+      "fieldtype": "Select",
+      "label": "午点实际",
+      "options": "未确认\n已就餐\n未就餐\n不供餐",
+      "default": "未确认",
+      "reqd": 1,
+      "in_list_view": 0
+    },
+    {
+      "fieldname": "dinner_expected",
+      "fieldtype": "Check",
+      "label": "晚餐预计就餐",
+      "default": "0"
+    },
+    {
+      "fieldname": "dinner",
+      "fieldtype": "Select",
+      "label": "晚餐实际",
+      "options": "未确认\n已就餐\n未就餐\n不供餐",
+      "default": "未确认",
+      "reqd": 1,
+      "in_list_view": 0
+    }
+  ],
+  "istable": 1,
+  "permissions": []
+}

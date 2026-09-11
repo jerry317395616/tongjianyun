@@ -1,0 +1,111 @@
+{
+  "doctype": "DocType",
+  "name": "Tongjianyun Class Meal Confirmation",
+  "module": "Tongjianyun",
+  "engine": "InnoDB",
+  "field_order": [
+    "meal_date",
+    "student_group",
+    "status",
+    "students",
+    "change_reason",
+    "confirmed_by",
+    "confirmed_at"
+  ],
+  "fields": [
+    {
+      "fieldname": "meal_date",
+      "fieldtype": "Date",
+      "label": "就餐日期",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "student_group",
+      "fieldtype": "Link",
+      "options": "Student Group",
+      "label": "班级",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "options": "待确认\n已确认",
+      "default": "待确认",
+      "label": "状态",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "students",
+      "fieldtype": "Table",
+      "options": "Tongjianyun Student Meal Row",
+      "label": "学生就餐明细",
+      "reqd": 1
+    },
+    {
+      "fieldname": "change_reason",
+      "fieldtype": "Small Text",
+      "label": "修改原因"
+    },
+    {
+      "fieldname": "confirmed_by",
+      "fieldtype": "Link",
+      "options": "User",
+      "label": "确认人",
+      "read_only": 1
+    },
+    {
+      "fieldname": "confirmed_at",
+      "fieldtype": "Datetime",
+      "label": "确认时间",
+      "read_only": 1
+    }
+  ],
+  "track_changes": 1,
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "report": 1
+    },
+    {
+      "role": "Education Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "report": 1
+    },
+    {
+      "role": "Tongjianyun Administrator",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "report": 1
+    },
+    {
+      "role": "Tongjianyun Director",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "report": 1
+    },
+    {
+      "role": "Tongjianyun Teacher",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "report": 1
+    },
+    {
+      "role": "Instructor",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "report": 1
+    }
+  ]
+}

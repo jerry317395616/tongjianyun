@@ -41,6 +41,7 @@ override_doctype_class = {
 }
 
 doctype_js = {
+    "Tongjianyun Daily Meal Confirmation": "public/js/student_meals.js",
     "Student": "public/js/student.js",
     "Student Group": "public/js/student_group.js",
     "Tongjianyun Recipe Ingredient": "public/js/recipe_ingredient_price.js",
@@ -98,3 +99,5 @@ has_permission = {
     doctype: "tongjianyun.teacher_permissions.document_permission"
     for doctype in ("Student Group", "Student", "Student Attendance", "Student Leave Application")
 }
+permission_query_conditions["Tongjianyun Class Meal Confirmation"] = "tongjianyun.student_meals.query_condition"
+has_permission["Tongjianyun Class Meal Confirmation"] = "tongjianyun.student_meals.document_permission"

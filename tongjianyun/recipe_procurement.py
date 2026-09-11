@@ -400,6 +400,17 @@ def prepare(recipe, company, allow_draft=False):
                 confirmation = _read("Tongjianyun Daily Meal Confirmation", found[0].name)
                 meal["count"] = confirmation.get("total_" + SLOTS[meal["slot"]] + "_count")
                 meal["basis"] = "全园已确认人数，请核对本食谱适用范围"
+    # Student-level plans may be used for purchasing, but remain explicitly estimates.
+    from tongjianyun.student_meals import procurement_counts
+    planned_by_day = {}
+    for meal in meals.values():
+        if meal["count"] is None:
+            if meal["date"] not in planned_by_day:
+                planned_by_day[meal["date"]] = procurement_counts(meal["date"])
+            planned = planned_by_day[meal["date"]]
+            if planned is not None:
+                meal["count"] = planned[SLOTS[meal["slot"]] + "_count"]
+                meal["basis"] = "各班学生就餐安排汇总（未全部实际确认，采购预计参考）"
     from tongjianyun.ingredient_resolution import suggestions
     return {"recipe": doc.name, "revision": digest(rows), "as_of_date": nowdate(), "ingredients": suggestions(list(ingredients.values())),
             "meals": sorted(meals.values(), key=lambda r: r["key"])}

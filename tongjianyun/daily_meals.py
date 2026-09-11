@@ -43,15 +43,11 @@ def _active_groups(student_group=None) -> list[dict]:
 
 
 def _active_students(group: str) -> list[str]:
-    return frappe.get_all(
-        "Student Group Student",
-        filters={"parent": group, "active": 1},
-        pluck="student",
-    )
+    return [row["student"] for row in _active_student_rows(group)]
 
 
 def _active_student_rows(group: str) -> list[dict]:
-    return [
+    rows = [
         dict(row)
         for row in frappe.get_all(
             "Student Group Student",
@@ -60,6 +56,12 @@ def _active_student_rows(group: str) -> list[dict]:
             order_by="group_roll_number asc, student asc",
         )
     ]
+    enabled = set(frappe.get_all("Student", filters={"name": ["in", [r["student"] for r in rows]], "enabled": 1}, pluck="name")) if rows else set()
+    unique = {}
+    for row in rows:
+        if row["student"] in enabled:
+            unique.setdefault(row["student"], row)
+    return list(unique.values())
 
 
 def _attendance_records(group: str, meal_date) -> dict[str, dict]:
@@ -144,8 +146,9 @@ def calculate_rows(meal_date=None) -> list[dict]:
         attendance = _attendance_by_student(group["name"], meal_date)
         leave_students = _leave_students(group["name"], students, meal_date)
         absent_students = {
-            student for student, status in attendance.items() if status == "Absent"
+            student for student, status in attendance.items() if status == "Absent" and student in students
         }
+        leave_students |= {student for student, status in attendance.items() if status == "Leave" and student in students}
         unavailable = absent_students | leave_students
         present_count = max(len(students) - len(unavailable), 0)
         adjustments = _adjustments(group["name"], meal_date)
@@ -164,7 +167,8 @@ def calculate_rows(meal_date=None) -> list[dict]:
                 0,
             )
         results.append(row)
-    return results
+    from tongjianyun.student_meals import apply_class_snapshots
+    return apply_class_snapshots(results, meal_date)
 
 
 def calculate_student_details(meal_date=None, student_group=None) -> list[dict]:
@@ -229,18 +233,27 @@ def calculate_student_details(meal_date=None, student_group=None) -> list[dict]:
 def refresh_confirmation(meal_date=None, *, force=False):
     meal_date = getdate(meal_date or nowdate())
     name = frappe.db.exists(CONFIRMATION_DOCTYPE, {"meal_date": meal_date})
+    if name:
+        frappe.db.get_value(CONFIRMATION_DOCTYPE, name, "name", for_update=True)
     doc = (
         frappe.get_doc(CONFIRMATION_DOCTYPE, name)
         if name
         else frappe.new_doc(CONFIRMATION_DOCTYPE)
     )
-    if name and doc.status in {"已确认", "已锁定"} and not force:
+    if name and (doc.status == "已锁定" or (doc.status == "已确认" and not force)):
         return doc
     doc.meal_date = meal_date
     doc.status = "待确认"
-    doc.source = "Education考勤"
+    doc.confirmed_by = None
+    doc.confirmed_at = None
+    doc.source = "预计人数（待班级确认实际就餐）"
     doc.set("details", [])
-    for row in calculate_rows(meal_date):
+    rows = calculate_rows(meal_date)
+    from tongjianyun.student_meals import all_classes_confirmed
+    if all_classes_confirmed(rows, meal_date):
+        doc.status = "已确认"
+        doc.source = "学生餐次明细（各班已确认）"
+    for row in rows:
         doc.append("details", row)
     if name:
         doc.save(ignore_permissions=True)
@@ -388,6 +401,9 @@ def get_daily_meal_confirmation(meal_date=None) -> dict:
 @frappe.whitelist(methods=["POST"])
 def confirm_daily_meal(meal_date=None) -> dict:
     require_manager()
+    from tongjianyun.student_meals import all_classes_confirmed
+    if not all_classes_confirmed(calculate_rows(meal_date), getdate(meal_date or nowdate())):
+        frappe.throw("请先按班级核对学生各餐就餐情况，不能把预计人数直接确认为实际人数")
     name = frappe.db.exists(
         CONFIRMATION_DOCTYPE,
         {"meal_date": getdate(meal_date or nowdate())},
