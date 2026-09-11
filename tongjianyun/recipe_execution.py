@@ -179,7 +179,7 @@ def run(state):
                 run_sync(recipe, state["revision"])
                 prepared = procurement.prepare(recipe, scope["company"], allow_draft=True)
             if any(not row.get("item_code") for row in prepared["ingredients"]):
-                frappe.throw("部分食材尚未匹配。请在“更多处理”核对食材用途/匹配结果后重试；不会猜测外购或自制。")
+                frappe.throw("部分食材尚未匹配。请使用下方“处理待确认食材”或“查看异常详情”，处理后点击“继续发布并结算”；不会猜测外购或自制。")
             # Release the old read snapshot, lock the recipe through the entire financial transaction.
             frappe.db.rollback()
             frappe.db.get_value(procurement.RECIPE, recipe, "name", for_update=True)

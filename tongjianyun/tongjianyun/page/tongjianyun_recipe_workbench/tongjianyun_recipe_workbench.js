@@ -165,9 +165,6 @@ class TongjianyunRecipePage {
                         </div>
                     </div>
                     <div class="tjy-hero-actions">
-                        <details><summary class="tjy-outline-button">更多处理</summary>
-                        ${recipe.workflowStatus === "已发布" ? '<button class="tjy-outline-button" data-action="erp-procurement">核对采购需求</button>' : ''}
-                        <button class="tjy-outline-button" data-action="item-sync">食材物料匹配结果</button></details>
                         <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入食谱</span></button>
                         <button class="tjy-outline-button" data-action="edit">${["已发布", "已归档"].includes(recipe.workflowStatus) ? "创建修订版" : "编辑食谱"}</button>
                         ${["草稿", "已发布"].includes(recipe.workflowStatus) ? '<button class="tjy-primary-button" data-action="execute-recipe">发布并完成采购结算</button>' : ''}
@@ -516,7 +513,7 @@ class TongjianyunRecipePage {
             frappe.show_alert({ message: sync?.message || "食谱已保存", indicator: sync?.status === "blocked" ? "orange" : "green" });
             this.showBrowse();
             if (sync?.recipe && sync.status !== "blocked") {
-                frappe.show_alert({message: "后台正在处理食材；汤粥等项目可点击“食材用途确认”集中处理。", indicator: "blue"}, 10);
+                frappe.show_alert({message: "后台正在处理食材；发布时会自动检查，需处理的异常会显示在流程进度中。", indicator: "blue"}, 10);
             }
         } catch (error) {
             this.showError("食谱保存失败", error);
@@ -782,10 +779,6 @@ class TongjianyunRecipePage {
     bindCommonActions() {
         this.main.find('[data-action="execute-recipe"]').on("click", () => this.executeRecipe());
         if (this.main.find('[data-execution-status]').length) this.refreshExecution();
-        const syncButton = this.main.find('[data-action="item-sync"]');
-        if (syncButton.length && !this.main.find('[data-action="product-decisions"]').length) {
-            syncButton.after('<button class="tjy-outline-button" data-action="product-decisions">食材用途确认</button>');
-        }
         this.main.find('[data-action="product-decisions"]').on("click", () => this.showProductDecisions());
         this.main.find('[data-action="item-sync"]').on("click", () => this.showItemSync());
         this.main.find('[data-action="erp-procurement"]').on("click", () => this.openProcurement());
@@ -822,6 +815,12 @@ class TongjianyunRecipePage {
                 return (state.result?.[key] || []).map(name => `<a style="margin-right:12px" href="/desk/${route}/${encodeURIComponent(name)}">${title} ${escapeHtml(name)}</a>`);
             }).join(" ");
             this.main.find('[data-execution-status]').html(`<strong>${state.status === "failed" ? "上次执行未完成 · " : ""}${escapeHtml(state.stage || "一键发布与结算")}</strong><p style="margin:8px 0">${escapeHtml(state.message || "自动衔接食材匹配、采购、收货、发票和付款记录。异常在这里提示，无需反复切换页面。")}</p><div>${stages}</div>${links ? `<div style="margin-top:12px">${links}</div>` : ""}`);
+            if (["failed", "interrupted"].includes(state.status) && state.stage === "食材匹配") {
+                const panel = this.main.find('[data-execution-status]');
+                panel.append('<div style="margin-top:12px"><button class="tjy-outline-button" data-resolve-ingredients>处理待确认食材</button> <button class="tjy-outline-button" data-inspect-ingredients>查看异常详情</button></div>');
+                panel.find('[data-resolve-ingredients]').on("click", () => this.showProductDecisions());
+                panel.find('[data-inspect-ingredients]').on("click", () => this.showItemSync());
+            }
             if (running) this.executionTimer = setTimeout(() => this.refreshExecution(), 2500);
         } catch (error) {
             this.main.find('[data-execution-status]').text(`状态暂时无法读取：${procurementErrorMessage(error)}。请重新打开食谱查看，勿重复操作。`);
@@ -902,7 +901,7 @@ class TongjianyunRecipePage {
                 args: {recipe, revision: pending.revision, decisions}, freeze: true});
             dialog.hide();
             frappe.show_alert({message: "确认已保存，后台将继续匹配；自制及跳过项目保留待办。", indicator: "green"});
-            await this.showItemSync();
+            await this.refreshExecution();
         }});
         dialog.show();
     }
@@ -1220,7 +1219,7 @@ class TongjianyunRecipePage {
             while (!closed && ["queued", "running"].includes(state.status)) {
                 show(state.message || "正在自动分类、创建物料，请稍候……");
                 if (Date.now() > deadline) {
-                    show("后台尚未结束，请稍后通过“食材物料匹配结果”查看进度。无需手动创建物料。");
+                    show("后台尚未结束，请稍后重试；发布流程会自动检查匹配结果。无需手动创建物料。");
                     return null;
                 }
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1240,7 +1239,7 @@ class TongjianyunRecipePage {
             }
             progress.hide();
             if (prepared.ingredients.some(row => !row.item_code)) {
-                frappe.msgprint("自动建档已完成一轮处理。剩余异常原因已列在食材表中；汤粥等请通过“食材用途确认”处理，分类服务或权限问题请重试或联系管理员，无需手动新建物料。");
+                frappe.msgprint("自动建档已完成一轮处理。剩余异常原因已列在食材表中；发布流程会提供待确认食材的处理入口，分类服务或权限问题请重试或联系管理员，无需手动新建物料。");
             } else {
                 frappe.show_alert({message: "食材已自动匹配建档，继续核对备餐人数。", indicator: "green"});
             }
