@@ -39,7 +39,10 @@ def _require_recipe_write() -> None:
 
 
 def _can_restore_recipe() -> bool:
-    return frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles(frappe.session.user)
+    return frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles(frappe.session.user) or (
+        "Tongjianyun Business Operator" in frappe.get_roles(frappe.session.user)
+        and frappe.has_permission(RECIPE_DOCTYPE, ptype="write")
+    )
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
