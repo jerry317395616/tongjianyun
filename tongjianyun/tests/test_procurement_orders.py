@@ -7,6 +7,10 @@ from tongjianyun import recipe_procurement as service
 
 class OrderTests(unittest.TestCase):
     def setUp(self):
+        for name in ("new_target", "apply_precision"):
+            helper = patch.object(service, name)
+            helper.start()
+            self.addCleanup(helper.stop)
         # Exercise Frappe's real rounding without requiring an initialized site.
         settings = patch.object(service.frappe, "get_system_settings", return_value="Banker's Rounding")
         settings.start()

@@ -12,7 +12,7 @@ ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
 
 app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260911-recipe-execution-2"]
+app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260911-recipe-defaults-2"]
 
 add_to_apps_screen = [
     {
@@ -53,6 +53,10 @@ override_whitelisted_methods = {
 }
 
 doc_events = {
+    "Material Request": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
+    "Purchase Order": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
+    "Purchase Receipt": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
+    "Purchase Invoice": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
     "Student": {
         "after_delete": "tongjianyun.education_data_notifications.notify_missing_education_data",
     },

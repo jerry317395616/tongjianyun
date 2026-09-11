@@ -1,5 +1,10 @@
 # 食谱发布与采购结算
 
+2026-09-11 补充：同一内容版本重试自动带回上次人数及历史补录选择。
+修复 23 人时公斤数量被三位小数舍入导致多出 0.4 克的问题：仅对童健云
+采购单据实例的数量计算缓存保留九位小数，映射前与校验前均应用；不改
+DocType、全局精度、货币精度或超订容差。23 人整周全链路回滚验证通过。
+
 入口：`/desk/tongjianyun-recipe-workbench` 的“发布并完成采购结算”。
 调用链：原 Page JS → `recipe_execution.inspect/start/status` → 已有
 `recipe_item_sync`、`recipe_procurement` → ERPNext 标准业务函数。

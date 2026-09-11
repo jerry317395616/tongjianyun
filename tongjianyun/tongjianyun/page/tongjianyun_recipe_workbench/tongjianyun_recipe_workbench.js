@@ -814,14 +814,14 @@ class TongjianyunRecipePage {
                 this.main.find('[data-action="edit"]').text("创建修订版");
             }
             const running = ["queued", "running"].includes(state.status);
-            const label = state.status === "completed" ? "查看结算结果" : running ? "后台执行中…" : "发布并完成采购结算";
+            const label = state.status === "completed" ? "查看结算结果" : running ? "后台执行中…" : ["failed", "interrupted"].includes(state.status) ? "继续发布并结算" : "发布并完成采购结算";
             this.main.find('[data-action="execute-recipe"]').text(label).prop("disabled", running);
             const stages = (state.steps || []).map(step => `<span style="display:inline-block;padding:4px 9px;margin:4px;border-radius:6px;background:${step === state.stage ? "#d6eee2" : "#fff"}">${escapeHtml(step)}</span>`).join(" → ");
             const links = Object.entries({purchase_orders: "采购订单", purchase_receipts: "收货单", purchase_invoices: "采购发票", payment_entries: "付款记录"}).flatMap(([key, title]) => {
                 const route = {purchase_orders: "purchase-order", purchase_receipts: "purchase-receipt", purchase_invoices: "purchase-invoice", payment_entries: "payment-entry"}[key];
                 return (state.result?.[key] || []).map(name => `<a style="margin-right:12px" href="/desk/${route}/${encodeURIComponent(name)}">${title} ${escapeHtml(name)}</a>`);
             }).join(" ");
-            this.main.find('[data-execution-status]').html(`<strong>${escapeHtml(state.stage || "一键发布与结算")}</strong><p style="margin:8px 0">${escapeHtml(state.message || "自动衔接食材匹配、采购、收货、发票和付款记录。异常在这里提示，无需反复切换页面。")}</p><div>${stages}</div>${links ? `<div style="margin-top:12px">${links}</div>` : ""}`);
+            this.main.find('[data-execution-status]').html(`<strong>${state.status === "failed" ? "上次执行未完成 · " : ""}${escapeHtml(state.stage || "一键发布与结算")}</strong><p style="margin:8px 0">${escapeHtml(state.message || "自动衔接食材匹配、采购、收货、发票和付款记录。异常在这里提示，无需反复切换页面。")}</p><div>${stages}</div>${links ? `<div style="margin-top:12px">${links}</div>` : ""}`);
             if (running) this.executionTimer = setTimeout(() => this.refreshExecution(), 2500);
         } catch (error) {
             this.main.find('[data-execution-status]').text(`状态暂时无法读取：${procurementErrorMessage(error)}。请重新打开食谱查看，勿重复操作。`);
@@ -843,8 +843,8 @@ class TongjianyunRecipePage {
             const missing = data.meals.filter(row => row.count === null || row.count === undefined);
             const dialog = new frappe.ui.Dialog({title: "发布并完成采购结算", fields: [
                 {fieldtype: "HTML", options: `<p>默认公司：${escapeHtml(data.scope.company)}；收货仓库：${escapeHtml(data.scope.warehouse)}。</p><p>使用已维护的采购价格和默认供应商、账户。克/毫升库存数量保持不变，采购按公斤/升计价。${data.unmatched ? `另有 ${data.unmatched} 项食材将在后台匹配。` : "食材已匹配。"}</p><p>已确认餐次人数自动带入；${missing.length ? `${missing.length} 个餐次尚无确认人数，请填写统一备餐人数。` : "无需填写人数。"}</p>`},
-                {fieldtype: "Int", fieldname: "fallback_count", label: "未确认餐次的统一备餐人数", hidden: !missing.length, reqd: !!missing.length, description: "仅补空白，不覆盖已确认人数，0 人保留。"},
-                {fieldtype: "Check", fieldname: "include_history", label: "包含过去日期（实际业务历史补录）", default: 0},
+                {fieldtype: "Int", fieldname: "fallback_count", label: "未确认餐次的统一备餐人数", default: data.fallback_count, hidden: !missing.length, reqd: !!missing.length, description: "自动带回本食谱上次填写的人数；仅补空白，不覆盖已确认人数，0 人保留。"},
+                {fieldtype: "Check", fieldname: "include_history", label: "包含过去日期（实际业务历史补录）", default: data.include_history || 0},
                 {fieldtype: "Check", fieldname: "facts", label: "我已核对人数及维护的价格，确认收货、发票和付款事实已发生，允许系统登记对应单据", default: 0, reqd: 1},
                 {fieldtype: "HTML", options: '<p class="text-muted">仅登记已发生的事实，不代表银行转账。未发生的业务请勿确认。结算完成不等于全公司关账。</p><div data-execution-error role="alert" style="color:#c53434"></div>'}
             ], primary_action_label: "确认执行", primary_action: async values => {

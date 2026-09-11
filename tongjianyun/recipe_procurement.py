@@ -8,6 +8,7 @@ from html import escape
 
 import frappe
 import frappe.defaults
+from tongjianyun.procurement_precision import apply_precision, new_target
 from frappe.utils import flt, getdate, nowdate
 
 RECIPE = "Tongjianyun Recipe"
@@ -650,8 +651,9 @@ def _create_purchase_orders(name):
     orders = []
     source_rates = {row.name: float(row.rate or 0) for row in request.items}
     for (recipe_date, supplier), quantities in sorted(grouped.items()):
-        order = make_purchase_order(name, args={"supplier": supplier,
+        order = make_purchase_order(name, target_doc=new_target("Purchase Order"), args={"supplier": supplier,
             "filtered_children": list(quantities), "requested_qty": quantities})
+        apply_precision(order)
         order.buying_price_list = request.buying_price_list or _default_buying_price_list()
         # ERPNext clears past dates; normalize both retained and rescheduled dates
         # before its min(schedule_date) validation (date/string mix otherwise fails).
@@ -722,7 +724,8 @@ def _ensure_purchase_receipt(order):
             return receipts[-1]
         frappe.throw(f"采购订单 {order.name} 没有待收货数量，无法自动入库。")
 
-    receipt = make_purchase_receipt(order.name)
+    receipt = make_purchase_receipt(order.name, target_doc=new_target("Purchase Receipt"))
+    apply_precision(receipt)
     if not receipt.items:
         frappe.throw(f"采购订单 {order.name} 没有可收货明细，无法自动入库。")
     receipt.posting_date = nowdate()
@@ -749,7 +752,8 @@ def _ensure_purchase_invoice(order):
             return invoices[-1]
         frappe.throw(f"采购订单 {order.name} 已全部开票，但未找到关联采购发票。")
 
-    invoice = make_purchase_invoice(order.name)
+    invoice = make_purchase_invoice(order.name, target_doc=new_target("Purchase Invoice"))
+    apply_precision(invoice)
     if not invoice.items:
         frappe.throw(f"采购订单 {order.name} 没有可开票明细，无法自动开票。")
     if any(float(item.qty or 0) > 0 and float(item.rate or 0) <= 0 for item in invoice.items):

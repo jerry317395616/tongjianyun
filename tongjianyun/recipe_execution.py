@@ -6,6 +6,7 @@ Intermediate cache events explicitly describe uncommitted work, not completed fa
 import base64
 import json
 import re
+from html import unescape
 
 import frappe
 from frappe.utils import now_datetime
@@ -61,7 +62,9 @@ def _record(state):
 def _public(state):
     if not state:
         return {"status": "not_started", "steps": STEPS}
-    return {key: state.get(key) for key in ("status", "stage", "message", "updated_at", "result", "recipe")} | {"steps": STEPS}
+    result = {key: state.get(key) for key in ("status", "stage", "message", "updated_at", "result", "recipe")} | {"steps": STEPS}
+    result["message"] = re.sub(r"<[^>]+>", " ", unescape(str(result.get("message") or "")))
+    return result
 
 
 @frappe.whitelist()
@@ -70,7 +73,11 @@ def inspect(recipe):
     _access(recipe, write=True)
     scope = procurement.default_scope(recipe)
     prepared = procurement.prepare(recipe, scope["company"], allow_draft=True)
+    previous = _latest(recipe)
+    current_revision = source_snapshot(recipe)["revision"]
+    defaults = previous if previous and previous.get("revision") == current_revision else {}
     return {"scope": scope, "revision": source_snapshot(recipe)["revision"],
+            "fallback_count": defaults.get("fallback_count"), "include_history": defaults.get("include_history", 0),
             "meals": prepared["meals"], "unmatched": sum(not row.get("item_code") for row in prepared["ingredients"]),
             "status": status(recipe)}
 
@@ -99,6 +106,8 @@ def start(recipe, revision, confirmed=0, include_history=0, fallback_count=None)
         fallback_count = None
     with frappe.cache.lock(_key(recipe) + ":lock", timeout=60, blocking_timeout=1):
         previous = _latest(recipe)
+        if fallback_count is None and previous and previous.get("revision") == revision:
+            fallback_count = previous.get("fallback_count")
         from frappe.utils.background_jobs import is_job_enqueued
         if previous and previous["status"] in ("queued", "running") and is_job_enqueued(previous["job_id"]):
             return _public(previous)
