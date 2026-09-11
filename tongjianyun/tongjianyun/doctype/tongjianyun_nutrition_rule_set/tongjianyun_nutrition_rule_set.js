@@ -27,7 +27,7 @@ frappe.ui.form.on("Tongjianyun Nutrition Rule Set", {
         if (frm.doc.status === "草稿") {
             frm.add_custom_button(__("提交审核"), () => callTransition(frm, "submit_rule_set"), __("规则流程"));
         }
-        if (frm.doc.status === "待审核" && (frappe.user.has_role("System Manager") || frappe.user.has_role("Tongjianyun Administrator"))) {
+        if (frm.doc.status === "待审核" && (frappe.user.has_role("System Manager") || frappe.user.has_role("Tongjianyun Business Operator"))) {
             frm.add_custom_button(__("发布规则"), () => {
                 frappe.confirm(__("发布后，新的营养分析将立即使用本规则。确定继续吗？"), () =>
                     callTransition(frm, "publish_rule_set", { confirmation: "确认发布" })

@@ -5,19 +5,92 @@
  "creation": "2026-08-12 16:30:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["meal_date","student_group","adjustment_type","column_break_adjustment","breakfast_delta","morning_snack_delta","lunch_delta","afternoon_snack_delta","dinner_delta","reason","approved_by"],
+ "field_order": [
+  "meal_date",
+  "student_group",
+  "adjustment_type",
+  "column_break_adjustment",
+  "breakfast_delta",
+  "morning_snack_delta",
+  "lunch_delta",
+  "afternoon_snack_delta",
+  "dinner_delta",
+  "reason",
+  "approved_by"
+ ],
  "fields": [
-  {"default":"Today","fieldname":"meal_date","fieldtype":"Date","in_list_view":1,"in_standard_filter":1,"label":"就餐日期","reqd":1},
-  {"fieldname":"student_group","fieldtype":"Link","in_list_view":1,"in_standard_filter":1,"label":"班级","options":"Student Group","reqd":1},
-  {"fieldname":"adjustment_type","fieldtype":"Select","in_list_view":1,"label":"调整类型","options":"临时停餐\n临时加餐\n访客\n其他","reqd":1},
-  {"fieldname":"column_break_adjustment","fieldtype":"Column Break"},
-  {"default":"0","fieldname":"breakfast_delta","fieldtype":"Int","label":"早餐调整"},
-  {"default":"0","fieldname":"morning_snack_delta","fieldtype":"Int","label":"早点调整"},
-  {"default":"0","fieldname":"lunch_delta","fieldtype":"Int","label":"午餐调整"},
-  {"default":"0","fieldname":"afternoon_snack_delta","fieldtype":"Int","label":"午点调整"},
-  {"default":"0","fieldname":"dinner_delta","fieldtype":"Int","label":"晚餐调整"},
-  {"fieldname":"reason","fieldtype":"Small Text","label":"调整原因","reqd":1},
-  {"fieldname":"approved_by","fieldtype":"Link","label":"审核人","options":"User"}
+  {
+   "default": "Today",
+   "fieldname": "meal_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "就餐日期",
+   "reqd": 1
+  },
+  {
+   "fieldname": "student_group",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "班级",
+   "options": "Student Group",
+   "reqd": 1
+  },
+  {
+   "fieldname": "adjustment_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "调整类型",
+   "options": "临时停餐\n临时加餐\n访客\n其他",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_adjustment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "breakfast_delta",
+   "fieldtype": "Int",
+   "label": "早餐调整"
+  },
+  {
+   "default": "0",
+   "fieldname": "morning_snack_delta",
+   "fieldtype": "Int",
+   "label": "早点调整"
+  },
+  {
+   "default": "0",
+   "fieldname": "lunch_delta",
+   "fieldtype": "Int",
+   "label": "午餐调整"
+  },
+  {
+   "default": "0",
+   "fieldname": "afternoon_snack_delta",
+   "fieldtype": "Int",
+   "label": "午点调整"
+  },
+  {
+   "default": "0",
+   "fieldname": "dinner_delta",
+   "fieldtype": "Int",
+   "label": "晚餐调整"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "调整原因",
+   "reqd": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "审核人",
+   "options": "User"
+  }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
@@ -25,10 +98,27 @@
  "name": "Tongjianyun Daily Meal Adjustment",
  "naming_rule": "Expression",
  "permissions": [
-  {"create":1,"delete":1,"email":1,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","share":1,"write":1},
-  {"create":1,"delete":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Teacher","write":1},
-  {"create":1,"print":1,"read":1,"report":1,"role":"Tongjianyun Nutrition","write":1},
-  {"print":1,"read":1,"report":1,"role":"Tongjianyun Director"}
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Tongjianyun Business Operator",
+   "write": 1
+  }
  ],
  "search_fields": "student_group,reason",
  "sort_field": "meal_date",

@@ -7,12 +7,7 @@ import frappe
 
 ROLE = "Tongjianyun Business Operator"
 PROFILE = "童健云业务操作"
-BACKING = (
-    "Tongjianyun Administrator", "Tongjianyun Director", "Tongjianyun Nutrition",
-    "Tongjianyun Academic", "Tongjianyun Teacher", "Tongjianyun Health",
-    "Tongjianyun Kitchen", "Tongjianyun Procurement", "Tongjianyun Food Safety",
-    "Tongjianyun Finance", "Tongjianyun Service", "I-ONE Agent User",
-)
+BACKING = ("I-ONE Agent User",)
 BUSINESS = {
     "Student", "Student Group", "Guardian", "Instructor", "Academic Year", "Academic Term",
     "Program", "Program Enrollment", "Student Attendance", "Student Leave Application",

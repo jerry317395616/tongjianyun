@@ -23,9 +23,9 @@ ATTENDANCE_EDITOR_ROLES = {
     "System Manager",
     "Education Manager",
     "Instructor",
-    "Tongjianyun Administrator",
-    "Tongjianyun Director",
-    "Tongjianyun Teacher",
+    "Tongjianyun Business Operator",
+    "Tongjianyun Business Operator",
+    "Tongjianyun Business Operator",
 }
 
 

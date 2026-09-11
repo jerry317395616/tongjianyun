@@ -9,8 +9,8 @@ from frappe.utils.print_utils import get_print
 ATTENDANCE_DOCTYPE = "Tongjianyun Meal Attendance"
 PRINT_FORMAT_NAME = "就餐人数记录表"
 WORKSPACE_NAME = "童健云"
-SERVICE_ROLE = "Tongjianyun Service"
-SERVICE_USERS = ("tongjianyun.service@myyr.top",)
+SERVICE_ROLE = "Tongjianyun Business Operator"
+SERVICE_USERS = ()  # Service accounts require explicit assignment, never automatic promotion.
 
 
 PRINT_HTML = r"""
@@ -152,7 +152,7 @@ def install_service_role():
 	if not frappe.db.exists("Role", SERVICE_ROLE):
 		role = frappe.new_doc("Role")
 		role.role_name = SERVICE_ROLE
-		role.desk_access = 0
+		role.desk_access = 1
 		role.insert(ignore_permissions=True)
 
 	for user_name in SERVICE_USERS:

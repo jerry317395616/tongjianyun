@@ -1,10 +1,10 @@
 {
  "content": null,
- "creation": "2026-08-12 10:00:00.000000",
+ "creation": "2026-08-12 10:00:00",
  "docstatus": 0,
  "doctype": "Page",
- "idx": 0,
- "modified": "2026-08-12 12:05:00.000000",
+ "idx": 4,
+ "modified": "2026-09-11 13:44:51.057054",
  "modified_by": "Administrator",
  "module": "Tongjianyun",
  "name": "tongjianyun-recipe-workbench",
@@ -13,11 +13,14 @@
  "roles": [
   {
    "role": "System Manager"
+  },
+  {
+   "role": "Tongjianyun Business Operator"
   }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "食谱工作台"
+ "title": "\u98df\u8c31\u5de5\u4f5c\u53f0"
 }

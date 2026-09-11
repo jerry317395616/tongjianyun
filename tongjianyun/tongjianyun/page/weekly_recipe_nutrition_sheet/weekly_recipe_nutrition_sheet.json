@@ -11,10 +11,12 @@
  "owner": "Administrator",
  "page_name": "weekly-recipe-nutrition-sheet",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Tongjianyun Administrator"},
-  {"role": "Tongjianyun Director"},
-  {"role": "Tongjianyun Nutrition"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Tongjianyun Business Operator"
+  }
  ],
  "script": null,
  "standard": "Yes",

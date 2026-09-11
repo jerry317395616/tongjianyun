@@ -5,8 +5,8 @@ No endpoint accepts a caller-selected actor, and these hooks never grant roles.
 """
 import frappe
 
-MANAGERS = {"System Manager", "Education Manager", "Tongjianyun Administrator", "Tongjianyun Director"}
-TEACHERS = {"Instructor", "Tongjianyun Teacher"}
+MANAGERS = {"System Manager", "Education Manager", "Tongjianyun Business Operator", "Tongjianyun Business Operator"}
+TEACHERS = {"Instructor", "Tongjianyun Business Operator"}
 SUPPORTED = {"Student Group", "Student", "Student Attendance", "Student Leave Application"}
 
 

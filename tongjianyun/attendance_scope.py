@@ -1,7 +1,7 @@
 """Attendance scope is derived from the authenticated Frappe user, never request data."""
 import frappe
 
-MANAGERS = {"System Manager", "Education Manager", "Tongjianyun Administrator", "Tongjianyun Director"}
+MANAGERS = {"System Manager", "Education Manager", "Tongjianyun Business Operator", "Tongjianyun Business Operator"}
 
 
 def is_manager():

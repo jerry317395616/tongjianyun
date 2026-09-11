@@ -19,8 +19,8 @@ from tongjianyun.recipe_storage import get_recipe_detail
 
 RULE_SET_DOCTYPE = "Tongjianyun Nutrition Rule Set"
 REVISION_DOCTYPE = "Tongjianyun Nutrition Rule Revision"
-EDITOR_ROLES = {"System Manager", "Tongjianyun Administrator", "Tongjianyun Nutrition"}
-PUBLISHER_ROLES = {"System Manager", "Tongjianyun Administrator"}
+EDITOR_ROLES = {"System Manager", "Tongjianyun Business Operator", "Tongjianyun Business Operator"}
+PUBLISHER_ROLES = {"System Manager", "Tongjianyun Business Operator"}
 
 
 def document_to_rule_set(document: Any) -> dict[str, Any]:

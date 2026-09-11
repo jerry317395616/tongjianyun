@@ -25,94 +25,30 @@ REMOVED_DOCTYPES = (
     "Tongjianyun Meal Nutrition",
 )
 
-ROLE_PERMISSIONS = {
-    "Tongjianyun Administrator": {
-        "Data Import": "rwc",
-    },
-    "Tongjianyun Director": {
-        "Student": "rwc",
-        "Guardian": "rwc",
-        "Student Group": "rwc",
-        "Instructor": "rwc",
-        "Academic Year": "rwc",
-        "Academic Term": "rwc",
-        "Program": "rwc",
-        "Program Enrollment": "rwc",
-        "Student Attendance": "rwc",
-        "Student Leave Application": "rwc",
-    },
-    "Tongjianyun Academic": {
-        "Student": "rwc",
-        "Guardian": "rwc",
-        "Student Group": "rwc",
-        "Instructor": "rwc",
-        "Academic Year": "rwc",
-        "Academic Term": "rwc",
-        "Program": "rwc",
-        "Program Enrollment": "rwc",
-    },
-    "Tongjianyun Teacher": {
-        "Student": "r",
-        "Guardian": "r",
-        "Student Group": "r",
-        "Student Attendance": "rwc",
-        "Student Leave Application": "rwc",
-        "Tongjianyun Daily Meal Confirmation": "rwc",
-        "Tongjianyun Daily Meal Adjustment": "rwcd",
-    },
-    "Tongjianyun Health": {
-        "Student": "r",
-        "Guardian": "r",
-        "Student Group": "r",
-    },
-    "Tongjianyun Nutrition": {
-        "Student": "r",
-        "Student Group": "r",
-    },
-    "Tongjianyun Kitchen": {
-        "Student Group": "r",
-    },
-    "Tongjianyun Procurement": {
-        "Student Group": "r",
-    },
-    "Tongjianyun Food Safety": {
-        "Student Group": "r",
-    },
-}
+ROLE_PERMISSIONS = {'Tongjianyun Business Operator': {'Academic Term': 'crw',
+                                   'Academic Year': 'crw',
+                                   'Data Import': 'crw',
+                                   'Guardian': 'crw',
+                                   'Instructor': 'crw',
+                                   'Program': 'crw',
+                                   'Program Enrollment': 'crw',
+                                   'Student': 'crw',
+                                   'Student Attendance': 'crw',
+                                   'Student Group': 'crw',
+                                   'Student Leave Application': 'crw',
+                                   'Tongjianyun Daily Meal Adjustment': 'cdrw',
+                                   'Tongjianyun Daily Meal Confirmation': 'crw'}}
 
 OWNER_SCOPED_PERMISSIONS = {
-    ("Tongjianyun Administrator", "Data Import"),
+    ("Tongjianyun Business Operator", "Data Import"),
 }
 
-TONGJIANYUN_ROLE_PERMISSIONS = {
-    "Tongjianyun Director": {
-        "Tongjianyun Daily Meal Confirmation": "r",
-        "Tongjianyun Daily Meal Adjustment": "r",
-        "Tongjianyun Recipe": "r",
-        "Tongjianyun Recipe Dish": "r",
-        "Tongjianyun Recipe Ingredient": "r",
-        "Tongjianyun Food Purchase": "r",
-    },
-    "Tongjianyun Nutrition": {
-        "Tongjianyun Daily Meal Confirmation": "rwc",
-        "Tongjianyun Daily Meal Adjustment": "rwc",
-        "Tongjianyun Recipe": "rwcd",
-        "Tongjianyun Recipe Dish": "rwcd",
-        "Tongjianyun Recipe Ingredient": "rwcd",
-    },
-    "Tongjianyun Kitchen": {
-        "Tongjianyun Daily Meal Confirmation": "r",
-        "Tongjianyun Recipe": "r",
-        "Tongjianyun Recipe Dish": "r",
-        "Tongjianyun Recipe Ingredient": "r",
-    },
-    "Tongjianyun Procurement": {
-        "Tongjianyun Food Purchase": "rwcd",
-    },
-    "Tongjianyun Food Safety": {
-        "Tongjianyun Food Purchase": "r",
-    },
-}
+TONGJIANYUN_ROLE_PERMISSIONS = {'Tongjianyun Business Operator': {'Tongjianyun Daily Meal Adjustment': 'crw',
+                                   'Tongjianyun Daily Meal Confirmation': 'crw',
+                                   'Tongjianyun Food Purchase': 'cdrw',
+                                   'Tongjianyun Recipe': 'cdrw',
+                                   'Tongjianyun Recipe Dish': 'cdrw',
+                                   'Tongjianyun Recipe Ingredient': 'cdrw'}}
 
 
 class TongjianyunStudent(Student):

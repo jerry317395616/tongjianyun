@@ -6,7 +6,7 @@ from frappe.utils import today
 
 
 RECIPIENT_ROLES = (
-    "Tongjianyun Administrator",
+    "Tongjianyun Business Operator",
     "园长",
     "教育管理员",
 )

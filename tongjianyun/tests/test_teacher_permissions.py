@@ -18,7 +18,7 @@ class TeacherPermissionTests(unittest.TestCase):
             roles.assert_not_called()
 
     def test_only_teacher_roles_without_manager_roles_are_scoped(self):
-        for roles, expected in [(["Instructor"], True), (["Tongjianyun Teacher"], True), (["Instructor", "System Manager"], False), (["Employee"], False)]:
+        for roles, expected in [(["Instructor"], True), (["Tongjianyun Business Operator"], False), (["Instructor", "System Manager"], False), (["Employee"], False)]:
             with self.subTest(roles=roles), patch.object(mod.frappe, "get_roles", return_value=roles):
                 self.assertEqual(mod.is_scoped_teacher("test"), expected)
 
