@@ -80,7 +80,7 @@ const zones = [
   { id: 'side', title: '黄色侧楼', description: '沿院落一侧延伸的黄色建筑，保留窗户、空调、金属外廊和地面遮棚。楼内用途与房间分布尚未确认。', source: '依据视频侧楼画面；长度与连接关系为示意', target: [18, 5, -1], eye: [-10, 16, 18], label: [19, 13, 0] },
   { id: 'track', title: '彩色跑道', description: '红、黄、蓝、紫四条跑道沿院落一侧展开，旁边为绿色活动场地。没有采集人员位置，也没有用动画模拟幼儿活动。', source: '依据院内照片及视频；无实际距离标尺', target: [6, 0, 4], eye: [-9, 20, 25], label: [5, 1.5, 10] },
   { id: 'play', title: '滑梯与沿楼游乐区', description: '以彩色滑梯、木质攀爬、轮胎和沿楼遮棚表达照片中的户外游乐区域。设施造型为简化模型，并非设备资产清单。', source: '依据照片与视频；设备数量及细节未逐一核对', target: [13, 2, -8], eye: [-2, 11, 8], label: [13, 7, -10] },
-  { id: 'passage', title: '楼下通道 · 待定位', description: '视频可见有顶通道与黑色铁门，但与主院落的精确连接位置尚未确认。模型中的通道只示意结构，不代表实际出入口方位。', source: '通道形态有视频依据；摆放位置待现场确认', target: [-10, 2, 20], eye: [-18, 10, 37], label: [-11, 7, 21] }
+  { id: 'passage', title: '入口楼与楼下通道', description: '新增照片确认：入口是楼体底层的穿行通道，不是独立门廊。通道上方可见三层连续窗带，灰白色外墙，两侧楼体转折连接。已补充窗框、立柱、遮棚和通道尽头铁门；不加入照片中的人物。', source: '外观依据入口新照片；总长度、背面与园区连接位置待核实', target: [-10.5, 6.5, 20], eye: [-9, 10, -10], label: [-10.5, 15, 21] }
 ];
 const groups = new Map();
 for (const zone of zones) {
@@ -198,18 +198,55 @@ for (let i = 0; i < 7; i++) {
 }
 for (let i = 0; i < 8; i++) box(play, 11 + (i % 2) * .8, .07, 4 + Math.floor(i / 2) * .85, .72, .04, .76, ['#e6bb46', '#df745e', '#83c1d0'][i % 3]);
 
-// Explicitly provisional placement: only the covered opening's shape is evidenced.
+// New entrance photo: three window bands ABOVE the ground-floor passage.
+// Keep the passage open; this is not a freestanding gate or a measured footprint.
 const passage = groups.get('passage');
-box(passage, -14, 2, 21, .45, 4, 3, '#aeb7b4');
-box(passage, -7, 2, 21, .45, 4, 3, '#aeb7b4');
-box(passage, -10.5, 4.1, 21, 7.5, .4, 3, '#b8c4bf');
-for (let x = -13.7; x <= -7.3; x += .4) box(passage, x, 1.3, 22, .055, 2.6, .055, '#43564f');
-box(passage, -10.5, 2.4, 22, 6.8, .07, .07, '#43564f');
-const dashPoints = [[-15, .1, 18.7], [-6, .1, 18.7], [-6, .1, 23], [-15, .1, 23], [-15, .1, 18.7]];
+const plaster = '#d9ddd8', frame = '#e9efeb', glass = '#758e91';
+// Ground-floor side rooms leave a 4.8-unit wide opening through the centre.
+box(passage, -16, 2, 21, 6.2, 4, 4, '#b2c5c0');
+box(passage, -5, 2, 21, 6.2, 4, 4, '#b2c5c0');
+box(passage, -10.5, 8.65, 21, 17.2, 9.3, 4, plaster);
+box(passage, -10.5, 13.4, 21, 17.5, .2, 4.2, '#b7c1bd');
+// Court-facing facade is towards negative Z, matching the view into the gate.
+for (let level = 0; level < 3; level++) {
+  const y = 5.6 + level * 3.1;
+  for (let bay = 0; bay < 4; bay++) {
+    const x = -16.8 + bay * 4.2;
+    box(passage, x, y, 18.95, 3.7, 1.95, .12, glass);
+    for (let mullion = 0; mullion <= 4; mullion++) box(passage, x - 1.85 + mullion * .925, y, 18.86, .055, 2.04, .05, frame);
+    for (const dy of [-.99, .43, .99]) box(passage, x, y + dy, 18.84, 3.78, .06, .055, frame);
+  }
+}
+for (const x of [-19, -14.7, -10.5, -6.3, -2]) {
+  box(passage, x, 8.6, 18.85, .24, 9.25, .24, '#c7d0cb');
+}
+// Short return wings show only the visible turn, not inferred full building lengths.
+for (const x of [-18.1, -2.9]) {
+  box(passage, x, 6.65, 17.2, 2, 13.3, 3.6, plaster);
+  box(passage, x, 13.4, 17.2, 2.15, .2, 3.7, '#b7c1bd');
+  const face = x < -10 ? x + 1.04 : x - 1.04;
+  for (let level = 0; level < 3; level++) {
+    const y = 5.6 + level * 3.1;
+    box(passage, face, y, 17.2, .08, 1.8, 2.6, glass);
+    box(passage, face, y, 17.2, .13, 1.9, .06, frame);
+    for (const dy of [-.95, .95]) box(passage, face, y + dy, 17.2, .13, .065, 2.65, frame);
+  }
+}
+// Low brown canopy, orange supports and iron gate behind the open passage.
+box(passage, -10.5, 3.9, 18.25, 15.2, .18, 1.6, '#7d715b');
+for (const x of [-13, -8]) cylinder(passage, x, 1.9, 18, .14, 3.8, '#b88d48');
+for (let x = -12.75; x <= -8.25; x += .3) box(passage, x, 1.5, 22.9, .05, 3, .05, '#43564f');
+for (const y of [.4, 2.5, 3]) box(passage, -10.5, y, 22.9, 4.65, .06, .06, '#43564f');
+for (const x of [-16.2, -4.8]) {
+  box(passage, x, 4.5, 18.65, 1.1, .75, .55, '#d5d6ce');
+  box(passage, x, 4.5, 18.34, .7, .48, .04, '#929f99');
+  box(passage, x, 1.8, 18.93, 2.2, 1.3, .08, '#6d8585');
+}
+const dashPoints = [[-19.4, .1, 15], [-1.6, .1, 15], [-1.6, .1, 23.4], [-19.4, .1, 23.4], [-19.4, .1, 15]];
 const dash = new THREE.Line(new THREE.BufferGeometry().setFromPoints(dashPoints.map(p => new THREE.Vector3(...p))), new THREE.LineDashedMaterial({ color: '#be8848', dashSize: .4, gapSize: .25 }));
 dash.computeLineDistances(); passage.add(dash);
 
-for (const [x, z, size] of [[-18, 13, 1.9], [-18, 18, 2.3], [-18, -4, 1.5]]) {
+for (const [x, z, size] of [[-20, 13, 1.6], [-20, 18, 1.5], [-18, -4, 1.5]]) {
   cylinder(model, x, 1.7, z, .18, 3.4, '#877655');
   const tree = new THREE.Mesh(new THREE.IcosahedronGeometry(size, 1), material('#497453'));
   tree.position.set(x, 4.1, z); tree.scale.y = 1.25; tree.castShadow = true; model.add(tree);
