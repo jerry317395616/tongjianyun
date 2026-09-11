@@ -185,7 +185,7 @@ class OrderTests(unittest.TestCase):
         order.name = "PO1"
         receipt = MagicMock(docstatus=1)
         receipt.name = "PR1"
-        invoice = MagicMock(docstatus=1)
+        invoice = MagicMock(docstatus=1, outstanding_amount=0)
         invoice.name = "PI1"
         payment = MagicMock(docstatus=1)
         payment.name = "PE1"

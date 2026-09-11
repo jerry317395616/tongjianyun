@@ -12,7 +12,7 @@ ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
 
 app_home = "/desk/tongjianyun-workbench"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260911-procurement-feedback-2"]
+app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260911-recipe-execution-2"]
 
 add_to_apps_screen = [
     {

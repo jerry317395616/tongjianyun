@@ -165,12 +165,15 @@ class TongjianyunRecipePage {
                         </div>
                     </div>
                     <div class="tjy-hero-actions">
-                        ${recipe.workflowStatus === "已发布" ? '<button class="tjy-outline-button" data-action="erp-procurement">准备 ERP 采购需求</button>' : ''}
-                        <button class="tjy-outline-button" data-action="item-sync">食材物料匹配结果</button>
+                        <details><summary class="tjy-outline-button">更多处理</summary>
+                        ${recipe.workflowStatus === "已发布" ? '<button class="tjy-outline-button" data-action="erp-procurement">核对采购需求</button>' : ''}
+                        <button class="tjy-outline-button" data-action="item-sync">食材物料匹配结果</button></details>
                         <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入食谱</span></button>
-                        <button class="tjy-primary-button" data-action="edit">${["已发布", "已归档"].includes(recipe.workflowStatus) ? "创建修订版" : "编辑食谱"}</button>
+                        <button class="tjy-outline-button" data-action="edit">${["已发布", "已归档"].includes(recipe.workflowStatus) ? "创建修订版" : "编辑食谱"}</button>
+                        ${["草稿", "已发布"].includes(recipe.workflowStatus) ? '<button class="tjy-primary-button" data-action="execute-recipe">发布并完成采购结算</button>' : ''}
                     </div>
                 </header>
+                <div data-execution-status role="status" aria-live="polite" style="padding:16px;margin-bottom:20px;border:1px solid #dce6e1;border-radius:12px;background:#f5f9f7">正在读取执行状态…</div>
                 <div class="tjy-browse-layout">
                     <div class="tjy-browse-main">
                         <div class="tjy-summary-card">
@@ -777,6 +780,8 @@ class TongjianyunRecipePage {
     }
 
     bindCommonActions() {
+        this.main.find('[data-action="execute-recipe"]').on("click", () => this.executeRecipe());
+        if (this.main.find('[data-execution-status]').length) this.refreshExecution();
         const syncButton = this.main.find('[data-action="item-sync"]');
         if (syncButton.length && !this.main.find('[data-action="product-decisions"]').length) {
             syncButton.after('<button class="tjy-outline-button" data-action="product-decisions">食材用途确认</button>');
@@ -792,6 +797,78 @@ class TongjianyunRecipePage {
         this.main.find('[data-action="calendar"]').on("click", () => this.enterEdit());
         this.main.find('[data-action="previous"]').on("click", () => this.openAdjacentRecipe(-1));
         this.main.find('[data-action="next"]').on("click", () => this.openAdjacentRecipe(1));
+    }
+
+    async refreshExecution() {
+        clearTimeout(this.executionTimer);
+        const recipe = this.state.selectedRecipe;
+        if (!recipe || !this.main.find('[data-execution-status]').length) return;
+        try {
+            const result = await frappe.call({method: "tongjianyun.recipe_execution.status", args: {recipe}});
+            if (recipe !== this.state.selectedRecipe) return;
+            const state = result.message || {};
+            this.executionState = state;
+            if (state.status === "completed" && this.state.payload?.recipe) {
+                this.state.payload.recipe.workflowStatus = "已发布";
+                this.main.find('.tjy-status').text("已发布");
+                this.main.find('[data-action="edit"]').text("创建修订版");
+            }
+            const running = ["queued", "running"].includes(state.status);
+            const label = state.status === "completed" ? "查看结算结果" : running ? "后台执行中…" : "发布并完成采购结算";
+            this.main.find('[data-action="execute-recipe"]').text(label).prop("disabled", running);
+            const stages = (state.steps || []).map(step => `<span style="display:inline-block;padding:4px 9px;margin:4px;border-radius:6px;background:${step === state.stage ? "#d6eee2" : "#fff"}">${escapeHtml(step)}</span>`).join(" → ");
+            const links = Object.entries({purchase_orders: "采购订单", purchase_receipts: "收货单", purchase_invoices: "采购发票", payment_entries: "付款记录"}).flatMap(([key, title]) => {
+                const route = {purchase_orders: "purchase-order", purchase_receipts: "purchase-receipt", purchase_invoices: "purchase-invoice", payment_entries: "payment-entry"}[key];
+                return (state.result?.[key] || []).map(name => `<a style="margin-right:12px" href="/desk/${route}/${encodeURIComponent(name)}">${title} ${escapeHtml(name)}</a>`);
+            }).join(" ");
+            this.main.find('[data-execution-status]').html(`<strong>${escapeHtml(state.stage || "一键发布与结算")}</strong><p style="margin:8px 0">${escapeHtml(state.message || "自动衔接食材匹配、采购、收货、发票和付款记录。异常在这里提示，无需反复切换页面。")}</p><div>${stages}</div>${links ? `<div style="margin-top:12px">${links}</div>` : ""}`);
+            if (running) this.executionTimer = setTimeout(() => this.refreshExecution(), 2500);
+        } catch (error) {
+            this.main.find('[data-execution-status]').text(`状态暂时无法读取：${procurementErrorMessage(error)}。请重新打开食谱查看，勿重复操作。`);
+            this.executionTimer = setTimeout(() => this.refreshExecution(), 5000);
+        }
+    }
+
+    async executeRecipe() {
+        if (this.executionState?.status === "completed") {
+            this.main.find('[data-execution-status]')[0]?.scrollIntoView({behavior: "smooth"});
+            return;
+        }
+        const recipe = this.state.selectedRecipe;
+        if (!recipe || this.executionOpening) return;
+        this.executionOpening = true;
+        try {
+            const response = await frappe.call({method: "tongjianyun.recipe_execution.inspect", args: {recipe}, freeze: true, freeze_message: "读取默认配置…"});
+            const data = response.message;
+            const missing = data.meals.filter(row => row.count === null || row.count === undefined);
+            const dialog = new frappe.ui.Dialog({title: "发布并完成采购结算", fields: [
+                {fieldtype: "HTML", options: `<p>默认公司：${escapeHtml(data.scope.company)}；收货仓库：${escapeHtml(data.scope.warehouse)}。</p><p>使用已维护的采购价格和默认供应商、账户。克/毫升库存数量保持不变，采购按公斤/升计价。${data.unmatched ? `另有 ${data.unmatched} 项食材将在后台匹配。` : "食材已匹配。"}</p><p>已确认餐次人数自动带入；${missing.length ? `${missing.length} 个餐次尚无确认人数，请填写统一备餐人数。` : "无需填写人数。"}</p>`},
+                {fieldtype: "Int", fieldname: "fallback_count", label: "未确认餐次的统一备餐人数", hidden: !missing.length, reqd: !!missing.length, description: "仅补空白，不覆盖已确认人数，0 人保留。"},
+                {fieldtype: "Check", fieldname: "include_history", label: "包含过去日期（实际业务历史补录）", default: 0},
+                {fieldtype: "Check", fieldname: "facts", label: "我已核对人数及维护的价格，确认收货、发票和付款事实已发生，允许系统登记对应单据", default: 0, reqd: 1},
+                {fieldtype: "HTML", options: '<p class="text-muted">仅登记已发生的事实，不代表银行转账。未发生的业务请勿确认。结算完成不等于全公司关账。</p><div data-execution-error role="alert" style="color:#c53434"></div>'}
+            ], primary_action_label: "确认执行", primary_action: async values => {
+                if (dialog.executionBusy) return;
+                if (!values.facts) return;
+                dialog.executionBusy = true;
+                dialog.get_primary_btn().prop("disabled", true).text("正在安排任务…");
+                try {
+                    await frappe.call({method: "tongjianyun.recipe_execution.start", args: {recipe, revision: data.revision, confirmed: 1, include_history: values.include_history || 0, fallback_count: values.fallback_count}});
+                    dialog.hide();
+                    this.refreshExecution();
+                } catch (error) {
+                    dialog.$wrapper.find('[data-execution-error]').text(procurementErrorMessage(error));
+                } finally {
+                    dialog.executionBusy = false;
+                    dialog.get_primary_btn().prop("disabled", false).text("确认执行");
+                }
+            }});
+            dialog.show();
+        } catch (error) {
+            frappe.msgprint({title: "暂时无法发布", message: escapeHtml(procurementErrorMessage(error))});
+        } finally {
+            this.executionOpening = false;
+        }
     }
 
     async showProductDecisions() {

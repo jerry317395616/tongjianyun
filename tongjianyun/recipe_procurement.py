@@ -92,9 +92,9 @@ def _payload(value):
     return frappe.parse_json(value) if isinstance(value, str) else value
 
 
-def _source(recipe):
+def _source(recipe, allow_draft=False):
     doc = _read(RECIPE, recipe)
-    if doc.is_deleted or doc.workflow_status != "已发布":
+    if doc.is_deleted or (doc.workflow_status != "已发布" and not (allow_draft and doc.workflow_status == "草稿")):
         frappe.throw("请先发布食谱，再准备采购需求。")
     dishes = frappe.get_list("Tongjianyun Recipe Dish", filters={"recipe": recipe},
                             fields=["name", "meal_date", "meal_slot"], limit_page_length=0)
@@ -182,9 +182,20 @@ def _current_buying_price(item_code, price_list, uom):
         if row.valid_upto and getdate(row.valid_upto) < today:
             continue
         rate = float(row.price_list_rate or 0)
+        # A blank Item Price UOM means the stock UOM, not the requested quote UOM.
+        if not row.uom:
+            stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
+            factor = conversion(uom, stock_uom) if stock_uom else None
+            if not factor:
+                continue
+            rate *= factor
         if rate > 0:
             candidates.append((0 if row.uom == uom else 1, rate))
     if not candidates:
+        stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
+        factor = conversion(uom, stock_uom) if stock_uom else None
+        if stock_uom != uom and factor:
+            return _current_buying_price(item_code, price_list, stock_uom) * factor
         return 0.0
     candidates.sort(key=lambda item: item[0])
     return candidates[0][1]
@@ -318,6 +329,8 @@ def _validate_plan_prices(plan, prices=None):
                 f"当前采购单据保留 {precision} 位小数，会被舍入为 0。"
                 "请在采购清单核对单价及计价单位后重试；本次未新建采购、收货、发票或付款单据。"
             )
+        if not math.isclose(rate, flt(rate, precision), rel_tol=0, abs_tol=1e-9):
+            frappe.throw(f"{escape(row['item_name'])}：当前计价单位 {escape(row['uom'])} 的单价超出 {precision} 位小数，请核对价格后再结算；不会自动抬高或压低单价。")
     if missing:
         frappe.throw(
             "请在确认采购清单中补齐采购单价："
@@ -327,13 +340,13 @@ def _validate_plan_prices(plan, prices=None):
 
 
 @frappe.whitelist()
-def prepare(recipe, company):
+def prepare(recipe, company, allow_draft=False):
     _permission("Item", "read")
     trace_available = _trace_available()
     if trace_available:
         _permission(TRACE, "read")
     _read("Company", company)
-    doc, rows = _source(recipe)
+    doc, rows = _source(recipe, allow_draft=allow_draft)
     remembered = {}
     if trace_available:
         for entry in frappe.get_list(TRACE, filters={"record_type": ["in", [KIND, "erp_recipe_mapping"]]}, fields=["name"],
@@ -403,7 +416,7 @@ def auto_match_items(recipe):
     return schedule_after_save(recipe)
 
 
-def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
+def _plan(recipe, company, warehouse, mappings, meals, include_history=0, allow_draft=False):
     if str(include_history) not in ("0", "1"):
         frappe.throw("历史补录选项无效，请重新预览。")
     include_history = str(include_history) == "1"
@@ -413,7 +426,7 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
     if wh.company != company or wh.is_group or wh.disabled:
         frappe.throw("请选择所属公司的有效明细仓库。")
     buying_price_list = _default_buying_price_list()
-    doc, source = _source(recipe)
+    doc, source = _source(recipe, allow_draft=allow_draft)
     mappings, meals = _payload(mappings), _payload(meals)
     if not isinstance(mappings, dict) or not isinstance(meals, dict):
         frappe.throw("食材匹配和分餐人数格式无效，请重新打开采购预览。")
@@ -454,6 +467,7 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
         uom = _read("UOM", line["uom"])
         if uom.must_be_whole_number and not float(line["qty"]).is_integer():
             frappe.throw("库存单位要求整数数量，请核对包装规格和换算，不能自动取整改变需求。")
+    _normalize_purchase_units(result)
     historical_dates = sorted({line["schedule_date"] for line in result if getdate(line["schedule_date"]) < today})
     for line in result:
         if line["schedule_date"] in historical_dates:
@@ -468,6 +482,20 @@ def _plan(recipe, company, warehouse, mappings, meals, include_history=0):
             "revision": digest(source), "mappings": checked, "meals": meals, "lines": result}
     plan["token"] = digest(plan)
     return plan
+
+
+def _normalize_purchase_units(lines):
+    """Keep recipe/stock units; quote mass and volume per kg/l without rounding up prices."""
+    for line in lines:
+        unit = UNITS.get(line["uom"].strip().lower())
+        if not unit or unit[1] != 1:
+            continue
+        candidates = ("Kg", "kg", "Kilogram") if unit[0] == "mass" else ("Litre", "Liter", "L")
+        target = next((u for u in candidates if frappe.db.exists("UOM", u)), None)
+        if not target:
+            frappe.throw("缺少公斤或升计价单位，请管理员维护现有单位后重试。")
+        line.update(stock_uom=line["uom"], stock_qty=line["qty"],
+                    uom=target, conversion_factor=1000, qty=line["qty"] / 1000)
 
 
 @frappe.whitelist()
@@ -507,6 +535,8 @@ def create_request(recipe, company, warehouse, mappings, meals, token, confirmed
     if str(confirmed) != "1":
         frappe.throw("请明确确认物料、备餐人数及采购毛料换算。")
     _permission("Material Request", "create")
+    _read(RECIPE, recipe)
+    frappe.db.get_value(RECIPE, recipe, "name", for_update=True)
     plan = _plan(recipe, company, warehouse, mappings, meals, include_history)
     if token != plan["token"]:
         frappe.throw("食谱或参数已变化，请重新预览。")
@@ -764,7 +794,7 @@ def _ensure_payment_entry(invoice):
     return payment
 
 
-def complete_purchase_cycle(name):
+def complete_purchase_cycle(name, progress=None):
     """Run the complete one-click ERPNext procurement cycle in one transaction."""
     request = _read("Material Request", name)
     required_permissions = [
@@ -793,11 +823,22 @@ def complete_purchase_cycle(name):
         orders = [_read("Purchase Order", order_name) for order_name in _create_purchase_orders(name)]
 
     receipts, invoices, payments = [], [], []
-    for order in orders:
+    for index, order in enumerate(orders):
+        if progress:
+            progress("orders", f"第 {index + 1}/{len(orders)} 天：提交采购订单")
         _submit_if_draft(order)
+        if progress:
+            progress("receipts", f"第 {index + 1}/{len(orders)} 天：登记收货")
         receipt = _ensure_purchase_receipt(order)
+        if progress:
+            progress("invoices", f"第 {index + 1}/{len(orders)} 天：登记采购发票")
         invoice = _ensure_purchase_invoice(order)
+        if progress:
+            progress("payments", f"第 {index + 1}/{len(orders)} 天：登记付款")
         payment = _ensure_payment_entry(invoice)
+        invoice.reload()
+        if float(invoice.outstanding_amount or 0) > 0.005:
+            frappe.throw(f"采购发票 {invoice.name} 仍有未结清余额，不能标记结算完成。")
         receipts.append(receipt.name)
         invoices.append(invoice.name)
         if payment:

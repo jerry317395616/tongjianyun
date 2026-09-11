@@ -1,0 +1,35 @@
+# 食谱发布与采购结算
+
+入口：`/desk/tongjianyun-recipe-workbench` 的“发布并完成采购结算”。
+调用链：原 Page JS → `recipe_execution.inspect/start/status` → 已有
+`recipe_item_sync`、`recipe_procurement` → ERPNext 标准业务函数。
+
+## 行为边界
+
+- 草稿、已发布且未删除的食谱可执行。待审核和归档食谱不绕过原流程。
+- 使用发起人的权限与身份，不提升为 Administrator；读取、创建、提交权限均校验。
+- 页面只读预检不发布、不记账。执行前必须确认收货、发票、付款的实际事实。
+- 已确认人数优先，缺失人数仅用用户填写的统一人数补齐，零人数保留。
+- 过去日期默认排除，需主动选择历史补录。
+- 未知食材复用既有模型匹配，不能明确匹配或缺价格时停止并提示，不编造数据。
+- 库存单位不改。g/ml 转 Kg/Litre 采购计价，明确换算 1000；小数单价不通过抬价规避校验。
+- 财务事务整体提交；失败回滚本次需求、订单、收货、发票和付款。此前已提交的物料匹配保留。
+- 重试复用已有单据，已有需求的日期、物料、数量、单位、价格必须一致。
+- 完成意味着本食谱采购应付结算完成，**不是公司级关账，也不是银行转账**。
+
+## 状态与审计
+
+使用既有 Comment 的 Info 业务记录保存任务起始及终态，不新增或变更 DocType。
+Redis 缓存仅提供实时进度，关闭页面不取消 RQ 任务。终态从数据库审计恢复；
+队列中断时提示安全重试。采购处理中的提示明确说明“整笔事务待提交”。
+
+## 验证
+
+Python：`python -m unittest tongjianyun.tests.test_procurement_orders tongjianyun.tests.test_recipe_execution`
+
+前端：`node --test tongjianyun/tests/test_procurement_feedback.cjs tongjianyun/tests/test_recipe_execution.cjs`
+
+2026-09-11 child 站点回滚验收：当前草稿，统一 10 人，仅用于验证；
+1 需求、5 订单、5 收货、5 发票、5 付款、114 库存流水、30 总账分录。
+验证失败回滚、完整执行、重复执行无新增、审计编码往返。所有临时记录已回滚，
+账务数量恢复原值。原页面已验证按钮、状态栏和默认配置确认窗口，未从浏览器提交真实结算。
