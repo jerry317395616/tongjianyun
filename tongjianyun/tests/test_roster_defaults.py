@@ -6,12 +6,13 @@ from tongjianyun import attendance_scope, daily_meals
 
 
 class RosterDefaultsTests(unittest.TestCase):
-    def test_only_missing_current_and_future_are_estimated(self):
+    def test_missing_history_current_and_future_are_estimated(self):
         rows = [dict(date=d, count=n) for d, n in [
             ("2026-09-10", None), ("2026-09-11", None),
             ("2026-09-12", None), ("2026-09-11", 0), ("2026-09-12", 18)]]
         service._fill_roster_estimates(rows, "2026-09-11", 257)
-        self.assertEqual([r["count"] for r in rows], [None, 257, 257, 0, 18])
+        self.assertEqual([r["count"] for r in rows], [257, 257, 257, 0, 18])
+        self.assertEqual(rows[0]["count_source"], "student_roster_history")
         self.assertEqual(rows[1]["count_source"], "student_roster")
         self.assertNotIn("count_source", rows[3])
 
@@ -19,6 +20,12 @@ class RosterDefaultsTests(unittest.TestCase):
         rows = [dict(date="2026-09-11", count=None)]
         service._fill_roster_estimates(rows, "2026-09-11", None)
         self.assertIsNone(rows[0]["count"])
+
+    def test_history_confirmed_zero_and_saved_plan_are_preserved(self):
+        rows = [dict(date="2026-09-01", count=n) for n in (0, 200)]
+        service._fill_roster_estimates(rows, "2026-09-11", 257)
+        self.assertEqual([r["count"] for r in rows], [0, 200])
+        self.assertTrue(all("count_source" not in r for r in rows))
 
     def estimate(self, manager=True, scope=("A", "B"), readable=("S1", "S2"), students=("S1", "S2")):
         with patch.object(attendance_scope, "is_manager", return_value=manager), \

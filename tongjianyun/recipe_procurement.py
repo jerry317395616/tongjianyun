@@ -359,9 +359,11 @@ def _roster_estimate():
 
 def _fill_roster_estimates(meals, today, count):
     for meal in meals:
-        if meal["count"] is None and getdate(meal["date"]) >= getdate(today) and count is not None:
-            meal.update(count=count, count_source="student_roster",
-                        basis="启用班级中的启用学生去重汇总（预计备餐，非实际就餐）")
+        if meal["count"] is None and count is not None:
+            historical = getdate(meal["date"]) < getdate(today)
+            meal.update(count=count, count_source="student_roster_history" if historical else "student_roster",
+                        basis="历史补录估算：按当前启用学生去重汇总，非历史实际就餐人数" if historical
+                        else "启用班级中的启用学生去重汇总（预计备餐，非实际就餐）")
 
 
 def prepare(recipe, company, allow_draft=False):
@@ -434,7 +436,7 @@ def prepare(recipe, company, allow_draft=False):
             if planned is not None:
                 meal["count"] = planned[SLOTS[meal["slot"]] + "_count"]
                 meal["basis"] = "各班学生就餐安排汇总（未全部实际确认，采购预计参考）"
-    if any(m["count"] is None and getdate(m["date"]) >= getdate(nowdate()) for m in meals.values()):
+    if any(m["count"] is None for m in meals.values()):
         _fill_roster_estimates(meals.values(), nowdate(), _roster_estimate())
     from tongjianyun.ingredient_resolution import suggestions
     return {"recipe": doc.name, "revision": digest(rows), "as_of_date": nowdate(), "ingredients": suggestions(list(ingredients.values())),
