@@ -14,10 +14,82 @@ class TongjianyunOperationsWorkbench {
         this.installStyles();
         this.page.set_primary_action("编制食谱", () => this.openRoute("Page", "tongjianyun-recipe-workbench"));
         this.page.add_menu_item("刷新工作台", () => this.load());
+        this.page.add_inner_button("上传学生名单", () => this.uploadRoster());
         this.page.add_menu_item("周食谱营养分析", () => this.openRoute("Page", "weekly-recipe-nutrition-sheet"));
         this.page.add_menu_item("食材营养统计", () => this.openRoute("Report", "Ingredient Nutrition Statistics"));
         this.page.add_menu_item("营养计算规则", () => this.openRoute("DocType", "Tongjianyun Nutrition Rule Set"));
         this.load();
+    }
+
+    uploadRoster() {
+        const esc = value => frappe.utils.escape_html(String(value ?? ""));
+        let token = null;
+        let timer = null;
+        let closed = false;
+        let busy = false;
+        const dialog = new frappe.ui.Dialog({title: "上传学生名单", size: "extra-large", fields: [
+            {fieldtype: "HTML", options: "<p>支持 Excel / CSV，无需套模板。系统先预览，确认后才写入。不会删除学生、覆盖已有资料或自动转班。</p>"},
+            {fieldtype: "Link", fieldname: "fallback", label: "名单未写班级时统一加入（选填）", options: "Student Group", get_query: () => ({filters: {disabled: 0}})},
+            {fieldtype: "Check", fieldname: "auto_age", label: "无班级时按年龄生成分班建议", default: 0, description: "按当前学年9月1日满3岁小班、4岁中班、5—6岁大班；仅匹配当前学年已有同名班级。预览后确认，不转班。"},
+            {fieldtype: "Button", fieldname: "upload", label: "选择名单文件", click: () => {
+                if (busy) return;
+                new frappe.ui.FileUploader({make_attachments_public: false, restrictions: {allowed_file_types: [".xlsx", ".xls", ".csv"], max_file_size: 5 * 1024 * 1024, max_number_of_files: 1}, on_success: async file => {
+                    if (closed) return;
+                    busy = true;
+                    box().text("已上传，正在安排识别…");
+                    try {
+                        const response = await frappe.call({method: "tongjianyun.student_roster_upload.start", args: {file: file.name, fallback_group: dialog.get_value("fallback") || "", auto_age: dialog.get_value("auto_age") || 0}});
+                        token = response.message.token;
+                        sessionStorage.setItem(storageKey, token);
+                        await poll();
+                    } catch (error) { showError(error); busy = false; }
+                }});
+            }},
+            {fieldtype: "HTML", fieldname: "progress"}
+        ], primary_action_label: "确认导入预览中的学生", primary_action: async () => {
+            if (!token || busy) return;
+            busy = true;
+            dialog.get_primary_btn().prop("disabled", true);
+            try {
+                await frappe.call({method: "tongjianyun.student_roster_upload.confirm", args: {token}});
+                await poll();
+            } catch (error) { showError(error); busy = false; }
+        }});
+        const storageKey = `tjy-roster-task:${frappe.session.user}`;
+        const box = () => dialog.fields_dict.progress.$wrapper;
+        const showError = error => box().text(error?.message || "操作失败，请检查提示后重试。");
+        const poll = async () => {
+            clearTimeout(timer);
+            if (closed || !token) return;
+            try {
+                const response = await frappe.call({method: "tongjianyun.student_roster_upload.status", args: {token}});
+                if (closed) return;
+                const data = response.message;
+                busy = ["queued", "running", "importing"].includes(data.status);
+                dialog.get_primary_btn().prop("disabled", data.status !== "preview" || !data.rows.length);
+                const labels = {create: "新增", add_to_group: "加入班级", unchanged: "保持不变"};
+                let html = `<p role="status">${esc(data.message)}</p>`;
+                if (data.status === "preview") {
+                    html += `<p>新增 ${data.counts.create || 0} 人；已有学生加入班级 ${data.counts.add_to_group || 0} 人；保持不变 ${data.counts.unchanged || 0} 人；待核对 ${(data.errors || []).length} 项。</p>`;
+                    html += `<details><summary>查看字段识别依据</summary>${(data.mappings || []).map(m => `<p>${esc(m.sheet)} 第${m.header}行表头（${m.ai ? "AI辅助识别，请核对" : "规则识别"}）：${esc(m.fields.join("；"))}</p>`).join("")}</details>`;
+                    html += `<div style="max-height:300px;overflow:auto"><table class="table table-bordered"><thead><tr><th>来源</th><th>姓名</th><th>操作</th><th>班级</th><th>依据</th></tr></thead><tbody>${data.rows.map(r => `<tr><td>${esc(r.sheet)}:${r.row}</td><td>${esc(r.name)}</td><td>${esc(labels[r.action])}</td><td>${esc(r.group)}</td><td>${esc(r.basis)}</td></tr>`).join("")}</tbody></table></div>`;
+                }
+                if (data.errors?.length) html += `<details open><summary>待核对 ${data.errors.length} 项（本次不导入）</summary><div style="max-height:180px;overflow:auto">${data.errors.map(r => `<p>${esc(r.sheet)} 第${r.row}行 ${esc(r.name)}：${esc(r.reason)}</p>`).join("")}</div><p>修正原文件后重新上传，已导入学生会再次核对，不重复创建。</p></details>`;
+                if (data.result) html += `<p>已新增 ${data.result.created} 人，加入班级 ${data.result.added_to_group} 人，保持不变 ${data.result.unchanged} 人。结果摘要已记录在上传文件的评论中。</p>`;
+                box().html(html);
+                if (busy) timer = setTimeout(poll, 2000);
+                if (data.status === "completed") this.load();
+            } catch (error) {
+                busy = false;
+                showError(error);
+                box().append($('<button class="btn btn-default">重新读取任务状态</button>').on('click', poll));
+            }
+        };
+        dialog.$wrapper.on("hidden.bs.modal", () => {closed = true; clearTimeout(timer);});
+        dialog.show();
+        dialog.get_primary_btn().prop("disabled", true);
+        token = sessionStorage.getItem(storageKey);
+        if (token) poll();
     }
 
     async load() {
@@ -170,6 +242,7 @@ class TongjianyunOperationsWorkbench {
                 '</div>',
                 '<div class="tjy-metric-value"><strong>' + Number(item.value || 0).toLocaleString() + '</strong><em>' + escapeHtml(item.suffix || "") + '</em></div>',
                 '<small>' + escapeHtml(item.hint || "") + '</small>',
+                item.label === "在园幼儿" ? '<button type="button" class="btn btn-xs btn-default" style="float:right" data-upload-roster>上传学生名单</button>' : '',
             '</article>',
         ].join("");
     }
@@ -264,6 +337,7 @@ class TongjianyunOperationsWorkbench {
     }
 
     bindEvents() {
+        this.main.find("[data-upload-roster]").on("click", () => this.uploadRoster());
         this.main.find("[data-route]").on("click", (event) => {
             const target = $(event.currentTarget);
             this.openRoute(target.attr("data-route-type"), target.attr("data-route"));

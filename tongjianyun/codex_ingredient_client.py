@@ -34,6 +34,8 @@ def thread_params(directory):
 
 
 class CodexIngredientClient:
+    system = SYSTEM
+    output_schema = OUTPUT_SCHEMA
     def classify_ingredients(self, ingredients, groups):
         if not 0 < len(ingredients) <= 20 or not 0 < len(groups) <= 500:
             raise ClassificationUnavailable("Codex 分类批次大小无效。")
@@ -90,10 +92,12 @@ class CodexIngredientClient:
                 await request(1, "initialize", {"clientInfo": {"name": "tjy-ingredient", "version": "1"},
                     "capabilities": {"experimentalApi": True}})
                 await send({"method": "initialized", "params": {}})
-                thread = await request(2, "thread/start", thread_params(directory))
+                params = thread_params(directory)
+                params["baseInstructions"] = self.system
+                thread = await request(2, "thread/start", params)
                 await request(3, "turn/start", {"threadId": thread["thread"]["id"],
                     "input": [{"type": "text", "text": payload}], "approvalPolicy": "never",
-                    "outputSchema": OUTPUT_SCHEMA})
+                    "outputSchema": self.output_schema})
                 output = ""
                 while True:
                     event = await receive()
