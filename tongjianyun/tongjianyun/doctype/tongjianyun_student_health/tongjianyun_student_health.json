@@ -1,0 +1,23 @@
+{
+ "doctype": "DocType", "name": "Tongjianyun Student Health", "module": "Tongjianyun", "engine": "InnoDB", "track_changes": 1,
+ "field_order": ["month","student_group","student","student_name","gender","history_state","medical_history","allergy_state","allergy_history","contact_phone","information_source","review_status","change_reason","confirmed_by","confirmed_at"],
+ "fields": [
+  {"fieldname":"month","fieldtype":"Date","label":"登记月份","reqd":1,"in_list_view":1},
+  {"fieldname":"student_group","fieldtype":"Link","options":"Student Group","label":"班级","reqd":1},
+  {"fieldname":"student","fieldtype":"Link","options":"Student","label":"学生","reqd":1},
+  {"fieldname":"student_name","fieldtype":"Data","label":"姓名","read_only":1,"in_list_view":1},
+  {"fieldname":"gender","fieldtype":"Data","label":"性别","read_only":1},
+  {"fieldname":"history_state","fieldtype":"Select","label":"既往病史状态","options":"未登记\n明确无\n已登记\n待核实","default":"未登记","reqd":1},
+  {"fieldname":"medical_history","fieldtype":"Small Text","label":"既往病史原始说明"},
+  {"fieldname":"allergy_state","fieldtype":"Select","label":"过敏史状态","options":"未登记\n明确无\n已登记\n待核实","default":"未登记","reqd":1},
+  {"fieldname":"allergy_history","fieldtype":"Small Text","label":"过敏史原始说明"},
+  {"fieldname":"contact_phone","fieldtype":"Data","label":"联系电话（人工核对）"},
+  {"fieldname":"information_source","fieldtype":"Small Text","label":"信息来源"},
+  {"fieldname":"review_status","fieldtype":"Select","label":"核对状态","options":"待核对\n已核对","default":"待核对","reqd":1,"in_list_view":1},
+  {"fieldname":"change_reason","fieldtype":"Small Text","label":"修改原因"},
+  {"fieldname":"confirmed_by","fieldtype":"Link","options":"User","label":"核对人","read_only":1},
+  {"fieldname":"confirmed_at","fieldtype":"Datetime","label":"核对时间","read_only":1}
+ ],
+ "permissions":[{"role":"Tongjianyun Health Manager","read":1,"write":1,"create":1}],
+ "sort_field":"modified","sort_order":"DESC"
+}
