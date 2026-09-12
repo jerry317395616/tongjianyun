@@ -26,6 +26,7 @@
     identitySocketPath: /home/zyd/frappe/state/harness/authority.sock
     ownersDirectory: !!js process.env.DSH_SHARED_OWNERS_DIRECTORY
     timeoutMs: 90000
+    promptTimeoutMs: 600000
     maxRequests: 16
     maxOwnershipEntries: 10000
     maxResponseBytes: 1000000

@@ -4,6 +4,8 @@
   const projections = new Map();
   let selectedSession;
   let visibleRows = [];
+  let statusNode;
+  const showStatus = text => { if (statusNode) { statusNode.textContent = text; statusNode.hidden = !text; } };
   const sleep = (signal) => new Promise((resolve, reject) => {
     if (signal.aborted) { reject(signal.reason); return; }
     const abort = () => { clearTimeout(timer); reject(signal.reason); };
@@ -16,7 +18,11 @@
       headers: { 'Content-Type': 'application/json' },
       ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
     });
-    if (!response.ok) throw new Error('Account request failed: ' + response.status);
+    if (!response.ok) {
+      const error = new Error('请求失败（' + response.status + '）。请检查登录状态；不要重复提交业务。');
+      error.status = response.status;
+      throw error;
+    }
     return response.json();
   }
   const employee = (operation, payload, signal) => request('/employee/session/' + operation, payload, signal);
@@ -37,9 +43,15 @@
         if (!Array.isArray(input.content) || input.content.some(part => !['text', 'image'].includes(part.type)))
           throw new Error('Unsupported message content');
         const images = input.content.filter(part => part.type === 'image');
-        await employee('prompt', { sessionId: input.sessionId, requestId: input.requestId,
+        showStatus('正在处理，请稍候。回复会自动更新，请勿重复发送。');
+        try { await employee('prompt', { sessionId: input.sessionId, requestId: input.requestId,
           text: input.content.filter(part => part.type === 'text').map(part => part.text).join('\n') || 'Describe the attached image.',
           ...(images.length ? { images } : {}) }, signal);
+          showStatus('');
+        } catch (error) {
+          showStatus('请求连接已中断，正在读取已保存回复。请核对结果后再操作。');
+          throw error;
+        }
         return { accepted: true };
       }
       case 'session/page': return employee('page', { sessionId: input.address.sessionId,
@@ -98,13 +110,21 @@
       const sessionId = input.address.sessionId;
       selectedSession = sessionId;
       let cursor;
+      let failures = 0;
       while (!signal.aborted) {
+        try {
         const value = await request('/native/view', { sessionId, maxMessages: Math.min(input.maxMessages ?? 50, 100),
           ...(cursor === undefined ? {} : { afterSeq: cursor }) }, signal);
         projections.set(sessionId, value.snapshot.projections);
         if (cursor === undefined) yield value.snapshot;
         else for (const event of value.events) yield event;
         cursor = value.snapshot.cursor;
+        if (failures) showStatus('回复连接已恢复。');
+        failures = 0;
+        } catch (error) {
+          if (signal.aborted || [401, 403, 404].includes(error.status) || ++failures > 5) throw error;
+          showStatus('回复连接暂时中断，正在重连（' + failures + '/5）。不会重复提交问题。');
+        }
         await sleep(signal);
       }
     } else throw new Error('This stream is not available in the shared entry');
@@ -122,6 +142,11 @@
     },
   };
   document.addEventListener('DOMContentLoaded', () => {
+    statusNode = document.createElement('div');
+    statusNode.setAttribute('role', 'status'); statusNode.setAttribute('aria-live', 'polite');
+    statusNode.hidden = true;
+    statusNode.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:9999;background:#164638;color:white;padding:10px 16px;border-radius:8px;max-width:80%;font:14px sans-serif';
+    document.body.append(statusNode);
     const nav = document.createElement('nav');
     nav.style.cssText = 'position:fixed;right:16px;top:8px;z-index:9999;display:flex;gap:12px;font:13px sans-serif;background:var(--background,#fff);padding:6px 10px;border-radius:8px';
     const approve = document.createElement('a');
