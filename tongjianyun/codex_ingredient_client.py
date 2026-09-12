@@ -6,7 +6,7 @@ import tempfile
 from tongjianyun.ingredient_classification import ClassificationUnavailable, validate_proposals
 
 BINARY = "/home/zyd/frappe/openai-codex/codex-rs/target/release/codex"
-MODEL = "qwen3.6-35b-a3b-fp8"
+MODEL = "ione-pro"
 PROVIDER = 'model_providers.ingredient={name="ingredient",base_url="http://10.144.133.1:1234/v1",wire_api="responses"}'
 LIMIT = 128 * 1024
 OUTPUT_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["rows"],
