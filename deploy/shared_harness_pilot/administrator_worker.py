@@ -65,8 +65,26 @@ def execute(request):
     rows = service.read_documents(doctype, **options)
     if operation == "frappe_get_document":
         return {"doctype": doctype, "name": arguments["name"], "document": rows[0] if rows else None}
+    # read_documents above validates the DocType, fields and equality filters.
+    # Count through Frappe's permission-aware list path, never the returned page.
+    from frappe.desk.reportview import get_count
+    filters = {key: service._scalar(value) for key, value in (options.get("filters") or {}).items()}
+    if options.get("name") is not None:
+        filters["name"] = options["name"]
+    previous = frappe.local.form_dict
+    try:
+        frappe.local.form_dict = frappe._dict(doctype=doctype, filters=filters, distinct=1, limit=0)
+        total = int(get_count())
+    finally:
+        frappe.local.form_dict = previous
+    start = arguments.get("start", 0)
+    has_more = start + len(rows) < total
     return {"doctype": doctype, "rows": rows, "limit": arguments.get("limit", 20),
-            "start": arguments.get("start", 0)}
+            "start": start, "page_count": len(rows), "total_count": total,
+            "count_scope": "all_matching_records", "permission_scope": "current_user",
+            "filters": filters, "has_more": has_more,
+            "next_start": start + len(rows) if has_more else None,
+            "count_instructions": "总人数使用 total_count；page_count、limit 和 rows 长度仅为本页条数，不是总数。"}
 
 
 def main():
