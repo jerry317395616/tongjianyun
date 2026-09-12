@@ -20,6 +20,24 @@ try:
     r=execute({'operation':'frappe_list_documents','arguments':{'doctype':'Student','fields':['name'],'filters':{'enabled':0}}})
     assert r['total_count']==frappe.db.count('Student',{'enabled':0})
     print(json.dumps({'disabled_total':r['total_count'],'checks':'passed'}))
+    def query(operation, **arguments):
+        return execute({'operation':operation,'arguments':arguments})
+    bad=query('frappe_describe_doctype',doctype='Meal')
+    assert bad['error']['code']=='not_found', bad
+    bad=query('frappe_list_documents',doctype='Student',fields=['not_a_real_field'])
+    assert bad['error']['code']=='invalid_query', bad
+    denied=query('frappe_describe_doctype',doctype='User')
+    assert denied['error']['code']=='access_denied', denied
+    meta=query('frappe_describe_doctype',doctype='Tongjianyun Recipe Dish')
+    assert 'fields' in meta, meta
+    today=meta['query_context']['today']
+    dishes=query('frappe_list_documents',doctype='Tongjianyun Recipe Dish',fields=['recipe','meal_date','meal_slot','dish_name'],filters={'meal_date':today},limit=100)
+    assert 'total_count' in dishes, dishes
+    print(json.dumps({'today':today,'today_dish_count':dishes['total_count'],'error_classification':'passed'},ensure_ascii=False))
+    for label,dt in meta['query_context']['business_objects'].items():
+        result=query('frappe_describe_doctype',doctype=dt)
+        assert 'fields' in result,(dt,result)
+    print(json.dumps({'business_metadata_checks':len(meta['query_context']['business_objects'])}))
 finally:
     frappe.db.rollback()
     frappe.destroy()

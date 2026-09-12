@@ -12,7 +12,47 @@ from employee_read_broker import strict_json
 from shared_identity import READ_FIELDS
 
 
+BUSINESS_OBJECTS = {
+    "学生档案": "Student", "班级": "Student Group",
+    "学生考勤": "Student Attendance", "食谱计划": "Tongjianyun Recipe",
+    "每日餐次菜品": "Tongjianyun Recipe Dish",
+    "就餐人数确认": "Tongjianyun Daily Meal Confirmation",
+    "采购订单": "Purchase Order", "采购收货": "Purchase Receipt",
+    "采购发票": "Purchase Invoice", "付款记录": "Payment Entry",
+}
+
+
 def execute(request):
+    """Keep authentication failures closed; classify business read failures safely."""
+    from tongjianyun import harness_administrator as service
+    import frappe
+    service._administrator()
+    if not isinstance(request, dict) or request.get("operation") not in READ_FIELDS:
+        return _execute(request)
+    # Admission is rechecked by _execute. Do not reveal context on admission failure.
+    users = frappe.conf.get("tongjianyun_shared_harness_users")
+    if frappe.conf.get("tongjianyun_shared_harness_enabled") != 1 or not isinstance(users, list) or "Administrator" not in users:
+        raise PermissionError("Administrator is not admitted")
+    try:
+        result = _execute(request)
+    except frappe.DoesNotExistError:
+        result = {"ok": False, "error": {"code": "not_found", "message": "单据类型或记录不存在，不代表没有权限。请按业务对象目录核对名称。"}}
+    except (frappe.PermissionError, PermissionError):
+        result = {"ok": False, "error": {"code": "access_denied", "message": "此查询被访问策略拒绝；不能推断账号对所有业务都无权限。"}}
+    except (ValueError, TypeError, KeyError, frappe.ValidationError):
+        result = {"ok": False, "error": {"code": "invalid_query", "message": "查询参数或字段不受支持。先查询元数据；过滤条件仅支持字段与值的等值字典，排序仅支持 name asc。不是权限结论。"}}
+    except Exception:
+        result = {"ok": False, "error": {"code": "query_failed", "message": "业务查询执行失败，原因尚未确认；不得解释为无权限或无数据。"}}
+    result["query_context"] = {
+        "today": frappe.utils.nowdate(), "timezone": frappe.utils.get_system_timezone(),
+        "business_objects": {label: dt for label, dt in BUSINESS_OBJECTS.items()
+            if frappe.db.exists("DocType", dt) and frappe.has_permission(dt, "read")},
+        "recipe_rule": "食谱主表 Tongjianyun Recipe；按 meal_date 查询 Tongjianyun Recipe Dish，并核对关联食谱 is_deleted=0、workflow_status。草稿不得当已发布食谱，无当天记录不得用最近食谱冒充。",
+    }
+    return result
+
+
+def _execute(request):
     from tongjianyun import harness_administrator as service
     import frappe
     if not isinstance(request, dict) or set(request) != {"operation", "arguments"}:
