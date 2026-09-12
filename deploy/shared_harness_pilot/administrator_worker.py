@@ -22,6 +22,31 @@ BUSINESS_OBJECTS = {
 }
 
 
+def default_read_fields(meta, detail=False):
+    """Bounded projection from actual metadata; never SQL '*' or secret fields."""
+    from tongjianyun import harness_administrator as service
+    candidates = ["name", getattr(meta, "title_field", None)]
+    candidates += [f.fieldname for f in meta.fields if detail or f.in_list_view]
+    selected = []
+    for field in candidates:
+        try:
+            service._field(meta, field)
+        except ValueError:
+            continue
+        if field not in selected:
+            selected.append(field)
+    return selected[:64 if detail else 16]
+
+
+QUERY_CONTRACT = {
+    "fields": "显式 fields 为 1–64 个元数据字段名；省略时返回安全默认字段。只返回 name 不表示其他字段不可读。",
+    "filters": "最多 20 个字段的等值字典；不接受 SQL、表达式或运算符。",
+    "pagination": "limit 为 1–100 的整数，start 为 0–100000；总数使用 total_count，继续查询使用 next_start。",
+    "order_by": "仅支持 name asc；业务排序在返回结果中处理。",
+    "relations": "元数据 Link 字段的 options 是关联 DocType；使用该表的 get_document 并指定所需 fields，每次独立检查权限。",
+}
+
+
 def execute(request):
     """Keep authentication failures closed; classify business read failures safely."""
     from tongjianyun import harness_administrator as service
@@ -40,10 +65,11 @@ def execute(request):
     except (frappe.PermissionError, PermissionError):
         result = {"ok": False, "error": {"code": "access_denied", "message": "此查询被访问策略拒绝；不能推断账号对所有业务都无权限。"}}
     except (ValueError, TypeError, KeyError, frappe.ValidationError):
-        result = {"ok": False, "error": {"code": "invalid_query", "message": "查询参数或字段不受支持。先查询元数据；过滤条件仅支持字段与值的等值字典，排序仅支持 name asc。不是权限结论。"}}
+        result = {"ok": False, "error": {"code": "invalid_query", "message": "查询参数或字段不受支持。先查询元数据；limit 必须为 1–100，过滤条件仅支持等值字典，排序仅支持 name asc。不是权限结论。"}}
     except Exception:
         result = {"ok": False, "error": {"code": "query_failed", "message": "业务查询执行失败，原因尚未确认；不得解释为无权限或无数据。"}}
     result["query_context"] = {
+        "query_contract": QUERY_CONTRACT,
         "today": frappe.utils.nowdate(), "timezone": frappe.utils.get_system_timezone(),
         "business_objects": {label: dt for label, dt in BUSINESS_OBJECTS.items()
             if frappe.db.exists("DocType", dt) and frappe.has_permission(dt, "read")},
@@ -83,7 +109,8 @@ def _execute(request):
             except ValueError:
                 continue
             fields.append({"fieldname": field.fieldname, "fieldtype": field.fieldtype,
-                           "label": field.label})
+                           "label": field.label,
+                           "options": field.options if field.fieldtype in {"Link", "Select", "Dynamic Link"} else None})
         from tongjianyun.harness_administrator_approvals import WRITE_ENABLE_KEY
         enabled = frappe.conf.get(WRITE_ENABLE_KEY)
         can_preview = type(enabled) in {int, bool} and enabled == 1
@@ -93,18 +120,24 @@ def _execute(request):
                 field["writable"] = True
             except ValueError:
                 field["writable"] = False
-        return {"doctype": doctype, "fields": fields, "access": "preview-confirm" if can_preview else "read-only",
+        return {"doctype": doctype, "fields": fields,
+                "default_list_fields": default_read_fields(meta),
+                "default_detail_fields": default_read_fields(meta, detail=True),
+                "access": "preview-confirm" if can_preview else "read-only",
                 "change_preview": {"tool": "employee_application_preview", "operation": "update",
                     "arguments": {"doctype": doctype, "name": "existing record name", "changes": "writable scalar fields only"},
                     "operations": ["create", "update", "submit", "cancel", "delete"],
                     "instructions": "Prepare only the requested change. A preview is NOT execution; the user must review and confirm separately."}
                 if can_preview else None}
     options = {key: value for key, value in arguments.items() if key != "doctype"}
+    if options.get("fields") is None:
+        options["fields"] = default_read_fields(service._meta(doctype), detail=operation == "frappe_get_document")
     if options.pop("order_by", "name asc") not in {None, "name asc"}:
         raise ValueError("Only name asc ordering is currently supported")
     rows = service.read_documents(doctype, **options)
     if operation == "frappe_get_document":
-        return {"doctype": doctype, "name": arguments["name"], "document": rows[0] if rows else None}
+        return {"doctype": doctype, "name": arguments["name"], "selected_fields": options["fields"],
+                "document": rows[0] if rows else None}
     # read_documents above validates the DocType, fields and equality filters.
     # Count through Frappe's permission-aware list path, never the returned page.
     from frappe.desk.reportview import get_count
@@ -119,7 +152,7 @@ def _execute(request):
         frappe.local.form_dict = previous
     start = arguments.get("start", 0)
     has_more = start + len(rows) < total
-    return {"doctype": doctype, "rows": rows, "limit": arguments.get("limit", 20),
+    return {"doctype": doctype, "rows": rows, "selected_fields": options["fields"], "limit": arguments.get("limit", 20),
             "start": start, "page_count": len(rows), "total_count": total,
             "count_scope": "all_matching_records", "permission_scope": "current_user",
             "filters": filters, "has_more": has_more,

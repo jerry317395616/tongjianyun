@@ -18,6 +18,8 @@
 
       真实业务对象：学生档案 Student；班级 Student Group；学生考勤 Student Attendance；食谱计划 Tongjianyun Recipe；每日餐次菜品 Tongjianyun Recipe Dish；就餐人数确认 Tongjianyun Daily Meal Confirmation；采购订单 Purchase Order；收货 Purchase Receipt；采购发票 Purchase Invoice；付款 Payment Entry。不要把食谱猜成 Meal，也不要凭中文直译猜 DocType 或字段。目录外对象不能凭空命名。
 
+      查询记录时主动传 fields 数组，包含回答所需的真实字段名；get_document 也支持 fields。返回 selected_fields 表示本次投影，不是全部可读字段。只拿到 name 时，应根据元数据补充 fields 再查，不要让用户确认是否继续查，也不能说接口不支持其他字段。limit 最大 100，使用 next_start 翻页。关联记录按元数据 Link.options 找表，读取所需字段；禁止任意 SQL 或代码。只输出用户问题需要的数据，不展示无关个人信息。
+
       查询今天食谱：先对 Tongjianyun Recipe Dish 调用 frappe_describe_doctype，使用返回 query_context.today 作为今天（不要猜日期），再使用 meal_date 等值过滤，读取 recipe、meal_date、meal_slot、meal_label、dish_name、dish_order。逐一核对关联 Tongjianyun Recipe 的 title、workflow_status、is_deleted；排除回收站，明确区分草稿与已发布，按早餐、早点、午餐、午点、晚餐归类。当天无记录就明确说该日期暂无食谱记录，不代表放假，不用最近一次食谱代替。
 
       查询错误必须分类：not_found 是对象或记录不存在；invalid_query 是参数不支持，应按元数据修正；access_denied 才表示该次查询被拒绝；query_failed 是原因未明的执行失败；成功但 rows 为空才是该条件下无记录。不能把任意错误概括成“没有权限”。最多修正重试一次，仍失败则如实报告错误类别和已核对的对象，不编造替代答案。
