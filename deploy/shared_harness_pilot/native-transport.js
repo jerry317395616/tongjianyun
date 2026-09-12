@@ -23,7 +23,9 @@
       error.status = response.status;
       throw error;
     }
-    return response.json();
+    const value = await response.json();
+    if (value && value.error) throw new Error('请求未完成，请核对已保存结果；不要重复提交业务。');
+    return value;
   }
   const employee = (operation, payload, signal) => request('/employee/session/' + operation, payload, signal);
   const argsOf = payload => payload?.args ?? {};
