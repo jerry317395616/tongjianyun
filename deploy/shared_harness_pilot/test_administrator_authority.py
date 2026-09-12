@@ -34,6 +34,22 @@ class AuthorityTests(unittest.IsolatedAsyncioTestCase):
         return {"version": 1, "operation": "read", "value": {"credential": cookie,
             "operation": "frappe_list_documents", "arguments": {"doctype": doctype}}}
 
+    async def test_catalog_is_bound_to_verified_administrator(self):
+        cookie = await self.login("Administrator")
+        request = self.request(cookie)
+        request["value"].update(operation="frappe_list_doctypes", arguments={"limit": 20})
+        self.assertEqual(await self.authority.execute(request), {"rows": []})
+        self.worker.assert_any_await("frappe_list_doctypes", {"limit": 20}, 5)
+
+    async def test_catalog_does_not_expand_teacher_scope(self):
+        cookie = await self.login("teacher")
+        request = self.request(cookie)
+        request["value"].update(operation="frappe_list_doctypes", arguments={})
+        result = await self.authority.execute(request)
+        self.assertEqual(result["error"]["code"], "access_denied")
+        self.worker.assert_not_awaited()
+        self.read.assert_not_awaited()
+
     async def test_signed_administrator_can_read_outside_employee_scope(self):
         cookie = await self.login("Administrator")
         self.assertEqual(await self.authority.execute(self.request(cookie)), {"rows": []})

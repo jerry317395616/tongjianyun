@@ -19,6 +19,7 @@ HELPERS = Path("/home/zyd/frappe/deepseek-harness/packages/extensions/tool-nativ
 sys.path.insert(0, str(HELPERS))
 from employee_read_broker import bounded_process, strict_json
 from shared_identity import Configuration, SharedIdentity, IdentityServer, NativeEnabledCheck, NativeRead, READ_FIELDS
+READ_FIELDS = {**READ_FIELDS, "frappe_list_doctypes": {"search", "start", "limit"}}
 
 
 async def administrator_worker(operation, arguments, timeout):
@@ -70,6 +71,8 @@ class AdministratorAuthority(SharedIdentity):
         if principal is None:
             raise PermissionError("login unavailable")
         if principal["user"] != "Administrator":
+            if value["operation"] == "frappe_list_doctypes":
+                return {"ok": False, "error": {"code": "access_denied", "message": "当前账号仅可使用既有配置的业务查询范围，尚未开放动态目录。"}}
             return await super().execute(request)
         if "Administrator" in self.readers:
             raise ValueError("read already running")

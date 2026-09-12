@@ -15,6 +15,11 @@ try:
     def query(op, **args):
         return execute({'operation': 'frappe_' + op, 'arguments': args})
     dt = 'Tongjianyun Recipe Dish'
+    catalog = query('list_doctypes', search=dt, limit=1)
+    assert catalog['rows'][0]['doctype'] == dt
+    assert query('list_doctypes', search='User')['rows'] == []
+    assert query('list_doctypes', limit=101)['error']['code'] == 'invalid_query'
+    assert query('list_doctypes', search={'sql': 'select'})['error']['code'] == 'invalid_query'
     meta = query('describe_doctype', doctype=dt)
     assert next(f for f in meta['fields'] if f['fieldname'] == 'recipe')['options'] == 'Tongjianyun Recipe'
     today = meta['query_context']['today']

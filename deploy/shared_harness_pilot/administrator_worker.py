@@ -10,6 +10,7 @@ HELPERS = Path("/home/zyd/frappe/deepseek-harness/packages/extensions/tool-nativ
 sys.path.insert(0, str(HELPERS))
 from employee_read_broker import strict_json
 from shared_identity import READ_FIELDS
+READ_FIELDS = {**READ_FIELDS, "frappe_list_doctypes": {"search", "start", "limit"}}
 
 
 BUSINESS_OBJECTS = {
@@ -97,6 +98,29 @@ def _execute(request):
     if (not isinstance(operation, str) or operation not in READ_FIELDS or not isinstance(arguments, dict)
             or set(arguments) - READ_FIELDS[operation]):
         raise ValueError("unsupported read")
+    if operation == "frappe_list_doctypes":
+        search = arguments.get("search", "")
+        start, limit = arguments.get("start", 0), arguments.get("limit", 20)
+        if not isinstance(search, str) or len(search) > 100 or type(start) is not int or not 0 <= start <= 100000 or type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid catalog query")
+        matches = []
+        # Metadata only. Business rows are always read separately via get_list.
+        for dt in frappe.get_all("DocType", pluck="name", order_by="name asc"):
+            try:
+                meta = service._meta(dt)
+            except (PermissionError, frappe.PermissionError):
+                continue
+            if not frappe.has_permission(dt, "read"):
+                continue
+            label = frappe._(dt)
+            if search.casefold() not in (dt + " " + label + " " + meta.module).casefold():
+                continue
+            matches.append({"doctype": dt, "label": label, "module": meta.module,
+                            "title_field": meta.title_field, "is_submittable": bool(meta.is_submittable)})
+        page = matches[start:start + limit]
+        return {"rows": page, "total_count": len(matches), "page_count": len(page),
+                "next_start": start + len(page) if start + len(page) < len(matches) else None,
+                "instructions": "按实际目录选择对象，describe 查询字段与操作。目录不授予写权限；写操作必须走既有 preview-confirm。"}
     doctype = arguments["doctype"]
     if operation == "frappe_get_document":
         service._name(arguments.get("name"))
