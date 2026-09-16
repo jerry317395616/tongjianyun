@@ -1,0 +1,42 @@
+童健云教师视频采集程序 · Windows 10/11 试运行版
+
+本包不包含摄像头密码、服务端密钥、教师照片或人脸模板。
+请在园内实际采集电脑安装；不需要 VPN，不需要开放摄像头公网端口。
+
+准备：
+1. 电脑与摄像头接入同一局域网，查明摄像头 IP。
+2. 安装面向全机的 Python 3.11+、FFmpeg（需同时包含 ffmpeg.exe 和 ffprobe.exe）。
+3. 确认教师授权、专用拍摄通道、采集时段，校准电脑时间并关闭自动睡眠。
+4. 由管理员在童健云「教师视频考勤 → 设备设置」创建设备和专用上传账号。
+   上传账号只用于上传，不要使用 Administrator 的密钥。
+
+配置：
+将 config.example.json 复制为 config.json，填写实际 IP、摄像头账号、专用上传密钥和 FFmpeg 路径。
+密码有 @、:、# 等特殊字符时，应在 RTSP URL 中做 URL 编码。
+摄像头的 RTSP 路径须以实机验证为准。
+示例默认周一至周五 06:30–19:30，每约一分钟分段上传。请按园区实际时间修改。
+config.json 是私密文件，不要发到群聊、聊天或 GitHub。
+
+安装（管理员 PowerShell，替换实际路径）：
+  .\install-windows.ps1 -ConfigPath C:\Private\config.json -PythonPath C:\Python312\python.exe
+
+确认配置和授权后启动：
+  Start-ScheduledTask -TaskName TongjianyunVideoCollector
+
+停止：
+  Stop-ScheduledTask -TaskName TongjianyunVideoCollector
+
+安装后任务会随电脑启动后台运行。无需老师每天打开窗口。
+本地状态：C:\ProgramData\TongjianyunVideo\spool\status.json
+本地日志：C:\ProgramData\TongjianyunVideo\spool\collector.log
+本地默认缓存上限 20 GiB；满盘停止录制并报警，不覆盖未上传片段。
+上传经服务器确认后，本地片段缓存 24 小时再清理。服务端视频默认按拍摄时间保留 3 天。
+关闭或断电的电脑无法录像；摄像头不在线不能补造视频。
+
+服务器页面：
+https://child.myyr.top/desk/teacher-video-attendance
+
+重要：当前是候选核实模式，尚未完成实际摄像头、识别准确率和活体防冒用验收。
+系统不会自动认定缺勤、生成工资或影响既有考勤。
+照片/口罩遮挡等不确定结果需要核实，必须提供非刷脸打卡方式。
+在现场取得真实设备 IP 后，再进行安装联调和教师授权注册。

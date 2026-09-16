@@ -1,0 +1,5 @@
+{
+ "doctype": "Page", "name": "teacher-video-attendance", "page_name": "teacher-video-attendance",
+ "title": "教师视频考勤", "module": "Tongjianyun", "standard": "Yes", "system_page": 0,
+ "roles": []
+}

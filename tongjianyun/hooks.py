@@ -26,6 +26,7 @@ add_to_apps_screen = [
 before_migrate = "tongjianyun.education_integration.before_migrate"
 
 after_migrate = [
+    "tongjianyun.video_attendance.setup.install",
     "tongjianyun.education_integration.install",
     "tongjianyun.student_identity.install",
     "tongjianyun.meal_attendance_setup.install",
@@ -84,6 +85,7 @@ doc_events = {
 }
 
 scheduler_events = {
+    "cron": {"*/2 * * * *": ["tongjianyun.video_attendance.jobs.tick"]},
     "daily": [
         "tongjianyun.daily_meals.prepare_today_confirmation",
         "tongjianyun.education_data_notifications.notify_missing_education_data",
@@ -101,3 +103,5 @@ has_permission = {
 }
 permission_query_conditions["Tongjianyun Class Meal Confirmation"] = "tongjianyun.student_meals.query_condition"
 has_permission["Tongjianyun Class Meal Confirmation"] = "tongjianyun.student_meals.document_permission"
+
+page_js = {"tongjianyun-workbench": "public/js/video_attendance_entry.js"}
