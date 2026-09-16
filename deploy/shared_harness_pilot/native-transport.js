@@ -34,7 +34,15 @@
     const input = requestOf(payload);
     switch (endpoint) {
       case 'session/list': return employee('list', {}, signal);
-      case 'session/create': return employee('create', {}, signal);
+      case 'session/create': {
+        const created = await employee('create', {}, signal);
+        // A blank session has sequence -1 but already owns default projections.
+        // Hydrate those through the account-checked view before the composer
+        // requests its model selection; no model request or business write runs.
+        const view = await request('/native/view', { sessionId: created.sessionId, maxMessages: 1 }, signal);
+        projections.set(created.sessionId, view.snapshot.projections);
+        return created;
+      }
       case 'session/modelCatalog': return request('/native/models',undefined,signal);
       case 'session/selectModel': return request('/native/model-selection',input,signal);
       case 'session/attachment': return request('/native/attachment',input,signal);
@@ -74,12 +82,17 @@
         visibleRows = list.items;
         for (const row of list.items) {
           const prior = seen.get(row.sessionId);
-          if (!prior) yield { type: 'emit', event: 'api-session/added', args: [row] };
+          const block = projections.get(row.sessionId);
+          const projectedAt = block?.asOfSeq;
+          // Session additions carry cursor -1 defaults in the upstream wire
+          // contract. Projection deltas only accept non-negative sequences.
+          if (!prior || (block && prior.projectedAt !== projectedAt))
+            yield { type: 'emit', event: 'api-session/added', args: [{ ...row, ...(block ? { projections: block } : {}) }] };
           if (!prior || prior.running !== row.running)
             yield { type: 'emit', event: 'api-session/status', args: [row.sessionId, row.running] };
           if (!prior || prior.updatedAt !== row.updatedAt)
             yield { type: 'emit', event: 'api-session/activity', args: [row.sessionId, row.updatedAt] };
-          seen.set(row.sessionId, row);
+          seen.set(row.sessionId, { ...row, projectedAt });
         }
         await sleep(signal);
       }
@@ -96,11 +109,12 @@
         await sleep(signal);
       }
     } else if (endpoint === 'session/control') {
-      yield { type: 'baseline', value: { queues: {}, jobs: {}, projections: {} } };
+      // Exactly one opening baseline is allowed per stream generation.
+      yield { type: 'baseline', value: { queues: {}, jobs: {}, projections: Object.fromEntries(projections) } };
       const seen = new Map();
       while (!signal.aborted) {
         for (const [sessionId, block] of projections) {
-          if (seen.get(sessionId) === block.asOfSeq) continue;
+          if (block.asOfSeq < 0 || seen.get(sessionId) === block.asOfSeq) continue;
           for (const [key, value] of Object.entries(block.values))
             yield { type: 'projection', sessionId, key, value, seq: block.asOfSeq };
           seen.set(sessionId, block.asOfSeq);
