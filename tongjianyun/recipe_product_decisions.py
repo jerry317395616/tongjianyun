@@ -1,7 +1,7 @@
 """Persist explicit product decisions using existing audited trace documents."""
 import json
 import frappe
-from tongjianyun.recipe_procurement import TRACE, _read, _permission, digest, conversion
+from tongjianyun.recipe_procurement import TRACE, _read, _permission, _trace_available, digest, conversion
 from tongjianyun.ingredient_resolution import FILTERS, requires_product_confirmation
 
 KIND = "erp_recipe_product_decision"
@@ -10,6 +10,8 @@ def record_key(recipe, key):
     return KIND + "::" + digest([recipe, key])[:32]
 
 def read_decision(recipe, row):
+    if not _trace_available():
+        return None
     _permission(TRACE, "read")
     key = record_key(recipe, row["key"])
     if not frappe.db.exists(TRACE, key):
@@ -47,6 +49,8 @@ def confirm(recipe, revision, decisions):
     snapshot = source_snapshot(recipe)
     if snapshot["revision"] != revision:
         frappe.throw("食材已变化，请重新打开待确认窗口。")
+    if not _trace_available():
+        frappe.throw("旧采购追踪单据已停用；请在采购预览中直接关联 ERPNext 物料。")
     _permission(TRACE, "read")
     _permission(TRACE, "create")
     source = {r["key"]: r for r in snapshot["ingredients"]}

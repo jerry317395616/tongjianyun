@@ -13,9 +13,7 @@ RECIPE_DOCTYPE = "Tongjianyun Recipe"
 DISH_DOCTYPE = "Tongjianyun Recipe Dish"
 INGREDIENT_DOCTYPE = "Tongjianyun Recipe Ingredient"
 
-RECIPE_EXECUTION_DOCTYPES = (
-    ("Tongjianyun Food Purchase", "食安采购"),
-)
+PROCUREMENT_REQUEST_TITLE_PREFIX = "童健云食谱采购 · "
 
 MEAL_SLOTS = ("breakfast", "morningSnack", "lunch", "snack", "dinner")
 MEAL_LABELS = {
@@ -25,6 +23,14 @@ MEAL_LABELS = {
     "snack": "\u5348\u70b9",
     "dinner": "\u665a\u9910",
 }
+
+
+def _doctype_available(doctype: str) -> bool:
+    """Return whether a DocType is registered, not merely backed by an old table."""
+    try:
+        return bool(frappe.db.exists("DocType", doctype))
+    except Exception:
+        return False
 
 
 def _require_login() -> None:
@@ -111,67 +117,79 @@ def _get_recipe_name(recipe: str) -> str:
     return recipe_name
 
 
-def _purchase_trace_blocks_deletion(row) -> bool:
-    """Keep audit traces, but only orphaned ERP request traces cease blocking."""
-    if row.record_type == "erp_recipe_auto_mapping":
-        return False
-    if row.record_type != "erp_recipe_request":
-        return True
-    try:
-        data = json.loads(row.record_json or "{}")
-    except (ValueError, TypeError):
-        return True
-    request = data.get("material_request") if isinstance(data, dict) else None
-    if not isinstance(request, str) or not request.strip():
-        return True  # Incomplete or corrupt traces require investigation.
-    if frappe.db.exists("Material Request", request):
-        return True  # Even cancelled documents remain business history.
-    for doctype in ("Purchase Order Item", "Purchase Receipt Item", "Purchase Invoice Item"):
-        if frappe.db.exists(doctype, {"material_request": request}):
-            return True
-    return False
+def _unique_linked_parents(child_doctype: str, filters: dict[str, Any]) -> list[str]:
+    if not _doctype_available(child_doctype) or not frappe.db.table_exists(child_doctype):
+        return []
+    rows = frappe.get_all(
+        child_doctype,
+        filters=filters,
+        pluck="parent",
+        limit_page_length=0,
+    )
+    return sorted({_clean(name) for name in rows if _clean(name)})
+
+
+def _erpnext_procurement_links(recipe_doc) -> list[dict[str, Any]]:
+    """Return ERPNext procurement records created from this recipe."""
+    if not _doctype_available("Material Request") or not frappe.db.table_exists("Material Request"):
+        return []
+
+    request_title = PROCUREMENT_REQUEST_TITLE_PREFIX + _clean(recipe_doc.name)
+    requests = [
+        _clean(name)
+        for name in frappe.get_all(
+            "Material Request",
+            filters={
+                "title": request_title,
+                "material_request_type": "Purchase",
+            },
+            pluck="name",
+            limit_page_length=0,
+        )
+        if _clean(name)
+    ]
+    if not requests:
+        return []
+
+    links = [{"doctype": "Material Request", "label": "采购需求", "count": len(set(requests))}]
+    orders = _unique_linked_parents(
+        "Purchase Order Item",
+        {"material_request": ["in", requests]},
+    )
+    if orders:
+        links.append({"doctype": "Purchase Order", "label": "采购订单", "count": len(orders)})
+
+        receipts = _unique_linked_parents(
+            "Purchase Receipt Item",
+            {"purchase_order": ["in", orders]},
+        )
+        if receipts:
+            links.append({"doctype": "Purchase Receipt", "label": "采购收货", "count": len(receipts)})
+
+        invoices = _unique_linked_parents(
+            "Purchase Invoice Item",
+            {"purchase_order": ["in", orders]},
+        )
+        if invoices:
+            links.append({"doctype": "Purchase Invoice", "label": "采购发票", "count": len(invoices)})
+    return links
 
 
 def _recipe_business_links(recipe_doc) -> list[dict[str, Any]]:
     """Return downstream business records that overlap or identify this recipe."""
 
-    recipe_tokens = tuple(
-        str(token)
-        for token in (
-            recipe_doc.name,
-            recipe_doc.recipe_id,
-            recipe_doc.title,
-            recipe_doc.week_start,
-            recipe_doc.week_end,
-        )
-        if _clean(token)
-    )
-    links: list[dict[str, Any]] = []
-    for doctype, label in RECIPE_EXECUTION_DOCTYPES:
-        if not frappe.db.table_exists(doctype):
-            continue
-        filters = []
-        for fieldname in ("record_id", "parent_id", "source", "record_json"):
-            if not frappe.db.has_column(doctype, fieldname):
-                continue
-            for token in recipe_tokens:
-                filters.append([fieldname, "like", f"%{token}%"])
-        if not filters:
-            continue
-        # Integrity checks intentionally include records hidden by user permissions;
-        # only aggregate counts, never their contents, are exposed to the client.
-        rows = frappe.get_all(doctype, or_filters=filters,
-            fields=["record_type", "record_json"], limit_page_length=0)
-        count = sum(_purchase_trace_blocks_deletion(row) for row in rows)
-        if count:
-            links.append({"doctype": doctype, "label": label, "count": count})
+    links: list[dict[str, Any]] = _erpnext_procurement_links(recipe_doc)
 
     if recipe_doc.week_start and recipe_doc.week_end:
         for doctype, label, date_field in (
             ("Tongjianyun Daily Meal Confirmation", "就餐确认", "meal_date"),
             ("Tongjianyun Daily Meal Adjustment", "就餐调整", "meal_date"),
         ):
-            if not frappe.db.table_exists(doctype) or not frappe.db.has_column(doctype, date_field):
+            if (
+                not _doctype_available(doctype)
+                or not frappe.db.table_exists(doctype)
+                or not frappe.db.has_column(doctype, date_field)
+            ):
                 continue
             count = frappe.db.count(
                 doctype,

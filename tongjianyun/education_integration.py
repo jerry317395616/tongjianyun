@@ -45,7 +45,6 @@ OWNER_SCOPED_PERMISSIONS = {
 
 TONGJIANYUN_ROLE_PERMISSIONS = {'Tongjianyun Business Operator': {'Tongjianyun Daily Meal Adjustment': 'crw',
                                    'Tongjianyun Daily Meal Confirmation': 'crw',
-                                   'Tongjianyun Food Purchase': 'cdrw',
                                    'Tongjianyun Recipe': 'cdrw',
                                    'Tongjianyun Recipe Dish': 'cdrw',
                                    'Tongjianyun Recipe Ingredient': 'cdrw'}}

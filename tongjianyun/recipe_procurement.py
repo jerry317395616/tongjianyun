@@ -554,9 +554,27 @@ def revision_impact(recipe):
         _, rows = _source(recipe)
         current_revision = digest(rows)
     if not _trace_available():
+        title = "童健云食谱采购 · " + recipe
+        rows = frappe.get_list(
+            "Material Request",
+            filters={
+                "title": title,
+                "material_request_type": "Purchase",
+                "docstatus": ["<", 2],
+            },
+            fields=["name", "docstatus"],
+            order_by="creation asc",
+            limit_page_length=0,
+        )
         return {
-            "requests": [],
-            "message": "采购需求已改用 ERPNext 标准物料需求和采购订单；当前食谱没有旧采购追踪记录。",
+            "requests": [
+                {"name": row.name, "docstatus": row.docstatus, "changed": True}
+                for row in rows
+            ],
+            "message": (
+                "食谱修改不会覆盖原采购需求、订单或库存。正式 ERPNext 单据不保存旧食谱哈希，"
+                "发现既有采购需求时请按已变化处理并人工核对。"
+            ),
         }
     _permission(TRACE, "read")
     output = []

@@ -439,18 +439,19 @@ function buildNutritionRows(analysis) {
         ["protein", "蛋白质供热", "protein_energy_range"],
     ]) {
         const range = analysis.calculation_rule?.macro_ranges?.[key] || standard[rangeKey] || [0, 0];
-        const actual = numberValue(analysis.macro_energy_ratio[key]);
+        const actualPercent = numberValue(analysis.macro_energy_ratio[key]);
         const refKcalLow = energyTotal * range[0] / 100;
         const refKcalHigh = energyTotal * range[1] / 100;
         const targetKcalLow = refKcalLow * ratio;
         const targetKcalHigh = refKcalHigh * ratio;
+        const actualKcal = energyTotal * actualPercent / 100;
         rows.push({
             label,
             full: `${formatNumber(refKcalLow, 0)}–${formatNumber(refKcalHigh, 0)}`,
             garden: `${formatNumber(targetKcalLow, 0)}–${formatNumber(targetKcalHigh, 0)}`,
-            actual: `${formatNumber(actual)}%`,
-            rate: `${formatNumber(actual)}%`,
-            evaluation: actual >= range[0] && actual <= range[1] ? "适宜" : (actual < range[0] ? "偏低" : "偏高"),
+            actual: formatNumber(actualKcal, 0),
+            rate: `${formatNumber(actualPercent)}%`,
+            evaluation: actualPercent >= range[0] && actualPercent <= range[1] ? "适宜" : (actualPercent < range[0] ? "偏低" : "偏高"),
         });
     }
     nutrient("protein", "总量（g）", { group: "蛋白质", groupRows: 3 });

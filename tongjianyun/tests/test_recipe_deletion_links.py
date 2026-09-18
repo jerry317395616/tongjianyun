@@ -1,47 +1,63 @@
-import json
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from frappe import _dict
+
 from tongjianyun import recipe_storage as service
 
 
 class DeletionLinksTests(unittest.TestCase):
-    def check(self, kind='erp_recipe_request', payload=None, exists=None):
-        row = _dict(record_type=kind, record_json=json.dumps({'material_request': 'MR1'}) if payload is None else payload)
-        with patch.object(service.frappe, 'db', MagicMock()) as db:
-            db.exists.side_effect = exists or (lambda *args: False)
-            return service._purchase_trace_blocks_deletion(row)
+    def recipe(self):
+        return _dict(
+            name="R1",
+            recipe_id="R1",
+            title="Recipe",
+            week_start=None,
+            week_end=None,
+            workflow_status="已归档",
+            is_deleted=0,
+        )
 
-    def test_deleted_request_without_downstream_does_not_block(self):
-        self.assertFalse(self.check())
-
-    def test_existing_request_blocks(self):
-        self.assertTrue(self.check(exists=lambda dt, value: dt == 'Material Request'))
-
-    def test_each_downstream_blocks(self):
-        for child in ('Purchase Order Item', 'Purchase Receipt Item', 'Purchase Invoice Item'):
-            with self.subTest(child=child):
-                self.assertTrue(self.check(exists=lambda dt, value: dt == child))
-
-    def test_corrupt_and_incomplete_remain_blocked(self):
-        for payload in ('{', '[]', '{}', '{"material_request": null}'):
-            with self.subTest(payload=payload):
-                self.assertTrue(self.check(payload=payload))
-
-    def test_other_records_preserve_policy(self):
-        self.assertTrue(self.check(kind='food_purchase'))
-        self.assertFalse(self.check(kind='erp_recipe_auto_mapping'))
-
-    def test_integration_count_and_actions(self):
-        doc = _dict(name='R1', recipe_id='R1', title='Recipe', week_start=None,
-                    week_end=None, workflow_status='已归档', is_deleted=0)
-        row = _dict(record_type='erp_recipe_request', record_json='{"material_request":"MR1"}')
-        with patch.object(service.frappe, 'db', MagicMock()) as db, \
-             patch.object(service.frappe, 'get_all', return_value=[row]), \
-             patch.object(service, '_can_restore_recipe', return_value=True):
-            db.exists.return_value = False
+    def test_no_procurement_allows_delete(self):
+        doc = self.recipe()
+        with patch.object(service, "_doctype_available", return_value=True),              patch.object(service.frappe, "db", MagicMock()) as db,              patch.object(service.frappe, "get_all", return_value=[]),              patch.object(service, "_can_restore_recipe", return_value=True):
+            db.table_exists.return_value = True
             self.assertEqual(service._recipe_business_links(doc), [])
-            self.assertTrue(service._recipe_actions(doc)['can_delete'])
-            db.exists.return_value = True
-            self.assertEqual(service._recipe_business_links(doc)[0]['count'], 1)
-            self.assertFalse(service._recipe_actions(doc)['can_delete'])
+            self.assertTrue(service._recipe_actions(doc)["can_delete"])
+
+    def test_erpnext_procurement_chain_blocks_deletion(self):
+        doc = self.recipe()
+
+        def get_all(doctype, *args, **kwargs):
+            if doctype == "Material Request":
+                self.assertEqual(
+                    kwargs["filters"]["title"],
+                    service.PROCUREMENT_REQUEST_TITLE_PREFIX + "R1",
+                )
+                return ["MR1", "MR2"]
+            if doctype == "Purchase Order Item":
+                return ["PO1", "PO1", "PO2"]
+            if doctype == "Purchase Receipt Item":
+                return ["PR1"]
+            if doctype == "Purchase Invoice Item":
+                return ["PI1", "PI2"]
+            return []
+
+        with patch.object(service, "_doctype_available", return_value=True),              patch.object(service.frappe, "db", MagicMock()) as db,              patch.object(service.frappe, "get_all", side_effect=get_all):
+            db.table_exists.return_value = True
+            links = service._recipe_business_links(doc)
+
+        self.assertEqual(
+            links,
+            [
+                {"doctype": "Material Request", "label": "采购需求", "count": 2},
+                {"doctype": "Purchase Order", "label": "采购订单", "count": 2},
+                {"doctype": "Purchase Receipt", "label": "采购收货", "count": 1},
+                {"doctype": "Purchase Invoice", "label": "采购发票", "count": 2},
+            ],
+        )
+        self.assertFalse(service._recipe_actions(doc, links)["can_delete"])
+
+
+if __name__ == "__main__":
+    unittest.main()

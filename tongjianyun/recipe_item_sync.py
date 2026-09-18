@@ -6,7 +6,7 @@ import frappe
 from tongjianyun.ingredient_classification import request_classification, ClassificationUnavailable, validate_proposals
 from tongjianyun.codex_ingredient_client import CodexIngredientClient
 from tongjianyun.ingredient_resolution import FILTERS, requires_product_confirmation
-from tongjianyun.recipe_procurement import TRACE, _permission, _read, conversion, digest
+from tongjianyun.recipe_procurement import TRACE, _permission, _read, _trace_available, conversion, digest
 
 KIND = "erp_recipe_auto_mapping"
 INGREDIENT = "Tongjianyun Recipe Ingredient"
@@ -38,11 +38,13 @@ def source_snapshot(recipe, *, require_write=True, allow_empty=False):
     if len(dishes) != frappe.db.count("Tongjianyun Recipe Dish", {"recipe": recipe}):
         frappe.throw("无法读取完整菜品明细。", frappe.PermissionError)
     source = [{"key": key, **row} for key, row in sorted(rows.items())]
-    decision_filters = {"parent_id": recipe, "record_type": "erp_recipe_product_decision"}
-    decisions = frappe.get_list(TRACE, filters=decision_filters,
-        fields=["record_id", "modified"], limit_page_length=0)
-    if len(decisions) != frappe.db.count(TRACE, decision_filters):
-        frappe.throw("无法读取完整食材确认记录。", frappe.PermissionError)
+    decisions = []
+    if _trace_available():
+        decision_filters = {"parent_id": recipe, "record_type": "erp_recipe_product_decision"}
+        decisions = frappe.get_list(TRACE, filters=decision_filters,
+            fields=["record_id", "modified"], limit_page_length=0)
+        if len(decisions) != frappe.db.count(TRACE, decision_filters):
+            frappe.throw("无法读取完整食材确认记录。", frappe.PermissionError)
     # Publishing or changing a title does not alter ingredient processing. The
     # parent modified value is checked separately under the apply-time row lock.
     metadata = {field: doc.get(field) for field in ("week_start", "week_end")}
@@ -65,7 +67,10 @@ def _state(recipe, value):
 def schedule_after_save(recipe):
     try:
         snapshot = source_snapshot(recipe)
-        for dt, action in (("Item", "read"), (TRACE, "create"), (TRACE, "read")):
+        checks = [("Item", "read")]
+        if _trace_available():
+            checks.extend(((TRACE, "create"), (TRACE, "read")))
+        for dt, action in checks:
             _permission(dt, action)
     except Exception:
         return {"recipe": recipe, "status": "blocked", "message": "食谱已保存；账号权限或食材明细不满足自动建档条件，可联系管理员查看。"}
@@ -172,8 +177,10 @@ def make_plan(recipe):
 def apply_plan(plan):
     """Caller owns transaction and serialization; no commits or permission bypasses here."""
     _permission("Item", "read")
-    _permission(TRACE, "read")
-    _permission(TRACE, "create")
+    trace_available = _trace_available()
+    if trace_available:
+        _permission(TRACE, "read")
+        _permission(TRACE, "create")
     # Recipe saves update this parent before rebuilding details. Hold its row lock
     # through the caller's commit so an older plan cannot race a newer save.
     locked_modified = frappe.db.get_value("Tongjianyun Recipe", plan["recipe"], "modified", for_update=True)
@@ -245,12 +252,13 @@ def apply_plan(plan):
             frappe.db.rollback(save_point=savepoint)
             result["unresolved"].append({**row, "reason": "权限、分类或物料校验未通过，未创建该物料。"})
     summarize_result(result)
-    key = KIND + "::" + digest(current["recipe"])[:32]
-    receipt = _read(TRACE, key) if frappe.db.exists(TRACE, key) else frappe.get_doc({"doctype": TRACE, "data_key": key})
-    receipt.update({"record_type": KIND, "record_id": current["revision"], "parent_id": current["recipe"],
-        "title": "食谱食材自动匹配", "status": result["status"], "source": "Source Codex + local Qwen / ERPNext standard ORM",
-        "record_json": json.dumps(result, ensure_ascii=False)})
-    receipt.save() if not receipt.is_new() else receipt.insert()
+    if trace_available:
+        key = KIND + "::" + digest(current["recipe"])[:32]
+        receipt = _read(TRACE, key) if frappe.db.exists(TRACE, key) else frappe.get_doc({"doctype": TRACE, "data_key": key})
+        receipt.update({"record_type": KIND, "record_id": current["revision"], "parent_id": current["recipe"],
+            "title": "食谱食材自动匹配", "status": result["status"], "source": "Source Codex + local Qwen / ERPNext standard ORM",
+            "record_json": json.dumps(result, ensure_ascii=False)})
+        receipt.save() if not receipt.is_new() else receipt.insert()
     return result
 
 
@@ -303,7 +311,9 @@ def get_sync_status(recipe):
     recipe = _get_recipe_name(recipe)
     _read("Tongjianyun Recipe", recipe)
     _permission("Item", "read")
-    _permission(TRACE, "read")
+    trace_available = _trace_available()
+    if trace_available:
+        _permission(TRACE, "read")
     try:
         state = frappe.cache.get_value(_cache_key(recipe))
     except Exception:
@@ -311,7 +321,8 @@ def get_sync_status(recipe):
     current = source_snapshot(recipe, require_write=False, allow_empty=True)
     if state and state.get("revision") == current["revision"]:
         return state
-    _permission(TRACE, "read")
+    if not trace_available:
+        return {"status": "not_started", "message": "旧采购追踪单据已停用；保存食谱后将使用 ERPNext 物料匹配结果。"}
     key = KIND + "::" + digest(recipe)[:32]
     if frappe.db.exists(TRACE, key):
         saved = json.loads(_read(TRACE, key).record_json)

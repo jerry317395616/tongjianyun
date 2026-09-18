@@ -49,14 +49,15 @@ class TestRecipeRevision(unittest.TestCase):
 
     def test_purchase_impact_is_read_only(self):
         recipe = SimpleNamespace(is_deleted=False, workflow_status="已发布")
-        trace = SimpleNamespace(record_json='{"material_request":"MR-1","revision":"old"}')
-        mr = SimpleNamespace(name="MR-1", docstatus=1)
+        request = SimpleNamespace(name="MR-1", docstatus=1)
         with patch.object(procurement, "_permission"), \
-             patch.object(procurement, "_read", side_effect=[recipe, trace, mr]), \
+             patch.object(procurement, "_read", return_value=recipe), \
              patch.object(procurement, "_source", return_value=(recipe, [{"amount": 60}])), \
-             patch.object(procurement.frappe, "get_list", return_value=[SimpleNamespace(name="trace")]), \
+             patch.object(procurement, "_trace_available", return_value=False), \
+             patch.object(procurement.frappe, "get_list", return_value=[request]), \
              patch.object(procurement.frappe, "get_doc") as write:
             result = procurement.revision_impact("r")
             self.assertTrue(result["requests"][0]["changed"])
             self.assertEqual(result["requests"][0]["docstatus"], 1)
+            self.assertIn("ERPNext", result["message"])
             write.assert_not_called()

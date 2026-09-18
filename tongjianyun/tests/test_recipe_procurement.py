@@ -53,6 +53,8 @@ class TestRecipeProcurement(unittest.TestCase):
         with patch.object(service, "_source", return_value=(_dict(name="WEEK"), rows)), \
              patch.object(service, "_read", side_effect=lambda dt, name: warehouse if dt == "Warehouse" else item), \
              patch.object(service, "_payload", side_effect=lambda v: v), \
+             patch.object(service, "_default_buying_price_list", return_value="Standard Buying"), \
+             patch.object(service, "_current_buying_price", return_value=None), \
              patch.object(service.frappe, "db", new=MagicMock()), \
              patch.object(service, "nowdate", return_value="2026-09-08"), \
              patch.object(service.frappe, "throw", side_effect=throw):
@@ -94,14 +96,16 @@ class TestRecipeProcurement(unittest.TestCase):
 
     def test_create_uses_preview_date_and_draft_only(self):
         plan = self.make_plan(dates=['2026-09-06', '2026-09-07'], include_history=1)
-        # Request name is serialized into trace JSON; supply a real string.
-        trace, request = MagicMock(), MagicMock()
+        request = MagicMock()
         request.name = 'MR-test'
-        with patch.object(service, '_permission'), patch.object(service, '_plan', return_value=plan), \
-             patch.object(service.frappe, 'db', MagicMock(exists=MagicMock(return_value=False))), \
-             patch.object(service.frappe, 'get_doc', side_effect=[trace, request]) as create:
+        with patch.object(service, '_permission'), patch.object(service, '_read', return_value=MagicMock()), \
+             patch.object(service, '_plan', return_value=plan), patch.object(service, '_apply_plan_rates'), \
+             patch.object(service, '_trace_available', return_value=False), \
+             patch.object(service.frappe, 'db', MagicMock()), \
+             patch.object(service.frappe, 'get_list', return_value=[]), \
+             patch.object(service.frappe, 'get_doc', return_value=request) as create:
             service.create_request('WEEK', 'School', 'Kitchen', {}, {}, plan['token'], confirmed=1, include_history=1)
-            data = create.call_args_list[1].args[0]
+            data = create.call_args.args[0]
             self.assertEqual(data['transaction_date'], '2026-09-06')
             self.assertEqual(data['items'][0]['schedule_date'], '2026-09-06')
             self.assertNotIn('docstatus', data)
@@ -109,7 +113,9 @@ class TestRecipeProcurement(unittest.TestCase):
             request.submit.assert_not_called()
 
     def test_changed_mode_rejected_before_write(self):
-        with patch.object(service, '_permission'), patch.object(service, '_plan', return_value={'token': 'new'}), \
+        with patch.object(service, '_permission'), patch.object(service, '_read', return_value=MagicMock()), \
+             patch.object(service, '_plan', return_value={'token': 'new'}), \
+             patch.object(service.frappe, 'db', MagicMock()), \
              patch.object(service.frappe, 'throw', side_effect=ValueError), \
              patch.object(service.frappe, 'get_doc') as write:
             with self.assertRaises(ValueError):

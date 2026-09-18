@@ -318,8 +318,8 @@ class TongjianyunOperationsWorkbench {
 
     quickActions() {
         return [
-            { icon: "meal", tone: "green", title: "今日出勤", hint: "记录幼儿出勤状态，确认备餐", type: "Page", route: "meal-attendance-teacher" },
-            { icon: "meal", tone: "amber", title: "今日备餐", hint: "查看用餐人数，确认备餐完成", type: "Page", route: "meal-kitchen-dashboard" },
+            { icon: "meal", tone: "green", title: "今日考勤", hint: "查看幼儿正式考勤记录", type: "DocType", route: "Student Attendance" },
+            { icon: "meal", tone: "amber", title: "今日就餐确认", hint: "核对考勤、请假与实际就餐人数", type: "DocType", route: "Tongjianyun Daily Meal Confirmation" },
             { icon: "chart", tone: "violet", title: "周食谱营养分析", hint: "查看带量食谱与营养评价", type: "Page", route: "weekly-recipe-nutrition-sheet" },
             { icon: "chart", tone: "green", title: "食材营养统计", hint: "按食材查看全部营养指标贡献", type: "Report", route: "Ingredient Nutrition Statistics" },
             { icon: "chart", tone: "cyan", title: "营养计算规则", hint: "版本化维护营养公式、阈值与供能目标", type: "DocType", route: "Tongjianyun Nutrition Rule Set" },

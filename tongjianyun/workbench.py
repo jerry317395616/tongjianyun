@@ -12,7 +12,8 @@ WORKSPACE_NAME = "童健云"
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
 DISH_DOCTYPE = "Tongjianyun Recipe Dish"
 CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
-PURCHASE_DOCTYPE = "Tongjianyun Food Purchase"
+PURCHASE_DOCTYPE = "Purchase Order"
+PURCHASE_PAGE = "weekly-orders"
 NUTRITION_RULE_DOCTYPE = "Tongjianyun Nutrition Rule Set"
 
 CLOSED_STATUSES = ("完成", "已完成", "关闭", "已关闭", "closed", "completed", "done")
@@ -23,8 +24,20 @@ def _require_login() -> None:
         frappe.throw(_("Not logged in."), frappe.AuthenticationError)
 
 
+def _doctype_available(doctype: str) -> bool:
+    """Check DocType metadata before touching a table left by an old feature."""
+    try:
+        return bool(frappe.db.exists("DocType", doctype))
+    except Exception:
+        return False
+
+
 def _can_read(doctype: str) -> bool:
-    return bool(frappe.db.table_exists(doctype) and frappe.has_permission(doctype, "read"))
+    return bool(
+        _doctype_available(doctype)
+        and frappe.db.table_exists(doctype)
+        and frappe.has_permission(doctype, "read")
+    )
 
 
 def _count(doctype: str, filters: Any = None) -> int:
@@ -71,8 +84,9 @@ def _open_count(doctype: str) -> int:
         return 0
     return sum(
         1
-        for row in frappe.get_list(doctype, fields=["status"], page_length=0)
-        if str(row.status or "").strip().lower() not in CLOSED_STATUSES
+        for row in frappe.get_list(doctype, fields=["status", "docstatus"], page_length=0)
+        if int(row.docstatus or 0) != 2
+        and str(row.status or "").strip().lower() not in CLOSED_STATUSES
     )
 
 
@@ -92,7 +106,7 @@ def get_overview() -> dict[str, Any]:
     dish_count = _count(DISH_DOCTYPE, {"recipe": recipe["name"]}) if recipe else 0
     student_count = _count("Student", {"enabled": 1})
     group_count = _count("Student Group", {"disabled": 0})
-    purchase_total = _count(PURCHASE_DOCTYPE)
+    purchase_total = _count(PURCHASE_DOCTYPE, {"docstatus": ["<", 2]})
     purchase_open = _open_count(PURCHASE_DOCTYPE)
 
     group_ready = group_count > 0
@@ -176,8 +190,8 @@ def get_overview() -> dict[str, Any]:
             "status": purchase_status[0],
             "status_label": purchase_status[1],
             "action_label": "处理采购",
-            "route_type": "DocType",
-            "route": PURCHASE_DOCTYPE,
+            "route_type": "Page",
+            "route": PURCHASE_PAGE,
         },
     ]
     next_step = next((step for step in steps if step["status"] in {"attention", "pending"}), steps[-1])
@@ -290,6 +304,78 @@ def get_overview() -> dict[str, Any]:
     }
 
 
+def install_director_dashboard_entry() -> None:
+    """Install only the director cockpit entry without touching retired/experimental links."""
+    if not frappe.db.exists("Workspace", WORKSPACE_NAME):
+        return
+    if not frappe.db.exists("Page", "director-dashboard"):
+        frappe.throw(_("园长驾驶舱页面尚未安装"))
+
+    workspace = frappe.get_doc("Workspace", WORKSPACE_NAME)
+    rows = list(workspace.get("sidebar_items") or [])
+    existing = next((row for row in rows if row.link_type == "Page" and row.link_to == "director-dashboard"), None)
+    if existing:
+        existing.label = "园长驾驶舱"
+        existing.icon = "layout-dashboard"
+        existing.child = 0
+    else:
+        row = workspace.append("sidebar_items", _sidebar_link("园长驾驶舱", "Page", "director-dashboard", "layout-dashboard"))
+        rows = list(workspace.get("sidebar_items") or [])
+        rows.remove(row)
+        rows.insert(min(2, len(rows)), row)
+        workspace.set("sidebar_items", rows)
+
+    for index, row in enumerate(workspace.get("sidebar_items") or [], start=1):
+        row.idx = index
+
+    if not any(row.type == "Page" and row.link_to == "director-dashboard" for row in workspace.get("shortcuts") or []):
+        workspace.append("shortcuts", {
+            "type": "Page",
+            "link_to": "director-dashboard",
+            "label": "园长驾驶舱",
+            "color": "Blue",
+            "stats_filter": "[]",
+        })
+
+    workspace.save(ignore_permissions=True)
+    frappe.db.commit()
+    frappe.clear_cache()
+
+
+def _cleanup_retired_workspace_content(workspace) -> None:
+    try:
+        content = json.loads(workspace.content or "[]")
+    except Exception:
+        return
+    if not isinstance(content, list):
+        return
+
+    retired = {"今日出勤", "今日备餐", "月度结算"}
+    cleaned = []
+    for block in content:
+        data = block.get("data") if isinstance(block, dict) else None
+        shortcut_name = data.get("shortcut_name") if isinstance(data, dict) else None
+        if block.get("type") == "shortcut" and shortcut_name in retired:
+            continue
+        cleaned.append(block)
+
+    existing = {
+        block.get("data", {}).get("shortcut_name")
+        for block in cleaned
+        if isinstance(block, dict) and isinstance(block.get("data"), dict)
+    }
+    desired = [
+        {"id": "tjyDirectorDashboard", "type": "shortcut", "data": {"shortcut_name": "园长驾驶舱", "col": 3}},
+        {"id": "tjyStudentAttendance", "type": "shortcut", "data": {"shortcut_name": "今日考勤", "col": 3}},
+    ]
+    insert_at = next((i for i, block in enumerate(cleaned) if isinstance(block, dict) and block.get("type") == "spacer"), len(cleaned))
+    for block in reversed(desired):
+        if block["data"]["shortcut_name"] not in existing:
+            cleaned.insert(insert_at, block)
+
+    workspace.content = json.dumps(cleaned, ensure_ascii=False)
+
+
 def install() -> None:
     if not frappe.db.exists("Workspace", WORKSPACE_NAME):
         return
@@ -313,6 +399,7 @@ def install() -> None:
         for item in _workspace_links():
             workspace.append("links", item)
 
+        _cleanup_retired_workspace_content(workspace)
         workspace.save(ignore_permissions=True)
         frappe.db.commit()
     finally:
@@ -324,14 +411,11 @@ def _sidebar_items() -> list[dict[str, Any]]:
     return [
         _sidebar_link("首页", "Workspace", WORKSPACE_NAME, "home", default=1),
         _sidebar_link("业务工作台", "Page", "tongjianyun-workbench", "layout-dashboard"),
+        _sidebar_link("园长驾驶舱", "Page", "director-dashboard", "layout-dashboard"),
         _section("出勤管理", "calendar-check"),
-        _sidebar_link("今日出勤（教师端）", "Page", "meal-attendance-teacher", child=1),
-        _sidebar_link("今日备餐（厨房端）", "Page", "meal-kitchen-dashboard", child=1),
         _sidebar_link("今日就餐确认", "DocType", CONFIRMATION_DOCTYPE, child=1),
         _sidebar_link("就餐调整记录", "DocType", "Tongjianyun Daily Meal Adjustment", child=1),
-        _sidebar_link("月度结算", "Page", "meal-finance-settlement", child=1),
         _sidebar_link("月度就餐统计", "DocType", "Tongjianyun Meal Attendance", child=1),
-        _sidebar_link("园长看板", "Page", "director-dashboard", child=1),
         _section("膳食营养", "salad"),
         _sidebar_link("食谱计划", "Page", "tongjianyun-recipe-workbench", child=1),
         _sidebar_link("周食谱营养分析", "Page", "weekly-recipe-nutrition-sheet", child=1),
@@ -377,22 +461,20 @@ def _section(label: str, icon: str):
 def _shortcuts() -> list[dict[str, Any]]:
     return [
         {"type": "Page", "link_to": "tongjianyun-workbench", "label": "业务工作台", "color": "Green", "stats_filter": "[]"},
-        {"type": "Page", "link_to": "meal-attendance-teacher", "doc_view": "", "label": "今日出勤", "color": "Blue", "stats_filter": "[]"},
-        {"type": "Page", "link_to": "meal-kitchen-dashboard", "doc_view": "", "label": "今日备餐", "color": "Orange", "stats_filter": "[]"},
+        {"type": "Page", "link_to": "director-dashboard", "label": "园长驾驶舱", "color": "Blue", "stats_filter": "[]"},
+        {"type": "DocType", "link_to": "Student Attendance", "doc_view": "List", "label": "今日考勤", "color": "Blue", "stats_filter": "[]"},
         {"type": "DocType", "link_to": CONFIRMATION_DOCTYPE, "doc_view": "List", "label": "今日就餐确认", "color": "Blue", "stats_filter": "[]"},
         {"type": "Page", "link_to": "tongjianyun-recipe-workbench", "label": "食谱计划", "color": "Green", "stats_filter": "[]"},
-        {"type": "Page", "link_to": "meal-finance-settlement", "doc_view": "", "label": "月度结算", "color": "Purple", "stats_filter": "[]"},
     ]
 
 
 def _workspace_content() -> list[dict[str, Any]]:
     return [
         {"id": "tjyWorkbench", "type": "shortcut", "data": {"shortcut_name": "业务工作台", "col": 3}},
-        {"id": "tjyTeacherAttendance", "type": "shortcut", "data": {"shortcut_name": "今日出勤", "col": 3}},
-        {"id": "tjyKitchenDashboard", "type": "shortcut", "data": {"shortcut_name": "今日备餐", "col": 3}},
+        {"id": "tjyDirectorDashboard", "type": "shortcut", "data": {"shortcut_name": "园长驾驶舱", "col": 3}},
+        {"id": "tjyStudentAttendance", "type": "shortcut", "data": {"shortcut_name": "今日考勤", "col": 3}},
         {"id": "tjyAttendance", "type": "shortcut", "data": {"shortcut_name": "今日就餐确认", "col": 3}},
         {"id": "tjyRecipe", "type": "shortcut", "data": {"shortcut_name": "食谱计划", "col": 3}},
-        {"id": "tjyFinanceSettlement", "type": "shortcut", "data": {"shortcut_name": "月度结算", "col": 3}},
         {"id": "tjySpacer", "type": "spacer", "data": {"col": 12}},
         {"id": "tjyAttendanceCard", "type": "card", "data": {"card_name": "就餐管理", "col": 4}},
         {"id": "tjyMealCard", "type": "card", "data": {"card_name": "膳食营养", "col": 4}},

@@ -21,7 +21,7 @@ DAILY_MEAL_CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
 RECIPE_DISH_DOCTYPE = "Tongjianyun Recipe Dish"
 RECIPE_INGREDIENT_DOCTYPE = "Tongjianyun Recipe Ingredient"
-FOOD_PURCHASE_DOCTYPE = "Tongjianyun Food Purchase"
+PROCUREMENT_REQUEST_TITLE_PREFIX = "童健云食谱采购 · "
 
 SERVICE_TOKEN_CONFIG_KEY = "tongjianyun_dify_food_safety_token"
 SCHOOL_NAME_CONFIG_KEY = "tongjianyun_food_safety_school_name"
@@ -200,24 +200,79 @@ def _latest_recipe() -> dict[str, Any] | None:
 
 
 def _recent_procurement_summaries() -> list[dict[str, Any]]:
-    if not frappe.db.table_exists(FOOD_PURCHASE_DOCTYPE):
-        return []
-    rows = frappe.get_all(
-        FOOD_PURCHASE_DOCTYPE,
-        fields=("title", "status", "risk", "category", "source", "modified"),
+    """Return bounded summaries from the formal ERPNext procurement chain."""
+    for doctype in ("Material Request", "Purchase Order", "Purchase Order Item"):
+        if not frappe.db.exists("DocType", doctype) or not frappe.db.table_exists(doctype):
+            return []
+
+    requests = frappe.get_all(
+        "Material Request",
+        filters={
+            "title": ["like", f"{PROCUREMENT_REQUEST_TITLE_PREFIX}%"],
+            "material_request_type": "Purchase",
+        },
+        fields=("name", "title", "status", "docstatus", "transaction_date", "modified"),
         order_by="modified desc",
-        limit_page_length=MAX_PURCHASE_SUMMARIES,
+        limit_page_length=MAX_PURCHASE_SUMMARIES * 4,
     )
+    if not requests:
+        return []
+
+    request_names = [row.name for row in requests if row.name]
+    linked_orders = sorted({
+        row.parent
+        for row in frappe.get_all(
+            "Purchase Order Item",
+            filters={"material_request": ["in", request_names]},
+            fields=("parent",),
+            limit_page_length=0,
+        )
+        if row.parent
+    })
+    if linked_orders:
+        rows = frappe.get_all(
+            "Purchase Order",
+            filters={"name": ["in", linked_orders], "docstatus": ["<", 2]},
+            fields=(
+                "name",
+                "title",
+                "status",
+                "supplier_name",
+                "transaction_date",
+                "grand_total",
+                "per_received",
+                "modified",
+            ),
+            order_by="modified desc",
+            limit_page_length=MAX_PURCHASE_SUMMARIES,
+        )
+        return [
+            {
+                "title": _as_text(row.title) or _as_text(row.name),
+                "status": _as_text(row.status),
+                "risk": "",
+                "category": "食材采购",
+                "source": "ERPNext Purchase Order",
+                "supplier": _as_text(row.supplier_name),
+                "transaction_date": str(row.transaction_date or ""),
+                "amount": flt(row.grand_total),
+                "received_percent": flt(row.per_received),
+                "last_updated_at": str(row.modified),
+            }
+            for row in rows
+        ]
+
     return [
         {
-            "title": _as_text(row.title),
-            "status": _as_text(row.status),
-            "risk": _as_text(row.risk),
-            "category": _as_text(row.category),
-            "source": _as_text(row.source),
+            "title": _as_text(row.title) or _as_text(row.name),
+            "status": _as_text(row.status) or ("草稿" if int(row.docstatus or 0) == 0 else "已提交"),
+            "risk": "",
+            "category": "采购需求",
+            "source": "ERPNext Material Request",
+            "transaction_date": str(row.transaction_date or ""),
             "last_updated_at": str(row.modified),
         }
-        for row in rows
+        for row in requests[:MAX_PURCHASE_SUMMARIES]
     ]
 
 

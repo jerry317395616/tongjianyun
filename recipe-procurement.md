@@ -28,7 +28,7 @@
 - 全园已确认就餐人数仅为提示，需人工确认适用班级/餐次范围；空人数不能推定为在册人数。
 - 毛料换算系数由使用者确认；质量与体积之间不猜密度、包装不猜规格。
 - 新物料使用 ERPNext 原生快速录入，尊重 Item 创建权限。
-- 采购追溯复用 Tongjianyun Food Purchase 既有 JSON 字段，独立 record_type=erp_recipe_request。
+- 正式采购追溯以 ERPNext Material Request → Purchase Order → Purchase Receipt → Purchase Invoice 关联链为准；旧站点历史追踪表仅做兼容读取。
   不调用原有 storage.py 中绕过权限的接口。
 - 一份食谱、一个公司仅生成一个集成需求。相同请求重试打开原单；参数变化拒绝覆盖或重复创建。
   撤销、部分采购后的差额修订不在本阶段自动执行，需人工核对并采用明确修订流程。
@@ -44,7 +44,7 @@
 ## 校验
 
 源食谱、菜品/食材明细、物料、公司、仓库均需可读；创建需 Material Request create、
-Tongjianyun Food Purchase create/write/read 权限。未配置权限时拒绝，不自动提权。
+ERPNext Material Request / Purchase Order / Purchase Receipt / Purchase Invoice 按操作所需权限校验；旧追踪表不存在时不要求其权限，也不自动提权。
 库存单位必须存在，物料必须启用且可采购、维护库存；整数单位禁止小数需求。
 食谱含过去日期、空需求、未匹配项、单位变化及预览后来源变化均阻止创建。
 

@@ -131,7 +131,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-10 14:09:28.473164",
+ "modified": "2026-09-18 17:44:23.973500",
  "modified_by": "Administrator",
  "module": "Tongjianyun",
  "name": "\u7ae5\u5065\u4e91",
@@ -209,6 +209,14 @@
    "type": "Page"
   },
   {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "\u56ed\u957f\u9a7e\u9a76\u8231",
+   "link_to": "director-dashboard",
+   "stats_filter": "[]",
+   "type": "Page"
+  },
+  {
    "color": "Cyan",
    "doc_view": "List",
    "label": "\u6708\u5ea6\u5c31\u9910\u7edf\u8ba1",
@@ -241,6 +249,20 @@
    "keep_closed": 0,
    "label": "\u4e1a\u52a1\u5de5\u4f5c\u53f0",
    "link_to": "tongjianyun-workbench",
+   "link_type": "Page",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "layout-dashboard",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "\u56ed\u957f\u9a7e\u9a76\u8231",
+   "link_to": "director-dashboard",
    "link_type": "Page",
    "open_in_new_tab": 0,
    "show_arrow": 0,

@@ -21,8 +21,7 @@ def run():
                 continue
             frappe.set_user(user)
             preview[user] = {dt + ":" + action: bool(frappe.has_permission(dt, ptype=action))
-                for dt, action in (("Item", "read"), ("Item", "create"), ("Item Group", "create"),
-                    ("Tongjianyun Food Purchase", "read"), ("Tongjianyun Food Purchase", "create"))}
+                for dt, action in (("Item", "read"), ("Item", "create"), ("Item Group", "create"))}
         frappe.set_user("Administrator")
         job = frappe.enqueue("tongjianyun.tests.check_recipe_item_sync_queue.probe", queue="long", timeout=30,
             expected_user="Administrator", job_id="tjy-sync-probe-" + uuid.uuid4().hex)

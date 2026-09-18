@@ -1,4 +1,4 @@
-frappe.pages['weekly-purchase-orders'].on_page_load = function (wrapper) {
+frappe.pages['weekly-orders'].on_page_load = function (wrapper) {
   const page = frappe.ui.make_app_page({ parent: wrapper, title: '一周采购订单', single_column: true });
   const body = $(wrapper).find('.layout-main-section').html('<div class="tjy-weekly-orders"><p>正在加载本周订单…</p></div>');
   const call = method => frappe.call({ method: `tongjianyun.recipe_procurement.${method}` });
