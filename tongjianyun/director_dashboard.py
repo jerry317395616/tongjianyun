@@ -543,6 +543,12 @@ def _scene_nav() -> list[dict[str, Any]]:
             "route": ["List", "Student Attendance"],
         },
         {
+            "id": "teacher_attendance",
+            "label": "教师考勤",
+            "icon": "◎",
+            "route": ["List", "Employee Checkin"],
+        },
+        {
             "id": "nutrition",
             "label": "膳食营养",
             "icon": "♨",
@@ -758,6 +764,14 @@ def _business_cards(
             ),
             "route": ["List", "Student Group"],
             "tone": "green",
+        },
+        {
+            "id": "teacher_attendance",
+            "icon": "🧑‍🏫",
+            "title": "教师考勤",
+            "description": "查看教职工上下班打卡记录",
+            "route": ["List", "Employee Checkin"],
+            "tone": "cyan",
         },
         {
             "id": "nutrition",

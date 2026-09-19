@@ -28,6 +28,7 @@ REMOVED_DOCTYPES = (
 ROLE_PERMISSIONS = {'Tongjianyun Business Operator': {'Academic Term': 'crw',
                                    'Academic Year': 'crw',
                                    'Data Import': 'crw',
+                                   'Employee Checkin': 'r',
                                    'Guardian': 'crw',
                                    'Instructor': 'crw',
                                    'Program': 'crw',

@@ -83,6 +83,22 @@ class TestDirectorDashboard(unittest.TestCase):
         self.assertTrue(any(task["title"] == "本周食谱尚未编制" for task in tasks))
         self.assertTrue(any(task["title"] == "采购订单尚未全部提交" for task in tasks))
 
+    def test_teacher_attendance_entry_routes_to_employee_checkin(self):
+        scenes = director_dashboard._scene_nav()
+        teacher_scene = next(row for row in scenes if row["id"] == "teacher_attendance")
+        self.assertEqual(teacher_scene["label"], "教师考勤")
+        self.assertEqual(teacher_scene["route"], ["List", "Employee Checkin"])
+
+        cards = director_dashboard._business_cards(
+            {"group_total": 3, "student_total": 257},
+            {"dish_count": 0},
+            {"order_count": 0, "amount": 0},
+            {"month_label": "2026年09月", "spend": 0},
+        )
+        teacher_card = next(row for row in cards if row["id"] == "teacher_attendance")
+        self.assertEqual(teacher_card["title"], "教师考勤")
+        self.assertEqual(teacher_card["route"], ["List", "Employee Checkin"])
+
     @patch.object(director_dashboard, "_safe_get_list")
     def test_material_request_scope_is_tongjianyun_recipe_only(self, get_list):
         get_list.return_value = [{"name": "MAT-REQ-1"}]
