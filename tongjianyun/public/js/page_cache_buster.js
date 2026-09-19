@@ -1,23 +1,23 @@
 (() => {
-    const recipePageVersion = "20260911-recipe-defaults-2";
-    const versionKey = "tongjianyun_recipe_page_version";
+    const pageCacheVersion = "20260919-director-teacher-attendance-1";
+    const versionKey = "tongjianyun_page_cache_version";
     const reloadKey = `${versionKey}_reloaded`;
-    const cachedPages = ["tongjianyun-recipe-workbench", "tongjianyun-workbench", "weekly-recipe-nutrition-sheet"];
+    const cachedPages = ["tongjianyun-recipe-workbench", "tongjianyun-workbench", "weekly-recipe-nutrition-sheet", "director-dashboard"];
 
     try {
-        if (window.localStorage.getItem(versionKey) === recipePageVersion) return;
+        if (window.localStorage.getItem(versionKey) === pageCacheVersion) return;
         const hadStalePage = cachedPages.some((page) => Boolean(window.localStorage.getItem(`_page:${page}`)));
         cachedPages.forEach((page) => window.localStorage.removeItem(`_page:${page}`));
-        window.localStorage.setItem(versionKey, recipePageVersion);
+        window.localStorage.setItem(versionKey, pageCacheVersion);
         if (
             hadStalePage &&
             cachedPages.some((page) => window.location.pathname.includes(page)) &&
-            window.sessionStorage.getItem(reloadKey) !== recipePageVersion
+            window.sessionStorage.getItem(reloadKey) !== pageCacheVersion
         ) {
-            window.sessionStorage.setItem(reloadKey, recipePageVersion);
+            window.sessionStorage.setItem(reloadKey, pageCacheVersion);
             window.location.reload();
         }
     } catch (error) {
-        console.warn("Unable to refresh the Tongjianyun recipe page cache.", error);
+        console.warn("Unable to refresh the Tongjianyun page cache.", error);
     }
 })();
