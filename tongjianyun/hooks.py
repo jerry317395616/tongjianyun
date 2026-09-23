@@ -13,8 +13,8 @@ ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
 app_home = "/tongjianyun-entry"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
 app_include_js = [
-    "/assets/tongjianyun/js/page_cache_buster.js?v=teacher-entry-compat-20260923-1",
-    "/assets/tongjianyun/js/teacher_entry_compat.js?v=teacher-entry-compat-20260923-1",
+    "/assets/tongjianyun/js/page_cache_buster.js?v=meal-flow-20260923-1",
+    "/assets/tongjianyun/js/teacher_entry_compat.js?v=meal-flow-20260923-1",
 ]
 
 # Preserve the restricted management Page; route old teacher bookmarks safely.

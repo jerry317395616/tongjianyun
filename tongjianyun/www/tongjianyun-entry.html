@@ -43,7 +43,7 @@
       {% endif %}
       <nav class="secondary-links" aria-label="其他入口"><a href="/tongjianyun-entry?choose=1">重新选择工作入口</a>{% if entry.business_available %}<a href="/desk/tongjianyun-workbench">原业务工作台 ↗</a>{% endif %}</nav>
       </section>
-      <aside class="guide"><span class="guide-icon" aria-hidden="true">✿</span><h2>工作，就在教室里</h2><p>点击学生与物件，在同一场景里完成日常班级管理。</p><div><b>门口点名台</b><span>到园、请假与缺勤核对</span></div><div><b>班级餐桌</b><span>预计与实际用餐分别确认</span></div><div><b>黑板与阅读角</b><span>查看课表，记录真实观察</span></div><p class="note">健康资料继续遵循专属权限。卡通布局与人物动作仅作示意，不是实时定位或自动识别。</p></aside>
+      <aside class="guide"><span class="guide-icon" aria-hidden="true">✿</span><h2>{{ "工作，就在教室里" if entry.profiles | length == 1 and entry.profiles[0].id == "teacher" else "走进自己的业务场景" }}</h2><p>点击学生与物件，在同一场景里完成日常班级管理。</p><div><b>门口点名台</b><span>到园、请假与缺勤核对</span></div><div><b>班级餐桌</b><span>预计与实际用餐分别确认</span></div><div><b>黑板与阅读角</b><span>查看课表，记录真实观察</span></div><p class="note">健康资料继续遵循专属权限。卡通布局与人物动作仅作示意，不是实时定位或自动识别。</p></aside>
     </div>
     <footer>入口选择不改变账号权限 · 班级关联在每次访问时重新核验</footer>
   </main>
