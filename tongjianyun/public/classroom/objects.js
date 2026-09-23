@@ -1,20 +1,20 @@
 // One registry for physical hotspots, search, keyboard navigation and fallback.
 // Coordinates describe an illustrative room, never a child's actual location.
 export const OBJECTS = Object.freeze([
-  {id:'arrival', action:'attendance', title:'门口点名台', label:'考勤点名', icon:'check', point:[-6.7,2.0,4.5], tint:'#4c8eca', hint:'核对到园、请假与缺勤'},
-  {id:'cubbies', action:'roster', title:'学生储物柜', label:'学生名册', icon:'people', point:[-5.8,2.0,-4.5], tint:'#778f71', hint:'完整名册与学生业务卡片'},
-  {id:'leave_book', action:'leave', title:'请假登记簿', label:'请假与缺勤', icon:'note', point:[-4.2,1.7,4.65], tint:'#be9660', hint:'查看登记、核对请假'},
-  {id:'board', action:'schedule', title:'教学黑板', label:'课堂安排', icon:'book', point:[-.35,3.8,-5], tint:'#588879', hint:'当天课表，仅表示计划'},
-  {id:'dining', action:'meals', title:'班级餐桌', label:'五餐确认', icon:'meal', point:[-.4,1.5,2.3], tint:'#2f9b7b', hint:'预计安排与实际分开核对'},
-  {id:'reading', action:'records', title:'阅读小屋', label:'成长记录', icon:'book', point:[5.5,2.8,-3.8], tint:'#a589ae', hint:'记录教师实际观察', area:'reading'},
-  {id:'art', action:'art', title:'美工画架', label:'美工观察', icon:'note', point:[6.5,2,-.9], tint:'#c6876c', hint:'手动记录，不推断参与情况', area:'art'},
-  {id:'rest', action:'rest', title:'午休小床', label:'午休观察', icon:'heart', point:[6.7,1.45,4.8], tint:'#838bbb', hint:'仅人工观察，无睡眠监测', area:'rest'},
-  {id:'health', action:'health', title:'健康资料柜', label:'健康核对', icon:'heart', point:[6.55,2.3,2.8], tint:'#5c9b87', hint:'专属权限，详情按需读取'},
-  {id:'mailbox', action:'contact', title:'家园信箱', label:'家园联系', icon:'chat', point:[2.9,1.9,4.85], tint:'#bf8990', hint:'查看已授权监护人资料'},
-  {id:'dayboard', action:'workflow', title:'教师工作板', label:'一日工作', icon:'check', point:[-3.2,2.6,-4.45], tint:'#648ba1', hint:'按已有业务记录引导，不自动完成'},
+  {id:'arrival', action:'attendance', title:'门口点名台', label:'考勤点名', icon:'check', point:[-7.05,2.16,4.93], tint:'#59a080', hint:'核对到园、请假与缺勤'},
+  {id:'cubbies', action:'roster', title:'学生储物柜', label:'学生名册', icon:'people', point:[6.84,2.08,5.04], tint:'#e8a343', hint:'完整名册与学生业务卡片'},
+  {id:'leave_book', action:'leave', title:'请假登记簿', label:'请假与缺勤', icon:'note', point:[-4.02,1.50,5.07], tint:'#c29864', hint:'查看登记、核对请假'},
+  {id:'board', action:'schedule', title:'教学黑板', label:'课堂安排', icon:'book', point:[.10,4.11,-5.37], tint:'#549dea', hint:'当天课表，仅表示计划'},
+  {id:'dining', action:'meals', title:'班级餐桌', label:'五餐确认', icon:'meal', point:[3.45,2.25,.45], tint:'#58ad91', hint:'预计安排与实际分开核对'},
+  {id:'reading', action:'records', title:'阅读帐篷', label:'成长记录', icon:'book', point:[-6.35,2.54,-2.10], tint:'#70ad88', hint:'记录教师实际观察', area:'reading'},
+  {id:'art', action:'art', title:'美工画架', label:'美工观察', icon:'palette', point:[-5.20,2.24,2.03], tint:'#ac86d3', hint:'手动记录，不推断参与情况', area:'art'},
+  {id:'rest', action:'rest', title:'午休小床', label:'午休观察', icon:'bed', point:[6.65,1.79,-2.56], tint:'#a78adb', hint:'仅人工观察，无睡眠监测', area:'rest'},
+  {id:'health', action:'health', title:'健康资料柜', label:'健康核对', icon:'heart', point:[7.21,2.27,1.65], tint:'#de8587', hint:'专属权限，详情按需读取'},
+  {id:'mailbox', action:'contact', title:'家园信箱', label:'家园联系', icon:'chat', point:[4.18,2.08,4.88], tint:'#6aa8d9', hint:'查看已授权监护人资料'},
+  {id:'dayboard', action:'workflow', title:'教师工作板', label:'一日工作', icon:'check', point:[-3.75,2.53,-3.9], tint:'#659f85', hint:'按已有业务记录引导，不自动完成'},
 ]);
 export const objectFor = action => OBJECTS.find(o => o.action === action) || null;
-export const PAGE_SIZE = 48;
+export const PAGE_SIZE = 24;
 export function studentPage(rows, id) {
   const index = rows.findIndex(r => r.student === id);
   return index < 0 ? null : Math.floor(index / PAGE_SIZE);

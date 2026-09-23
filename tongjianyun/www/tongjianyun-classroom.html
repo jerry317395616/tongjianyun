@@ -6,8 +6,9 @@
   <meta name="csrf-token" content="{{ csrf_token | e }}">
   <title>班级管理 · 童健云</title>
   <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
-  <link rel="stylesheet" href="/assets/tongjianyun/classroom/classroom.css?v=scene-v1-20260923-1">
-  <link rel="stylesheet" href="/assets/tongjianyun/classroom/scene-workbench.css?v=scene-v1-20260923-1">
+  <link rel="stylesheet" href="/assets/tongjianyun/classroom/classroom.css?v=refined-20260923-1">
+  <link rel="stylesheet" href="/assets/tongjianyun/classroom/scene-workbench.css?v=refined-20260923-1">
+  <link rel="stylesheet" href="/assets/tongjianyun/classroom/refined.css?v=refined-20260923-1">
   <script type="importmap">{"imports":{"three":"/assets/tongjianyun/campus/vendor/three.module.js"}}</script>
 </head>
 <body>
@@ -25,6 +26,9 @@
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></symbol>
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 3H3v6 M15 3h6v6 M3 15v6h6 M21 15v6h-6"/></symbol>
+    <symbol id="i-bed" viewBox="0 0 24 24"><path d="M3 4v17 M21 10v11 M3 16h18 M3 10h15a3 3 0 0 1 3 3v3 M8 10V7h9a4 4 0 0 1 4 4"/><path d="M3 6h4v4H3"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 1-4 2 2 0 0 1 1-4h3a3 3 0 0 0 2-4 10 10 0 0 0-9-6Z"/><circle cx="7" cy="9" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="17" cy="9" r="1"/><circle cx="6" cy="14" r="1"/></symbol>
+    <symbol id="i-motion" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z M20 2v4 M18 4h4"/></symbol>
   </defs></svg>
   <a class="skip-link" href="#main">跳到班级管理内容</a>
   <header class="topbar">
@@ -41,10 +45,11 @@
         <div class="scene-stage" id="scene-stage"><div id="scene-canvas" role="img" aria-label="卡通教室，拖动旋转，滚轮缩放；所有物件提供等效键盘入口"></div><div id="scene-labels" aria-label="教室内的业务物件"></div><div id="scene-loading" class="scene-loading">正在布置班级场景…</div><div id="scene-fallback" hidden><div class="fallback-art">☀</div><h3>班级业务照常可用</h3><p>当前浏览器未能启用 3D。下面的入口提供相同业务，不生成示例数据。</p><div class="scene-fallback-actions"><button class="primary" data-action="objects">所有业务物件</button><button class="secondary" data-action="roster">完整学生名册</button><button class="secondary" data-action="workflow">一日工作引导</button></div></div></div>
         <div class="scene-intro scene-chrome"><div><p class="eyebrow">CLASSROOM / 场景即工作台</p><h1 id="class-title">班级里的每一天</h1><p id="class-subtitle">点击学生或物件，在教室里完成日常管理。</p></div></div>
         <div class="search-shell"><label class="scene-search"><svg><use href="#i-search"/></svg><input id="scene-search" type="search" autocomplete="off" placeholder="找学生 / 找业务物件" aria-label="搜索学生或业务物件" aria-controls="search-results" aria-expanded="false"><kbd>/</kbd></label><div id="search-results" class="search-results" hidden aria-label="搜索结果"></div></div>
-        <div class="scene-controls"><div class="view-switch" role="group" aria-label="场景视角"><button data-view="room" class="active" aria-pressed="true">教室</button><button data-view="top" aria-pressed="false">俯视</button></div><button id="label-toggle" class="icon-button active" title="显示或隐藏物件标注" aria-label="显示物件标注" aria-pressed="true"><svg><use href="#i-note"/></svg></button><button id="fullscreen" class="icon-button" aria-label="全屏工作台" title="全屏工作台"><svg><use href="#i-expand"/></svg></button></div>
+        <div class="scene-controls"><div class="view-switch" role="group" aria-label="场景视角"><button data-view="room" class="active" aria-pressed="true">教室</button><button data-view="close" aria-pressed="false">近景</button><button data-view="top" aria-pressed="false">俯视</button></div><button id="label-toggle" class="icon-button active" title="显示或隐藏物件标注" aria-label="显示物件标注" aria-pressed="true"><svg><use href="#i-note"/></svg></button><button id="motion-toggle" class="icon-button" title="装饰动画，不代表实时活动" aria-label="切换装饰动画" aria-pressed="false"><svg><use href="#i-motion"/></svg></button><button id="fullscreen" class="icon-button" aria-label="全屏工作台" title="全屏工作台"><svg><use href="#i-expand"/></svg></button></div>
         <div id="scene-pager" class="scene-pager" hidden><button id="people-prev" aria-label="上一页名册形象">‹</button><span id="people-page"></span><button id="people-next" aria-label="下一页名册形象">›</button></div>
         <div class="scene-legend" aria-label="名册形象状态"><span><i class="dot Present"></i>登记到园</span><span><i class="dot Leave"></i>请假</span><span><i class="dot Absent"></i>缺勤</span><span><i class="dot Unknown"></i>待点名</span></div>
-        <div class="scene-dock"><div class="scene-context" aria-live="polite"><strong id="context-title">点一个物件，开始今天的工作</strong><p id="context-detail">门口点名 · 餐桌核餐 · 黑板看课表 · 阅读角记成长</p></div><nav class="scene-actions" aria-label="场景辅助操作"><button class="dock-primary" data-action="workflow"><svg><use href="#i-check"/></svg>一日工作 <span id="task-count"></span></button><button data-action="objects"><svg><use href="#i-cube"/></svg>所有物件</button><button data-action="roster"><svg><use href="#i-people"/></svg>找学生</button><button id="reset-view" aria-label="复位三维视角"><svg><use href="#i-refresh"/></svg>回到全景</button></nav></div>
+        <section class="scene-work-preview" aria-label="真实记录生成的工作摘要"><h2><svg><use href="#i-check"/></svg>一日工作</h2><div id="daily-preview"></div></section>
+        <div class="scene-dock"><div class="scene-context" aria-live="polite"><strong id="context-title">点一个物件，开始今天的工作</strong><p id="context-detail">门口点名 · 餐桌核餐 · 黑板看课表 · 阅读角记成长</p></div><nav class="scene-actions" aria-label="场景辅助操作"><button class="dock-primary" data-action="workflow" style="--action-color:#6b9f85"><svg><use href="#i-check"/></svg>一日工作 <span id="task-count"></span></button><button data-action="attendance" style="--action-color:#59a080"><svg><use href="#i-check"/></svg>考勤点名</button><button data-action="roster" style="--action-color:#e8a343"><svg><use href="#i-people"/></svg>学生名册</button><button data-action="schedule" style="--action-color:#549dea"><svg><use href="#i-book"/></svg>课堂安排</button><button data-action="meals" style="--action-color:#58ad91"><svg><use href="#i-meal"/></svg>五餐确认</button><button data-action="records" style="--action-color:#70ad88"><svg><use href="#i-book"/></svg>成长记录</button><button data-action="art" style="--action-color:#ac86d3"><svg><use href="#i-palette"/></svg>美工观察</button><button data-action="rest" style="--action-color:#a78adb"><svg><use href="#i-bed"/></svg>午休观察</button><button data-action="health" style="--action-color:#de8587"><svg><use href="#i-heart"/></svg>健康核对</button><button data-action="contact" style="--action-color:#6aa8d9"><svg><use href="#i-chat"/></svg>家园联系</button><button data-action="objects" style="--action-color:#8d9d84"><svg><use href="#i-cube"/></svg>所有物件</button><button id="reset-view" aria-label="复位三维视角"><svg><use href="#i-refresh"/></svg>回到全景</button></nav></div>
         <div class="scene-footnote"><span id="scene-note">空间示意，非实时位置</span> · <span id="sync-time"></span></div>
       </section>
     </div>
@@ -52,6 +57,6 @@
   <dialog id="business-dialog" aria-labelledby="dialog-title" aria-modal="false"><div class="dialog-header"><div><p id="dialog-kicker" class="eyebrow">班级业务</p><h2 id="dialog-title">班级详情</h2></div><div class="dialog-tools"><button id="dialog-expand" aria-label="展开或收起核对面板" title="展开核对面板"><svg><use href="#i-expand"/></svg></button><button id="dialog-close" class="close-button" aria-label="返回班级场景" title="返回班级场景">×</button></div></div><div class="dialog-context"><span id="object-context">场景内办理</span><span> / </span><button data-action="workflow">一日工作</button><button data-action="objects">换一个物件</button><span id="selection-context"></span></div><div id="dialog-content" class="dialog-content"></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p class="page-message">请启用 JavaScript，或直接进入<a href="/desk/tongjianyun-workbench">现有业务工作台</a>。</p></noscript>
-  <script type="module" src="/assets/tongjianyun/classroom/app.js?v=scene-v1-20260923-1"></script>
+  <script type="module" src="/assets/tongjianyun/classroom/app.js?v=refined-20260923-1"></script>
 </body>
 </html>

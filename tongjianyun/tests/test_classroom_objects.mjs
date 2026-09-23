@@ -11,7 +11,7 @@ test('Every business object has a unique ID/action and finite anchor',()=>{
   for(const o of OBJECTS){assert(o.label&&o.title&&o.hint);assert.equal(o.point.length,3);assert(o.point.every(Number.isFinite));assert.equal(objectFor(o.action).id,o.id);}
 });
 test('Search and scene share the same capability index',()=>assert.equal(objectFor('not-a-capability'),null));
-test('48 avatars per page, all 80 children reachable',()=>{const rows=Array.from({length:80},(_,i)=>({student:'S'+i}));assert.equal(PAGE_SIZE,48);assert.equal(studentPage(rows,'S47'),0);assert.equal(studentPage(rows,'S48'),1);assert.equal(studentPage(rows,'S79'),1);assert.equal(studentPage(rows,'OTHER'),null);});
+test('24 detailed avatars per page, all 80 children reachable',()=>{const rows=Array.from({length:80},(_,i)=>({student:'S'+i}));assert.equal(PAGE_SIZE,24);assert.equal(studentPage(rows,'S23'),0);assert.equal(studentPage(rows,'S24'),1);assert.equal(studentPage(rows,'S79'),3);assert.equal(studentPage(rows,'OTHER'),null);});
 test('Selections cannot retain foreign or duplicate IDs',()=>assert.deepEqual(visibleSelection(['S1','S1','OTHER'],[{student:'S1'}]),['S1']));
 test('Unknown attendance stays actionable',()=>assert.equal(workRoute(base())[0].state,'3 人待点名'));
 test('Empty roster does not imply attendance complete',()=>{const d=base();d.attendance.counts={total:0,Unknown:0};assert.equal(workRoute(d)[0].state,'暂无学生');});

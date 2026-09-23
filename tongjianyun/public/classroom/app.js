@@ -1,5 +1,5 @@
-import {OBJECTS, objectFor, PAGE_SIZE, workRoute, objectBadge, visibleSelection} from './objects.js?v=scene-v1-20260923-1';
-import {STATUS, COLORS, MEALS, LOG_TYPES, esc as h, mealSelections, mealTotals, timeLabel, hash, attendanceChanges} from './state.js?v=scene-v1-20260923-1';
+import {OBJECTS, objectFor, PAGE_SIZE, workRoute, objectBadge, visibleSelection} from './objects.js?v=refined-20260923-1';
+import {STATUS, COLORS, MEALS, LOG_TYPES, esc as h, mealSelections, mealTotals, timeLabel, hash, attendanceChanges} from './state.js?v=refined-20260923-1';
 
 const $ = id => document.getElementById(id);
 const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
@@ -109,9 +109,10 @@ async function load({automatic = false} = {}) {
     setPageMessage(result.capabilities.future ? '当前为未来日期：仅查看课表和预计用餐，不可登记实际出勤、实际就餐或成长记录。' : '');
     history.replaceState(null, '', '/tongjianyun-classroom?' + new URLSearchParams({class: result.group.name, day: result.day}));
     if (!scenePromise) {
-      scenePromise = import('./scene.js?v=scene-v1-20260923-1').then(({ClassroomScene}) => {
+      scenePromise = import('./scene.js?v=refined-20260923-1').then(({ClassroomScene}) => {
         scene = new ClassroomScene($('scene-canvas'), $('scene-labels'), {
           onStudent: id => selectStudent(id), onAction: action => act(action), onFailure: () => fallback(), onPage: pageChanged,
+          onMotion: enabled => {const b=$('motion-toggle');if(b){b.setAttribute('aria-pressed',String(enabled));b.classList.toggle('active',enabled);b.title=enabled?'关闭装饰动画（非实时活动）':'开启装饰动画（遵循减少动态效果设置）';}},
         });
         if (data?.group) {scene.setStudents(data.attendance.students);scene.setBusinessData(data);}
         $('scene-loading').hidden = true;
@@ -133,7 +134,8 @@ function render() {
   $('class-subtitle').textContent=`${c.total} 名可见在册幼儿 · 点击物件办理业务，状态来自已有登记`;
   $('task-count').textContent=workRoute(data).filter(s=>s.needsAttention).length || '';
   $('sync-time').textContent=`业务读取 ${data.generated_at.slice(11,19)} · 可见时60秒刷新`;
-  $('scene-note').textContent=`布局 / 名册形象示意，非实际座位或定位${c.total>48?' · 每页48人，可切换全部名册':''}`;
+  $('scene-note').textContent=`场景、人物姿态与动画均为示意，非真实活动或定位${c.total>PAGE_SIZE?' · 每页'+PAGE_SIZE+'人，可翻页查看全部名册':''}`;
+  const preview=$('daily-preview');if(preview)preview.innerHTML=workRoute(data).slice(0,4).map(s=>`<button data-action="${s.action}"><span>${h(s.title)}</span><small>${h(s.state)}</small></button>`).join('');
   updateContext();renderSearch();
 }
 function renderSearch() {
@@ -361,6 +363,7 @@ $('reset-view').onclick=()=>{scene?.setView(currentView);};
 $('people-prev').onclick=()=>scene?.setPage((scene?.page||0)-1);
 $('people-next').onclick=()=>scene?.setPage((scene?.page||0)+1);
 $('label-toggle').onclick=()=>{const hidden=sceneCard.classList.toggle('scene-labels-hidden');$('label-toggle').setAttribute('aria-pressed',String(!hidden));$('label-toggle').classList.toggle('active',!hidden);};
+$('motion-toggle').onclick=()=>{if(scene)scene.setMotion(!scene.motionEnabled);};
 $('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch(_){toast('浏览器未允许全屏，仍可使用全部班级功能。');}};
 const refreshTimer=setInterval(()=>load({automatic:true}),60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load({automatic:true});});

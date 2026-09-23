@@ -19,6 +19,11 @@ paths = {
     "/assets/tongjianyun/classroom/objects.js": {200},
     "/assets/tongjianyun/classroom/scene-workbench.css": {200},
     "/assets/tongjianyun/classroom/classroom.css": {200},
+    "/assets/tongjianyun/classroom/visual-kit.js": {200},
+    "/assets/tongjianyun/classroom/visual-layout.js": {200},
+    "/assets/tongjianyun/classroom/characters.js": {200},
+    "/assets/tongjianyun/classroom/room.js": {200},
+    "/assets/tongjianyun/classroom/refined.css": {200},
     "/api/method/tongjianyun.classroom.get_overview": {401, 403},
 }
 for path, expected in paths.items():

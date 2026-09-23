@@ -45,7 +45,7 @@ class CDP{
   const cdp=new CDP(wsURL);let session;
   try{
     const target=await cdp.send('Target.createTarget',{url:'about:blank'});session=(await cdp.send('Target.attachToTarget',{targetId:target.targetId,flatten:true})).sessionId;
-    const send=(m,p={})=>cdp.send(m,p,session);await send('Page.enable');await send('Runtime.enable');
+    const send=(m,p={})=>cdp.send(m,p,session);await send('Page.enable');await send('Runtime.enable');await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     const evaluate=async expression=>{const result=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;};
     const until=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await wait(200);}throw Error('Timed out: '+expression);};
     const click=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
@@ -58,7 +58,24 @@ class CDP{
     const shot=async filename=>{const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync(path.join(OUT,filename),Buffer.from(r.data,'base64'));};
     assert.equal(await evaluate(`document.querySelectorAll('#scene-labels [data-object-id]').length`),11);
     assert.equal(await evaluate(`!!document.querySelector('.sidenav') || !!document.querySelector('.right-column')`),false);
-    await shot('desktop.png');
+    await until(`document.querySelector('#scene-canvas').dataset.renderedStudents==='24' && +document.querySelector('#scene-canvas').dataset.triangles>0`);
+    const metrics=await evaluate(`({...document.querySelector('#scene-canvas').dataset})`);
+    assert(+metrics.drawCalls<1800, 'Detailed scene must batch static meshes');
+    assert(+metrics.triangles<1800000, 'Triangle budget exceeded');
+    assert.equal(metrics.motionEnabled,'false','Reduced-motion preference must stop decoration');
+    await click('#motion-toggle');assert.equal(await evaluate(`document.querySelector('#motion-toggle').getAttribute('aria-pressed')`),'false');
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
+    await until(`document.querySelector('#scene-canvas').dataset.motionEnabled==='true' && +document.querySelector('#scene-canvas').dataset.animationTicks>0`);
+    await evaluate(`Object.defineProperty(document,'hidden',{configurable:true,get:()=>true})`);
+    const pausedTicks=await evaluate(`document.querySelector('#scene-canvas').dataset.animationTicks`);await wait(350);
+    assert.equal(await evaluate(`document.querySelector('#scene-canvas').dataset.animationTicks`),pausedTicks,'Background guard must stop animation updates');
+    await evaluate(`delete document.hidden`);await click('#motion-toggle');
+    assert.equal(await evaluate(`document.querySelector('#scene-canvas').dataset.motionEnabled`),'false');
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});await wait(150);
+    await shot('desktop.png');await click('[data-view="close"]');await wait(500);await shot('characters-close.png');await click('[data-view="room"]');await wait(400);
+    assert(await evaluate(`document.querySelector('#scene-note').textContent.includes('姿态')`));
+    assert.equal(await evaluate(`document.querySelectorAll('#daily-preview button').length`),4);
+
     await click('#scene-labels [data-action="workflow"]');await until(`document.querySelectorAll('.route-step').length===5`);
     assert.equal(await evaluate(`document.querySelector('#business-dialog').getAttribute('aria-modal')`),'false');
     await shot('workflow.png');await close();
@@ -67,7 +84,7 @@ class CDP{
     await click('#toggle-scene-picking');
     // Exercise real raycasting, not only DOM buttons. Project the first child's
     // head using this illustrative camera, then dispatch a canvas-host tap.
-    await evaluate(`(async()=>{const T=await import('/assets/tongjianyun/campus/vendor/three.module.js');const host=document.querySelector('#scene-canvas'),r=host.getBoundingClientRect(),aspect=r.width/r.height,span=Math.max(12.8,19/aspect);const camera=new T.OrthographicCamera(-span*aspect/2,span*aspect/2,span/2,-span/2,.1,120);camera.position.set(12.8,11.6,20.5);camera.zoom=1.08;camera.lookAt(-6.7*.13,.8,4.5*.12);camera.updateProjectionMatrix();camera.updateMatrixWorld();const point=new T.Vector3(-4+Math.cos(Math.PI/8)*1.10,1.095,-1.25+Math.sin(Math.PI/8)*1.10).project(camera);const init={bubbles:true,clientX:r.left+(point.x+1)*r.width/2,clientY:r.top+(1-point.y)*r.height/2,pointerId:1};host.dispatchEvent(new PointerEvent('pointerdown',init));host.dispatchEvent(new PointerEvent('pointerup',init));})()`);
+    await evaluate(`(async()=>{const T=await import('/assets/tongjianyun/campus/vendor/three.module.js');const {ROOM_VIEW,slotFor}=await import('/assets/tongjianyun/classroom/visual-layout.js?v=refined-20260923-1');const {objectFor}=await import('/assets/tongjianyun/classroom/objects.js?v=refined-20260923-1');const host=document.querySelector('#scene-canvas'),r=host.getBoundingClientRect(),aspect=r.width/r.height,span=Math.max(ROOM_VIEW.vertical,ROOM_VIEW.horizontal/aspect);const camera=new T.OrthographicCamera(-span*aspect/2,span*aspect/2,span/2,-span/2,.1,120);camera.position.set(...ROOM_VIEW.eye);camera.zoom=ROOM_VIEW.zoom;const target=objectFor('attendance').point;camera.lookAt(target[0]*.09,1,target[2]*.08);camera.updateProjectionMatrix();camera.updateMatrixWorld();const slot=slotFor(0);const point=new T.Vector3(slot.x,1.42,slot.z).project(camera);const init={bubbles:true,clientX:r.left+(point.x+1)*r.width/2,clientY:r.top+(1-point.y)*r.height/2,pointerId:1};host.dispatchEvent(new PointerEvent('pointerdown',init));host.dispatchEvent(new PointerEvent('pointerup',init));})()`);
     await until(`document.querySelector('#scene-selection-count')?.textContent==='1'`);
     assert.equal(await evaluate(`document.querySelectorAll('.attendance-select:checked').length`),1);
     await shot('scene-selection.png');await click('#toggle-scene-picking');await close();
@@ -89,15 +106,15 @@ class CDP{
     await evaluate(`const d=document.querySelector('#day-input');d.value='2026-09-24';d.dispatchEvent(new Event('change',{bubbles:true}));`);await until(`document.querySelector('#page-message').textContent.includes('未来日期')`);await click('#scene-labels [data-action="meals"]');await until(`!!document.querySelector('#confirm-meals')`);assert.equal(await evaluate(`document.querySelector('#confirm-meals').disabled`),true);await close();
     await evaluate(`const select=document.querySelector('#class-select');select.value='DEMO-OTHER';select.dispatchEvent(new Event('change',{bubbles:true}));`);await until(`document.querySelector('#class-title').textContent.includes('彩虹班')`);
     students=Array.from({length:80},(_,i)=>({student:'LARGE-DEMO-'+i,student_name:'合成名单'+i,status:'Unknown',source:'尚无登记'}));
-    await click('#refresh');await until(`document.querySelector('#scene-canvas').dataset.totalStudents==='80' && document.querySelector('#scene-canvas').dataset.renderedStudents==='48'`);
-    assert.equal(await evaluate(`document.querySelector('#scene-note').textContent.includes('48人')`),true);await click('#people-next');await until(`document.querySelector('#scene-canvas').dataset.studentPage==='1' && document.querySelector('#scene-canvas').dataset.renderedStudents==='32'`);
+    await click('#refresh');await until(`document.querySelector('#scene-canvas').dataset.totalStudents==='80' && document.querySelector('#scene-canvas').dataset.renderedStudents==='24'`);
+    assert.equal(await evaluate(`document.querySelector('#scene-note').textContent.includes('24人')`),true);await click('#people-next');await until(`document.querySelector('#scene-canvas').dataset.studentPage==='1' && document.querySelector('#scene-canvas').dataset.renderedStudents==='24'`);await click('#people-next');await click('#people-next');await until(`document.querySelector('#scene-canvas').dataset.studentPage==='3' && document.querySelector('#scene-canvas').dataset.renderedStudents==='8'`);
     await click('#scene-labels [data-action="roster"]');await until(`document.querySelectorAll('#roster-body tr').length===80`);await close();
     await evaluate(`document.querySelector('#scene-canvas canvas').dispatchEvent(new Event('webglcontextlost',{cancelable:true}))`);
     assert.equal(await evaluate(`document.querySelector('#scene-fallback').hidden`),false);
     await click('#scene-labels [data-action="roster"]');await until(`document.querySelectorAll('#roster-body tr').length===80`);await close();
     await send('Emulation.setDeviceMetricsOverride',{width:1600,height:1050,deviceScaleFactor:1,mobile:false});
     assert.equal(await evaluate(`location.pathname`),'/tongjianyun-classroom','Core business must not navigate away');
-    assert.equal(errors.length,0,errors.join('\n'));console.log(JSON.stringify({passed:true,checks:['11 scene-first business objects','real avatar raycast selection','selection does not write','shared meal selection','workflow uses facts','art/rest manual observation','unsaved draft protection','all 80 avatars paginated','Three.js WebGL rendering','desktop screenshot','attendance interaction/save (synthetic)','five-meal confirmation (synthetic)','growth record save (synthetic)','health permission UI','room/top view','mobile no horizontal overflow','future actual confirmation disabled','class switching','80-student roster with explicit 48-avatar cap','WebGL failure keeps roster functional'],api_calls:requests.length,screenshots:OUT,browser_exceptions:errors.length}));
+    assert.equal(errors.length,0,errors.join('\n'));console.log(JSON.stringify({passed:true,checks:['11 scene-first business objects','real avatar raycast selection','selection does not write','shared meal selection','workflow uses facts','art/rest manual observation','unsaved draft protection','all 80 avatars paginated','Three.js WebGL rendering','desktop screenshot','attendance interaction/save (synthetic)','five-meal confirmation (synthetic)','growth record save (synthetic)','health permission UI','room/top view','mobile no horizontal overflow','future actual confirmation disabled','class switching','80-student roster with explicit 24-avatar pages','reduced motion respected','static mesh batch budget','detailed close view','animation starts and stops','background animation guard','WebGL failure keeps roster functional'],metrics,api_calls:requests.length,screenshots:OUT,browser_exceptions:errors.length}));
   }finally{
     const exited=new Promise(resolve=>browser.once('exit',resolve));
     await cdp.send('Browser.close').catch(()=>{});cdp.ws.close();

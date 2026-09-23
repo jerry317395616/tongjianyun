@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const base=new URL('../public/classroom/',import.meta.url);
+const code=await readFile(new URL('visual-layout.js',base),'utf8');
+const {appearanceFor,VISUAL_PAGE_SIZE,slotFor,ILLUSTRATIVE_SLOTS,blinkScale,ROOM_VIEW}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const cases=[];function test(name,run){run();cases.push(name);}
+test('24 explicit slots; no extra fabricated children',()=>{assert.equal(VISUAL_PAGE_SIZE,24);assert.equal(ILLUSTRATIVE_SLOTS.length,24);});
+test('Each illustration slot has a unique ground position',()=>assert.equal(new Set(ILLUSTRATIVE_SLOTS.map(s=>`${s.x}:${s.z}`)).size,24));
+test('Slots fit the illustrative classroom and keep poses explicit',()=>{for(const s of ILLUSTRATIVE_SLOTS){assert(Math.abs(s.x)<8&&Math.abs(s.z)<5.7);assert(Number.isFinite(s.angle));assert(['sit','draw','read','wave','stand'].includes(s.pose));}});
+test('No layout slot claims a sleeping child',()=>assert(!ILLUSTRATIVE_SLOTS.some(s=>/sleep|asleep/.test(s.pose))));
+test('Avatar appearances are stable by opaque ID',()=>assert.deepEqual(appearanceFor('opaque-id'),appearanceFor('opaque-id')));
+test('Avatar variants include at least five hairstyles and five outfits',()=>{const a=Array.from({length:100},(_,i)=>appearanceFor('DEMO-'+i));assert(new Set(a.map(v=>v.hair)).size>=5);assert(new Set(a.map(v=>v.outfit)).size>=5);});
+test('Out-of-page slots reject instead of overlapping',()=>{for(const i of [-1,24,500,1.1,NaN])assert.throws(()=>slotFor(i),RangeError);});
+test('Blink animation cannot invert or enlarge the eyes',()=>{for(let i=0;i<1000;i++){const b=blinkScale(i/100,1.7);assert(b>=.065&&b<=1);}});
+test('View configuration is finite and useful for real raycast tests',()=>{assert(ROOM_VIEW.eye.every(Number.isFinite));assert(ROOM_VIEW.zoom>0);});
+const scene=await readFile(new URL('scene.js',base),'utf8');
+test('Renderer has no network or business-write calls',()=>assert(!/\bfetch\s*\(|frappe\.call|XMLHttpRequest/.test(scene)));
+test('Background and reduced-motion guards exist',()=>{assert(scene.includes('document.hidden'));assert(scene.includes('prefers-reduced-motion: reduce'));assert(scene.includes('clearInterval(this.motionTimer)'));});
+test('Paging disposes merged avatar geometry',()=>assert(scene.includes('this.rigs.forEach(r=>r.dispose())')));
+console.log(JSON.stringify({passed:true,cases:cases.length,checks:cases}));
