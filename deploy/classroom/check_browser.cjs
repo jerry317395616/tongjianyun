@@ -20,8 +20,8 @@ const server=http.createServer(async(req,res)=>{
     if(method==='tongjianyun.classroom.get_overview')result=model(args.student_group,args.day);
     else if(method==='tongjianyun.classroom.save_attendance'){assert.equal(args.revision,String(revision));args.changes.forEach(c=>{students=students.map(s=>s.student===c.student?{...s,status:c.status}:s);});revision++;result={saved:args.changes.length};}
     else if(method==='tongjianyun.classroom.add_record'){logs.unshift({name:'DEMO-LOG',student:args.student,type:args.record_type,date:args.day,log:args.content});result={name:'DEMO-LOG'};}
-    else if(method==='tongjianyun.student_meals.get_class_meals')result={revision:'meal-1',record:{status:'待确认',students:students.map(s=>({student:s.student,student_name:s.student_name,...Object.fromEntries(['breakfast','morning_snack','lunch','afternoon_snack','dinner'].flatMap(k=>[[k,k==='dinner'?'不供餐':'未确认'],[k+'_expected',k==='dinner'?0:1]]))}))}};
-    else if(method==='tongjianyun.student_meals.save_class_meals'){assert.equal(args.students.length,28);if(args.confirm)mealActual={lunch_count:args.students.filter(s=>s.lunch==='就餐').length};result={ok:true};}
+    else if(method==='tongjianyun.classroom.get_meals')result={revision:'meal-1',record:{status:'待确认',students:students.map(s=>({student:s.student,student_name:s.student_name,...Object.fromEntries(['breakfast','morning_snack','lunch','afternoon_snack','dinner'].flatMap(k=>[[k,k==='dinner'?'不供餐':'未确认'],[k+'_expected',k==='dinner'?0:1]]))}))}};
+    else if(method==='tongjianyun.classroom.save_meals'){assert.equal(args.students.length,28);if(args.confirm)mealActual={lunch_count:args.students.filter(s=>s.lunch==='就餐').length};result={ok:true};}
     else if(method==='tongjianyun.classroom.get_health')result={month:'2026-09-01',rows:[{student:'DEMO-1',student_name:'示例幼儿01',history_state:'未登记',allergy_state:'未登记',review_status:'待核对',modified:null}]};
     else if(method==='tongjianyun.classroom.save_health'){assert.equal(args.payload.student,'DEMO-1');result={name:'DEMO-HEALTH'};}
     else{res.writeHead(404);res.end('{}');return;}

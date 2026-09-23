@@ -1,5 +1,5 @@
-import {OBJECTS, objectFor, PAGE_SIZE, workRoute, objectBadge, visibleSelection} from './objects.js?v=refined-20260923-1';
-import {STATUS, COLORS, MEALS, LOG_TYPES, esc as h, mealSelections, mealTotals, timeLabel, hash, attendanceChanges} from './state.js?v=refined-20260923-1';
+import {OBJECTS, objectFor, PAGE_SIZE, workRoute, objectBadge, visibleSelection} from './objects.js?v=teacher-entry-20260923-1';
+import {STATUS, COLORS, MEALS, LOG_TYPES, esc as h, mealSelections, mealTotals, timeLabel, hash, attendanceChanges} from './state.js?v=teacher-entry-20260923-1';
 
 const $ = id => document.getElementById(id);
 const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
@@ -67,7 +67,8 @@ async function api(method, args = {}, write = false) {
   } finally { clearTimeout(timeout); }
 }
 const call = (method, args, write = false) => api(`tongjianyun.classroom.${method}`, args, write);
-const scope = () => ({student_group: data.group.name, day: data.day});
+const workspace = new URLSearchParams(location.search).get('workspace') || '';
+const scope = () => ({student_group: data.group.name, day: data.day, workspace: data.workspace || workspace});
 const empty = (title, text = '') => `<div class="empty-block"><strong>${h(title)}</strong>${h(text)}</div>`;
 const status = child => `<span class="row-status"><i class="dot ${h(child.status)}"></i>${h(STATUS[child.status])}</span>`;
 const avatar = child => {
@@ -90,26 +91,29 @@ async function load({automatic = false} = {}) {
   if (data?.group && (group !== data.group.name || day !== data.day)) $('dashboard').hidden = true;
   if (!automatic) { $('refresh').disabled = true; setPageMessage('正在读取班级记录…'); }
   try {
-    const result = await call('get_overview', {student_group: group, day});
+    const result = await call('get_overview', {student_group: group, day, workspace});
     if (request !== sequence) return;
     data = result;
     $('class-select').innerHTML = result.groups.map(g => `<option value="${h(g.name)}">${h(g.student_group_name || g.name)}</option>`).join('') || '<option value="">暂无可管理班级</option>';
     $('class-select').disabled = !result.groups.length;
     $('day-input').value = result.day;
     $('user-name').textContent = result.user_label;
+    document.body.classList.toggle('teacher-workspace',result.workspace==='teacher');
+    $('workspace-label').textContent=result.workspace==='teacher'?'教师 · 我的班级':'班级 3D 工作台';
+    $('teacher-empty').hidden=!!result.group;
     if (!result.group) {
       $('dashboard').hidden = true; $('class-title').textContent = '尚未分配可管理班级';
       $('class-subtitle').textContent = '请由管理员核对教师与班级的关联及读取权限。';
-      setPageMessage('本账号暂无可见班级，不会展示其他班级或示例学生。'); return;
+      setPageMessage(result.workspace==='teacher'?'本人尚无可见任教班级，请核对员工、在岗教师与启用班级的关联。':'本账号暂无可见班级，不会展示其他班级或示例学生。'); return;
     }
     $('class-select').value = result.group.name;
     $('dashboard').hidden = false;
     render();
     ready = true;
     setPageMessage(result.capabilities.future ? '当前为未来日期：仅查看课表和预计用餐，不可登记实际出勤、实际就餐或成长记录。' : '');
-    history.replaceState(null, '', '/tongjianyun-classroom?' + new URLSearchParams({class: result.group.name, day: result.day}));
+    history.replaceState(null, '', '/tongjianyun-classroom?' + new URLSearchParams({class: result.group.name, day: result.day, workspace: result.workspace || workspace}));
     if (!scenePromise) {
-      scenePromise = import('./scene.js?v=refined-20260923-1').then(({ClassroomScene}) => {
+      scenePromise = import('./scene.js?v=teacher-entry-20260923-1').then(({ClassroomScene}) => {
         scene = new ClassroomScene($('scene-canvas'), $('scene-labels'), {
           onStudent: id => selectStudent(id), onAction: action => act(action), onFailure: () => fallback(), onPage: pageChanged,
           onMotion: enabled => {const b=$('motion-toggle');if(b){b.setAttribute('aria-pressed',String(enabled));b.classList.toggle('active',enabled);b.title=enabled?'关闭装饰动画（非实时活动）':'开启装饰动画（遵循减少动态效果设置）';}},
@@ -257,7 +261,7 @@ async function openMeals(studentId = null) {
   const context = scope(), editable = data.capabilities.meals_write, future = data.capabilities.future;
   const generation = openDialog('核对班级各餐人数', empty('正在读取班级就餐明细…'));
   try {
-    const result = await api('tongjianyun.student_meals.get_class_meals',{meal_date:context.day,student_group:context.student_group});
+    const result = await call('get_meals',context);
     if (!dialog.open || generation !== dialogSequence) return;
     const rows = mealSelections(result.record.students || []);
     $('dialog-content').innerHTML = `<div class="notice">预计安排不等于实际就餐。请逐人核对五个餐次；确认实际表示这些餐次均已核实，不会自动改写学生考勤。${future ? '未来日期只能保存预计安排。' : ''}</div>${!editable ? '<div class="notice warning">当前账号权限或锁定状态仅允许查看。</div>' : ''}<div class="selection-bar"><button class="secondary" id="toggle-scene-picking" aria-pressed="false">在场景里选学生</button><strong>已选 <span id="scene-selection-count">0</span> 人</strong><span class="selection-hint">场景选择与下面名册勾选联动；预计与实际仍按原流程分别保存。</span></div><div class="modal-toolbar"><strong>${h(result.record.status)} · ${rows.length} 人</strong><span class="spacer"></span><select id="bulk-meal" aria-label="批量调整餐次">${MEALS.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select><select id="bulk-state" aria-label="批量就餐状态">${['就餐','不就餐','不供餐'].map(s=>`<option>${s}</option>`).join('')}</select><button class="secondary" id="apply-meal" ${editable ? '' : 'disabled'}>应用到选中学生</button></div><div class="table-wrap"><table class="meal-table"><thead><tr><th><input type="checkbox" id="select-all-meals" aria-label="选择全部学生"></th><th>学生</th>${MEALS.map(([,l])=>`<th>${l}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr><td><input type="checkbox" class="meal-select" data-row="${i}" aria-label="选择${h(r.student_name)}"></td><td>${h(r.student_name)}</td>${MEALS.map(([k,l])=>`<td><select class="meal-value" data-row="${i}" data-meal="${k}" aria-label="${h(r.student_name)}${l}" ${editable?'':'disabled'}>${['就餐','不就餐','不供餐'].map(v=>`<option ${r[k]===v?'selected':''}>${v}</option>`).join('')}</select></td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr><td colspan="2">本次核对人数</td>${MEALS.map(([k])=>`<td id="meal-total-${k}"></td>`).join('')}</tr></tfoot></table></div><label class="form-field" style="margin-top:15px"><span>修改原因（修改已确认记录时必填）</span><textarea id="meal-reason" rows="2" maxlength="1000" ${editable?'':'disabled'}></textarea></label><div class="form-actions"><span class="muted">${h(result.revision ? '以已保存班级安排为起点' : '尚无已保存安排；当前为原规则的预计值，请先核对')}</span><button class="secondary" id="save-meal-plan" ${editable&&rows.length&&result.record.status!=='已确认'?'':'disabled'}>保存预计</button><button class="primary green" id="confirm-meals" ${editable&&rows.length&&!future?'':'disabled'}>确认五餐实际情况</button></div>`;
@@ -278,7 +282,7 @@ async function openMeals(studentId = null) {
       const reason=$('meal-reason').value.trim();
       if(result.record.status==='已确认'&&!reason)return toast('修改已确认记录必须填写原因。',true);
       if(confirm&&!window.confirm('确认已经核对本班五个餐次的实际就餐情况？尚未发生的餐次不应提前确认。'))return;
-      save(()=>api('tongjianyun.student_meals.save_class_meals',{meal_date:context.day,student_group:context.student_group,students:rows,revision:result.revision,confirm:confirm?1:0,change_reason:reason},true),confirm?'本班五餐实际情况已确认':'预计安排已保存，尚未确认实际就餐');
+      save(()=>call('save_meals',{...context,students:rows,revision:result.revision,confirm:confirm?1:0,change_reason:reason},true),confirm?'本班五餐实际情况已确认':'预计安排已保存，尚未确认实际就餐');
     };
     $('save-meal-plan').onclick=()=>commit(false);$('confirm-meals').onclick=()=>commit(true);totals();
   }catch(error){if(generation===dialogSequence)$('dialog-content').innerHTML=`<div class="notice error">${h(message(error))}</div>`;}

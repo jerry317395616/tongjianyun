@@ -10,9 +10,9 @@ required_apps = ["education"]
 # Register the domain-specific nutrition rule tools on I-ONE Core's MCP endpoint.
 ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
 
-app_home = "/desk/tongjianyun-workbench"
+app_home = "/tongjianyun-entry"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=20260923-classroom-1"]
+app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=teacher-entry-20260923-1"]
 
 add_to_apps_screen = [
     {

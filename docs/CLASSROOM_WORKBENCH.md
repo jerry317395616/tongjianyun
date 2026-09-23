@@ -317,3 +317,120 @@ node apps/tongjianyun/deploy/classroom/check_browser.cjs
 不运行迁移。基线备份：
 `/home/zyd/frappe/remote-workspace/classroom-refine-baseline-20260923.tgz`。
 回滚本轮视觉文件时不能删除原业务记录；恢复旧 `objects.js` 时须同时恢复旧场景和分页界面。
+
+
+## 班级教师入口 V1（2026-09-23）
+
+### 从应用首页进入
+
+首页继续使用 Frappe 原生 `/apps`，不改其它应用图标与上游源码。
+`hooks.py` 的 `app_home` 和 `add_to_apps_screen` 指向 `/tongjianyun-entry`。
+入口是标准网站模板及控制器，不新增 Page/DocType/Custom Field，不运行结构迁移。
+原 `/desk/tongjianyun-workbench` 保留，不能重定向回入口造成循环。
+
+登录后的入口由服务端每次根据当前账号重新解析：
+
+| 账号情况 | 行为 |
+| --- | --- |
+| 有在岗教师关联，仅一个可见任教班级 | 303 临时跳转到该班 3D 工作台，携带 `workspace=teacher` |
+| 有多个可见任教班级 | 展示本人任教班级卡片，不默认替老师选择第一个 |
+| 教师兼具明确管理/保健角色且能进入原工作台 | 选择“班级教师”或“业务工作台”；其它岗位继续使用原业务页，不冒充新建了独立岗位工作台 |
+| 单独 Business Operator、没有教师关联 | 保留原业务工作台，不推断其为教师或园长 |
+| 有 Instructor 角色但关联不完整 | 展示本人关联检查；不填充其它班级，不自动授予权限 |
+| 未识别到可用入口 | 明确提示管理员核对账号与关联，无模拟班级 |
+| Guest、停用账号、Website User | Guest 转登录；停用或非园内工作账号拒绝访问 |
+
+管理员没有真实任教关联时依然进原业务工作台。教师可以从场景右上角“切换工作入口”返回
+`/tongjianyun-entry?choose=1`。只有一个班也能主动回到选择页；不使用长久缓存的301记住个人路由。
+本期未新增默认身份/默认班级数据库字段，不保存跨账号的浏览器身份偏好。
+
+### 教师身份不是一个前端角色标签
+
+关联链：当前登录 User → `Employee.user_id`（Active）→ `Instructor.employee`（Active）→
+`Student Group Instructor`（严格限定 parenttype=Student Group、parentfield=instructors）→
+启用 Student Group，并与 `frappe.get_list` 的原有读取范围求交集。
+同时要求已有 Student 与 Student Group 读取权限。姓名、邮箱中的“老师”字样、请求中的
+user/role 参数、Business Operator 基础角色都不能单独建立任教身份。
+
+配置检查仅输出当前账号的关联布尔值与可见班级，不返回其它人员、员工信息或学生隐私。
+管理员应在原员工、教师、班级配置里明确维护关联，本次部署不替任何账号添加或修改关联。
+
+### 服务端工作范围与已有权限的区别
+
+教师入口的列表及写入不仅靠下拉框过滤。`classroom._groups('teacher')` 每次重新解析任教关联；
+`_scope` 在实际读取或写入前再次核验班级。`get_overview`、`save_attendance`、`add_record`、
+`get_health/save_health`、`get_meals/save_meals` 均携带并校验 workspace。
+变更任教关系后，旧链接或旧面板不会继续获得该教师入口的写入权。
+
+**workspace 是在既有账号权限之上的工作范围收窄，不是切换 Frappe 身份或全局撤权。**
+此前获授权跨班级的 Business Operator/管理账号，仍保留原工作台/API 中既有的业务权限。
+选择教师视图不等于撤销其后台权限，也不是让其变成另一个低权限账号。
+如需全系统严格单班级授权，应另行审查现有角色及权限配置；本期不静默改变历史授权。
+
+班级原点名、请假、五餐、课表、观察与健康规则继续使用现有后端。新增用餐适配接口只是
+在原 `student_meals` 前验证工作范围，并去掉其返回值中跨班级的 groups 索引；不改原餐次状态、
+版本校验、变更原因、未来日期或锁定规则。写入后只返回保存结果，不返回无关班级清单。
+成长日志与健康功能仍按原权限启用，不为了让按钮可用而扩大角色。
+
+### 入口和缓存安全
+
+`profile` 只接受服务端已识别的 teacher/business；班级参数必须属于服务端任教交集。
+所有跳转目标均为固定本地路由，由 `urlencode` 编码班级标识；不接受外部 next/redirect URL。
+工作入口、配置提示与个人303跳转使用 `private, no-store` 和 `Vary: Cookie`，避免不同账号的入口缓存混用。
+页面不嵌入敏感学生数据、不需要前端脚本才能选择班级；原登录、CSRF 和健康资料访问控制保持。
+
+### 本期文件
+
+```text
+tongjianyun/workspace_entry.py                 身份解析、任教范围、固定目标路由
+tongjianyun/www/tongjianyun_entry.py            原生网站控制器、登录和选择逻辑
+tongjianyun/www/tongjianyun-entry.html          多身份/多班级/配置检查页面
+tongjianyun/public/entry/entry.css              响应式入口样式
+tongjianyun/classroom.py                       教师工作范围和用餐适配
+tongjianyun/tests/test_workspace_entry.py       入口、越界、暂时跳转等测试
+deploy/teacher_entry/                          只读审查、验收与有限文件发布
+```
+
+### 验证流程
+
+```bash
+cd /home/zyd/frappe/native-bench
+env/bin/python apps/tongjianyun/deploy/teacher_entry/check_regression.py
+env/bin/python apps/tongjianyun/deploy/teacher_entry/check_accounts.py
+env/bin/python apps/tongjianyun/deploy/teacher_entry/check_live.py
+env/bin/python apps/tongjianyun/deploy/teacher_entry/make_browser_fixtures.py
+node apps/tongjianyun/deploy/teacher_entry/check_browser.cjs
+node apps/tongjianyun/deploy/classroom/check_browser.cjs
+env/bin/python apps/tongjianyun/deploy/teacher_entry/check_http.py
+CLASSROOM_TEST_BASE=https://child.myyr.top env/bin/python apps/tongjianyun/deploy/teacher_entry/check_http.py
+```
+
+入口浏览器用例由真实控制器/模板、合成账号解析结果生成。测试浏览器仅连接临时 localhost 服务，
+不使用个人浏览器配置或生产 Cookie，不伪造登录、不操作真实学生。原3D业务浏览器回归仍需通过。
+真实站点检查使用只读、rollback-only 的 Frappe 上下文验证原生图标路由、实际关联范围和越界拒绝；
+不把合成保存交互说成生产账号已经成功写入。
+
+### 发布与回滚
+
+`deploy/teacher_entry/release.py` 只发布显式21文件清单；对比发布前源码归档检测并发修改，
+不触碰其它未提交内容。发布后使用现有 `deploy/classroom/refresh_runtime.py` 刷新缓存及优雅重载，
+不重启数据库和队列，不执行 migrate，不修改用户角色和任教关系。
+
+回滚仅恢复该发布的源码及图标路由，再刷新运行时；不得撤销正常业务记录或重置账号关联。
+进入原 `/tongjianyun-classroom` 和 `/desk/tongjianyun-workbench` 的专业链接仍保留兼容。
+
+
+### 教师入口上线验收记录（2026-09-23）
+
+- 106项后端相关回归通过（包含本期36项入口、任教范围与适配回归）。
+- 真实入口控制器及模板生成63个合成场景结果；15类入口浏览器验收通过，0脚本异常。
+- 原精细3D工作台25类浏览器回归通过，人物点击、点名、五餐、观察、权限入口、分页、动画与降级保持可用。
+- 真实 Frappe `get_apps` 确认唯一童健云图标路由为 `/tongjianyun-entry`，原生模板解析到正确控制器。
+- 2个现有已关联账号通过只读任教范围核验，2次非任教班级请求均拒绝；未写入业务记录。
+- 内网和公网新入口均以303返回登录，检查 private/no-store；入口样式和前端模块200；匿名入口/教师业务API403。
+- 桌面多班选择、多身份选择、缺关联提示和390px手机截图均已检查。截图中的人员与班级全部是验收合成数据。
+- 源码备份：`/home/zyd/frappe/backups/teacher-entry-20260923/source-before.tgz`。
+  已发布显式21文件清单并刷新Frappe/网站缓存、优雅重载Web；未迁移结构、未分配角色或班级。
+- 配置审查发现当前存在仍需核对关联的教师入口；以配置提示处理，不替用户猜测或新增关联。
+
+本次未用真实教师登录Cookie完成生产写入验收；合成保存成功不表述为实际幼儿数据已写入。

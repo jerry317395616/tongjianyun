@@ -41,9 +41,18 @@ def _can(doctype, action="read"):
     return bool(frappe.db.exists("DocType", doctype) and frappe.has_permission(doctype, action))
 
 
-def _scope(group):
+def _groups(workspace=None):
+    if workspace not in (None, "", "teacher", "business"):
+        raise frappe.PermissionError("无效的工作入口")
+    if workspace == "teacher":
+        from tongjianyun.workspace_entry import teacher_groups
+        return teacher_groups()
+    return allowed_groups()
+
+
+def _scope(group, workspace=None):
     require_user()
-    require_group(group, allowed_groups())
+    require_group(group, _groups(workspace))
     doc = frappe.get_doc("Student Group", group)
     doc.check_permission("read")
     return doc
@@ -179,21 +188,21 @@ def _capabilities(day):
 
 
 @frappe.whitelist()
-def get_overview(student_group=None, day=None):
+def get_overview(student_group=None, day=None, workspace=None):
     require_user()
     day = _day(day)
-    names = allowed_groups()
+    names = _groups(workspace)
     groups = frappe.get_list("Student Group", filters={"name": ["in", names]}, fields=["name", "student_group_name"],
         order_by="student_group_name asc", limit_page_length=0) if names else []
     if student_group:
         require_group(student_group, names)
     group = student_group or (groups[0].name if groups else None)
-    common = {"groups": groups, "day": str(day), "today": today(), "generated_at": str(now_datetime()),
+    common = {"workspace": "teacher" if workspace == "teacher" else "business", "groups": groups, "day": str(day), "today": today(), "generated_at": str(now_datetime()),
               "user_label": frappe.db.get_value("User", frappe.session.user, "full_name") or "老师",
               "scene": {"mode": "illustrative", "location_connected": False, "layout_verified": False}}
     if not group:
         return {**common, "group": None}
-    group_doc = _scope(group)
+    group_doc = _scope(group, workspace)
     attendance = _attendance(group_doc, day)
     ids = [r["student"] for r in attendance["students"]]
     return {**common, "group": {"name": group, "label": group_doc.student_group_name or group},
@@ -202,8 +211,8 @@ def get_overview(student_group=None, day=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def save_attendance(student_group, day, changes, revision):
-    doc = _scope(student_group)
+def save_attendance(student_group, day, changes, revision, workspace=None):
+    doc = _scope(student_group, workspace)
     day = _day(day)
     if not _capabilities(day)["attendance_write"]:
         raise frappe.PermissionError("当前日期、确认状态或权限不允许修改考勤，请在原业务流程中核对")
@@ -212,7 +221,7 @@ def save_attendance(student_group, day, changes, revision):
         frappe.throw("请提交有效的点名变更")
     # Serialise submissions from this workbench, then re-read the authoritative facts.
     frappe.db.get_value("Student Group", student_group, "name", for_update=True)
-    doc = _scope(student_group)
+    doc = _scope(student_group, workspace)
     snapshot = _attendance(doc, day)
     if str(revision) != snapshot["revision"]:
         frappe.throw("名单或考勤已变化，请刷新后重新核对，未保存本次变更")
@@ -234,8 +243,8 @@ def save_attendance(student_group, day, changes, revision):
 
 
 @frappe.whitelist(methods=["POST"])
-def add_record(student_group, student, day, record_type, content):
-    group = _scope(student_group)
+def add_record(student_group, student, day, record_type, content, workspace=None):
+    group = _scope(student_group, workspace)
     day = _day(day)
     if day > getdate(today()):
         frappe.throw("不能将未来活动记为已发生")
@@ -255,8 +264,8 @@ def add_record(student_group, student, day, record_type, content):
 
 
 @frappe.whitelist()
-def get_health(student_group, day):
-    group = _scope(student_group)
+def get_health(student_group, day, workspace=None):
+    group = _scope(student_group, workspace)
     if not _health_allowed():
         raise frappe.PermissionError("需要专属健康管理权限")
     from tongjianyun.health_registration import roster
@@ -269,8 +278,8 @@ def get_health(student_group, day):
 
 
 @frappe.whitelist(methods=["POST"])
-def save_health(student_group, day, payload):
-    group = _scope(student_group)
+def save_health(student_group, day, payload, workspace=None):
+    group = _scope(student_group, workspace)
     if not _health_allowed():
         raise frappe.PermissionError("需要专属健康管理权限")
     data = frappe.parse_json(payload) if isinstance(payload, str) else payload
@@ -278,3 +287,27 @@ def save_health(student_group, day, payload):
         raise frappe.PermissionError("学生不在当前可见的班级名单中")
     from tongjianyun.health_registration import save_registration
     return save_registration({**data, "student_group": student_group, "month": str(_day(day).replace(day=1))})
+
+
+@frappe.whitelist()
+def get_meals(student_group, day, workspace=None):
+    """Revalidate this workspace before loading the existing meal workflow."""
+    group = _scope(student_group, workspace)
+    from tongjianyun.student_meals import get_class_meals
+    result = get_class_meals(str(_day(day)), group.name)
+    # The legacy response contains every account-visible class. Do not send
+    # that cross-school index through the teacher workspace.
+    return {key: result[key] for key in ("record", "revision", "expected", "actual")}
+
+
+@frappe.whitelist(methods=["POST"])
+def save_meals(student_group, day, students, revision="", confirm=0, change_reason="", workspace=None):
+    group = _scope(student_group, workspace)
+    day = _day(day)
+    if not _capabilities(day)["meals_write"]:
+        raise frappe.PermissionError("当前权限或锁定状态不允许修改就餐记录")
+    from tongjianyun.student_meals import save_class_meals
+    # Original workflow retains permission, revision, full-roster, future-date
+    # and confirmed-change checks. No status is set in the scene renderer.
+    save_class_meals(str(day), group.name, students, revision, confirm, change_reason)
+    return {"saved": True}

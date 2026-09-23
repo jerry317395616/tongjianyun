@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="same-origin">
+  <title>我的工作空间 · 童健云</title>
+  <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
+  <link rel="stylesheet" href="/assets/tongjianyun/entry/entry.css?v=teacher-entry-20260923-1">
+</head>
+<body>
+  <a class="skip" href="#entry-main">跳到工作空间</a>
+  <header><a class="brand" href="/apps"><img src="/assets/tongjianyun/images/tongjianyun-logo.svg" alt=""><span><strong>童健云</strong><small>每个人，回到自己的工作空间</small></span></a><span class="account">{{ entry.user_label | e }}</span><a class="return" href="/apps">返回应用首页 ↗</a></header>
+  <main id="entry-main">
+    <section class="intro"><p class="eyebrow">MY WORKSPACE · 我的工作空间</p>
+    {% if entry.view == 'classes' %}
+      <h1>今天，走进哪个班级？</h1><p>这里只展示您在岗任教、已启用且具有读取权限的班级。</p>
+    {% elif entry.view == 'profiles' %}
+      <h1>选择今天的工作入口</h1><p>按实际任教关系与现有权限，为您整理工作空间。</p>
+    {% else %}
+      <h1>您的工作空间还需要准备一下</h1><p>不会自动分配班级、授予角色，也不会代您进入其他班级。</p>
+    {% endif %}</section>
+    <div class="layout">
+      <section class="choices" aria-label="工作入口">
+      {% if entry.view == 'classes' %}
+        <div class="section-label"><span>班级教师</span><span>{{ entry.groups | length }} 个可进入的班级</span></div>
+        <div class="class-grid">{% for group in entry.groups %}
+          <a class="class-card" data-group-choice href="{{ group.url | e }}"><span class="class-art" aria-hidden="true"><span class="sun">☀</span><span class="board">一起玩 · 一起学</span><span class="table"></span></span><span class="class-description"><strong>{{ (group.student_group_name or group.name) | e }}</strong><small>我的任教班级 · 3D 工作台</small><span class="enter">进入教室 <span>→</span></span></span></a>
+        {% endfor %}</div>
+      {% else %}
+        {% for profile in entry.profiles %}
+          {% if profile.enabled %}<a class="profile-card" data-profile="{{ profile.id | e }}" href="{{ profile.url | e }}">{% else %}<section class="profile-card unavailable" data-profile="{{ profile.id | e }}">{% endif %}
+          <span class="profile-icon" aria-hidden="true">{{ '☀' if profile.id == 'teacher' else '▦' }}</span><span><strong>{{ profile.label | e }}</strong><small>{{ profile.description | e }}</small>{% if profile.id == 'teacher' and profile.enabled %}<em>{{ profile.class_count }} 个任教班级</em>{% elif not profile.enabled %}<em>待配置 · 不会展示其他班级</em>{% endif %}</span>{% if profile.enabled %}<span class="arrow">→</span></a>{% else %}</section>{% endif %}
+        {% endfor %}
+        {% if not entry.profiles %}<div class="setup"><h2>尚未识别到可用工作入口</h2><p>请由管理员核对园内工作账号、员工、教师及班级关联；未关联的业务账号不会被推断为班级教师。</p></div>{% endif %}
+      {% endif %}
+      {% if entry.view == 'setup' or (entry.profiles | selectattr('enabled', 'equalto', false) | list) %}
+        <details class="checklist" open><summary>本人教师入口配置检查</summary><p>请管理员在已有员工、教师、班级和权限配置中核对以下关联。</p>
+          {% for key, label in [('employee_linked', '账号关联启用员工'), ('instructor_linked', '员工关联在岗教师'), ('class_linked', '教师已加入班级任教名单'), ('can_read_classroom', '具有班级和学生读取权限')] %}
+            <div><span>{{ label | e }}</span><strong class="{{ 'ok' if entry.checks[key] else 'pending' }}">{{ '已关联 / 可用' if entry.checks[key] else '需核对' }}</strong></div>
+          {% endfor %}
+          <p>上述关联还必须与启用班级、班级行级权限取交集。这里不会改写任何配置。</p>
+        </details>
+      {% endif %}
+      <nav class="secondary-links" aria-label="其他入口"><a href="/tongjianyun-entry?choose=1">重新选择工作入口</a>{% if entry.business_available %}<a href="/desk/tongjianyun-workbench">原业务工作台 ↗</a>{% endif %}</nav>
+      </section>
+      <aside class="guide"><span class="guide-icon" aria-hidden="true">✿</span><h2>工作，就在教室里</h2><p>点击学生与物件，在同一场景里完成日常班级管理。</p><div><b>门口点名台</b><span>到园、请假与缺勤核对</span></div><div><b>班级餐桌</b><span>预计与实际用餐分别确认</span></div><div><b>黑板与阅读角</b><span>查看课表，记录真实观察</span></div><p class="note">健康资料继续遵循专属权限。卡通布局与人物动作仅作示意，不是实时定位或自动识别。</p></aside>
+    </div>
+    <footer>入口选择不改变账号权限 · 班级关联在每次访问时重新核验</footer>
+  </main>
+</body></html>
