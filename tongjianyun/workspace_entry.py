@@ -84,6 +84,11 @@ def entry_model():
     assignment = teaching_assignment()
     business = can_open_workbench()
     profiles = choose_profiles(frappe.session.user, frappe.get_roles(), assignment, business)
+    from tongjianyun.meal_scene import has_access as can_open_meal_scene
+    teacher_only = profiles and all(p["id"] == "teacher" for p in profiles)
+    if not teacher_only and can_open_meal_scene():
+        profiles.append({"id": "meals", "label": "膳食全流程场景", "enabled": True,
+            "description": "按业务顺序核对食谱、采购、到货、库存与实际用餐；不增加原账号权限。", "class_count": 0})
     return {"profiles": profiles, "groups": assignment["groups"],
             "checks": {k: v for k, v in assignment.items() if k != "groups"},
             "business_available": business,
@@ -110,6 +115,8 @@ def resolve_entry(model, profile=None, group=None, choose=False):
             return {"destination": CLASSROOM + "?" + urlencode({"workspace": "teacher", "class": selected}),
                     "view": "redirect", "profile": "teacher"}
         return {"destination": None, "view": "classes", "profile": "teacher"}
+    if profile == "meals" and available["meals"]["enabled"] and not choose:
+        return {"destination": "/tongjianyun-meal-scene", "view": "redirect", "profile": "meals"}
     if profile == "business" and not choose:
         return {"destination": WORKBENCH, "view": "redirect", "profile": "business"}
     return {"destination": None, "view": "profiles" if enabled else "setup", "profile": profile}

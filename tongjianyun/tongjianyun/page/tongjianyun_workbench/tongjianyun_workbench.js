@@ -17,6 +17,7 @@ class TongjianyunOperationsWorkbench {
         this.page.add_inner_button("上传学生名单", () => this.uploadRoster());
         this.page.add_inner_button("园区数字孪生", () => { window.location.href = "/tongjianyun-campus"; });
         this.page.add_inner_button("班级管理场景", () => { window.location.href = "/tongjianyun-classroom"; });
+        this.page.add_inner_button("膳食全流程场景", () => { window.location.href = "/tongjianyun-meal-scene"; });
         if (frappe.session.user === "Administrator" || frappe.user.has_role("Tongjianyun Health Manager")) {
             this.page.add_inner_button("幼儿健康登记", () => frappe.require("/assets/tongjianyun/js/health_registration.js?v=1", () => window.tjyOpenHealthRegistration()));
         }
