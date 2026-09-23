@@ -1,5 +1,5 @@
 (() => {
-    const pageCacheVersion = "teacher-entry-20260923-1";
+    const pageCacheVersion = "teacher-entry-compat-20260923-1";
     const versionKey = "tongjianyun_page_cache_version";
     const reloadKey = `${versionKey}_reloaded`;
     const cachedPages = ["tongjianyun-recipe-workbench", "tongjianyun-workbench", "weekly-recipe-nutrition-sheet", "director-dashboard"];

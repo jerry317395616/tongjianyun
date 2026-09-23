@@ -11,7 +11,7 @@ frappe.init(site=os.environ.get("CLASSROOM_TEST_SITE", "child.myyr.top"), sites_
 frappe.connect()
 try:
     frappe.set_user("Administrator")
-    modules = ["test_workspace_entry", "test_classroom", "test_student_meals", "test_attendance_scope", "test_teacher_permissions", "test_health_registration", "test_director_dashboard", "test_campus_viewer"]
+    modules = ["test_legacy_entry", "test_workspace_entry", "test_classroom", "test_student_meals", "test_attendance_scope", "test_teacher_permissions", "test_health_registration", "test_director_dashboard", "test_campus_viewer"]
     suite = unittest.defaultTestLoader.loadTestsFromNames(["tongjianyun.tests."+m for m in modules])
     result = unittest.TextTestRunner(verbosity=1).run(suite)
 finally:

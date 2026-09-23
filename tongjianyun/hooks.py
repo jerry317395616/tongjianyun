@@ -12,7 +12,13 @@ ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
 
 app_home = "/tongjianyun-entry"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = ["/assets/tongjianyun/js/page_cache_buster.js?v=teacher-entry-20260923-1"]
+app_include_js = [
+    "/assets/tongjianyun/js/page_cache_buster.js?v=teacher-entry-compat-20260923-1",
+    "/assets/tongjianyun/js/teacher_entry_compat.js?v=teacher-entry-compat-20260923-1",
+]
+
+# Preserve the restricted management Page; route old teacher bookmarks safely.
+update_website_context = ["tongjianyun.legacy_entry.redirect_legacy_teacher_page"]
 
 add_to_apps_screen = [
     {
