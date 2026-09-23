@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="same-origin">
+  <meta name="csrf-token" content="{{ csrf_token | e }}">
+  <title>班级管理 · 童健云</title>
+  <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
+  <link rel="stylesheet" href="/assets/tongjianyun/classroom/classroom.css?v=scene-v1-20260923-1">
+  <link rel="stylesheet" href="/assets/tongjianyun/classroom/scene-workbench.css?v=scene-v1-20260923-1">
+  <script type="importmap">{"imports":{"three":"/assets/tongjianyun/campus/vendor/three.module.js"}}</script>
+</head>
+<body>
+  <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10H3Z M9 20v-7h6v7"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 21v-4a6 6 0 0 1 12 0v4 M16 4a3 3 0 0 1 0 6 M17 13a5 5 0 0 1 4 5v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4 M16 3v4 m-8 7 3 3 5-6"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 5v16 M12 5C9 3 6 3 3 4v15c3-1 6-1 9 2 3-3 6-3 9-2V4c-3-1-6-1-9 1Z"/></symbol>
+    <symbol id="i-meal" viewBox="0 0 24 24"><path d="M4 3v6a3 3 0 0 0 6 0V3 M7 3v18 M19 3c-4 2-4 8 0 9V3v18"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20 5c-3-3-6-1-8 1-2-2-5-4-8-1-5 5 3 11 8 15 5-4 13-10 8-15Z M7 11h3l2-3 2 6 2-3h2"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 3H4v18h16V11 M8 16l2-5 9-9 3 3-9 9Z M10 11l3 3"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11a9 9 0 0 1-9 9H3l2-5A9 9 0 1 1 21 11Z M7 9h10 M7 13h6"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24"><path d="m12 2 9 5v10l-9 5-9-5V7Z M3 7l9 5 9-5 M12 12v10"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 9a8 8 0 1 0 0 7 M20 3v6h-6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 3H3v6 M15 3h6v6 M3 15v6h6 M21 15v6h-6"/></symbol>
+  </defs></svg>
+  <a class="skip-link" href="#main">跳到班级管理内容</a>
+  <header class="topbar">
+    <a class="brand" href="/desk/tongjianyun-workbench"><img src="/assets/tongjianyun/images/tongjianyun-logo.svg" alt=""><span><strong>童健云</strong><small>班级 3D 工作台</small></span></a>
+    <span class="scene-brand-divider"></span>
+    <div class="class-switch"><span class="sun-badge">☀</span><label for="class-select">我的班级<select id="class-select" disabled><option value="">正在读取…</option></select></label></div>
+    <div class="heading-controls"><label class="day-label" for="day-input">业务日期<input id="day-input" type="date" aria-label="业务日期"></label><button id="refresh" class="icon-button" title="刷新班级数据" aria-label="刷新班级数据"><svg><use href="#i-refresh"/></svg></button></div>
+    <div class="user-area"><a class="header-return" href="/desk/tongjianyun-workbench">返回业务工作台 ↗</a><span class="user-avatar">师</span><strong id="user-name">老师</strong></div>
+  </header>
+  <main id="main" class="content">
+    <div id="page-message" class="page-message" role="status">正在读取班级业务数据…</div>
+    <div id="dashboard" hidden>
+      <section class="scene-card" aria-label="班级 3D 主工作台">
+        <div class="scene-stage" id="scene-stage"><div id="scene-canvas" role="img" aria-label="卡通教室，拖动旋转，滚轮缩放；所有物件提供等效键盘入口"></div><div id="scene-labels" aria-label="教室内的业务物件"></div><div id="scene-loading" class="scene-loading">正在布置班级场景…</div><div id="scene-fallback" hidden><div class="fallback-art">☀</div><h3>班级业务照常可用</h3><p>当前浏览器未能启用 3D。下面的入口提供相同业务，不生成示例数据。</p><div class="scene-fallback-actions"><button class="primary" data-action="objects">所有业务物件</button><button class="secondary" data-action="roster">完整学生名册</button><button class="secondary" data-action="workflow">一日工作引导</button></div></div></div>
+        <div class="scene-intro scene-chrome"><div><p class="eyebrow">CLASSROOM / 场景即工作台</p><h1 id="class-title">班级里的每一天</h1><p id="class-subtitle">点击学生或物件，在教室里完成日常管理。</p></div></div>
+        <div class="search-shell"><label class="scene-search"><svg><use href="#i-search"/></svg><input id="scene-search" type="search" autocomplete="off" placeholder="找学生 / 找业务物件" aria-label="搜索学生或业务物件" aria-controls="search-results" aria-expanded="false"><kbd>/</kbd></label><div id="search-results" class="search-results" hidden aria-label="搜索结果"></div></div>
+        <div class="scene-controls"><div class="view-switch" role="group" aria-label="场景视角"><button data-view="room" class="active" aria-pressed="true">教室</button><button data-view="top" aria-pressed="false">俯视</button></div><button id="label-toggle" class="icon-button active" title="显示或隐藏物件标注" aria-label="显示物件标注" aria-pressed="true"><svg><use href="#i-note"/></svg></button><button id="fullscreen" class="icon-button" aria-label="全屏工作台" title="全屏工作台"><svg><use href="#i-expand"/></svg></button></div>
+        <div id="scene-pager" class="scene-pager" hidden><button id="people-prev" aria-label="上一页名册形象">‹</button><span id="people-page"></span><button id="people-next" aria-label="下一页名册形象">›</button></div>
+        <div class="scene-legend" aria-label="名册形象状态"><span><i class="dot Present"></i>登记到园</span><span><i class="dot Leave"></i>请假</span><span><i class="dot Absent"></i>缺勤</span><span><i class="dot Unknown"></i>待点名</span></div>
+        <div class="scene-dock"><div class="scene-context" aria-live="polite"><strong id="context-title">点一个物件，开始今天的工作</strong><p id="context-detail">门口点名 · 餐桌核餐 · 黑板看课表 · 阅读角记成长</p></div><nav class="scene-actions" aria-label="场景辅助操作"><button class="dock-primary" data-action="workflow"><svg><use href="#i-check"/></svg>一日工作 <span id="task-count"></span></button><button data-action="objects"><svg><use href="#i-cube"/></svg>所有物件</button><button data-action="roster"><svg><use href="#i-people"/></svg>找学生</button><button id="reset-view" aria-label="复位三维视角"><svg><use href="#i-refresh"/></svg>回到全景</button></nav></div>
+        <div class="scene-footnote"><span id="scene-note">空间示意，非实时位置</span> · <span id="sync-time"></span></div>
+      </section>
+    </div>
+  </main>
+  <dialog id="business-dialog" aria-labelledby="dialog-title" aria-modal="false"><div class="dialog-header"><div><p id="dialog-kicker" class="eyebrow">班级业务</p><h2 id="dialog-title">班级详情</h2></div><div class="dialog-tools"><button id="dialog-expand" aria-label="展开或收起核对面板" title="展开核对面板"><svg><use href="#i-expand"/></svg></button><button id="dialog-close" class="close-button" aria-label="返回班级场景" title="返回班级场景">×</button></div></div><div class="dialog-context"><span id="object-context">场景内办理</span><span> / </span><button data-action="workflow">一日工作</button><button data-action="objects">换一个物件</button><span id="selection-context"></span></div><div id="dialog-content" class="dialog-content"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <noscript><p class="page-message">请启用 JavaScript，或直接进入<a href="/desk/tongjianyun-workbench">现有业务工作台</a>。</p></noscript>
+  <script type="module" src="/assets/tongjianyun/classroom/app.js?v=scene-v1-20260923-1"></script>
+</body>
+</html>

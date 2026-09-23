@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source=fs.readFileSync(new URL('../public/classroom/state.js',import.meta.url),'utf8');
+const {esc,mealSelections,mealTotals,attendanceChanges,timeLabel,hash}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+assert.equal(esc('<img src=x onerror="alert(1)">'), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+assert.equal(esc(null),'');
+const rows=mealSelections([{student:'A',lunch:'未确认',lunch_expected:1,dinner:'不供餐'}, {student:'B',lunch:'未就餐',lunch_expected:1}, {student:'C',lunch:'已就餐',lunch_expected:0}]);
+assert.equal(rows[0].lunch,'就餐');assert.equal(rows[0].dinner,'不供餐');assert.equal(rows[1].lunch,'不就餐');assert.equal(rows[2].lunch,'就餐');assert.equal(mealTotals(rows).lunch,2);
+assert.deepEqual(attendanceChanges([{student:'A',status:'Unknown'}],{}),[]);
+assert.deepEqual(attendanceChanges([{student:'A',status:'Present'}],{A:{status:'Present'}}),[]);
+assert.deepEqual(attendanceChanges([{student:'A',status:'Unknown'}],{A:{status:'Leave',leave_reason:'家长告知'}}),[{student:'A',status:'Leave',leave_reason:'家长告知'}]);
+assert.equal(timeLabel('8:30:00'),'08:30');assert.equal(timeLabel(''),'');assert.equal(hash('student'),hash('student'));
+console.log('PASS: escaping, meal fact/plan mapping, unsaved attendance, explicit changes, time labels, deterministic generic avatars');

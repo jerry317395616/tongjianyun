@@ -6,6 +6,11 @@ frappe.ui.form.on('Student Group', {
   refresh(frm) {
     set_direct_student_query(frm)
     add_student_import_button(frm)
+    if (!frm.is_new() && !frm.doc.disabled) {
+      frm.add_custom_button("班级管理场景", () => {
+        window.location.href = "/tongjianyun-classroom?class=" + encodeURIComponent(frm.doc.name)
+      })
+    }
   },
 })
 
