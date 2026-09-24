@@ -1,0 +1,21 @@
+[Unit]
+Description=Frappe dedicated meal conversation worker
+After=network-online.target mariadb.service frappe-native-redis-queue.service
+
+[Service]
+Type=simple
+User=zyd
+Group=zyd
+WorkingDirectory=/home/zyd/frappe/native-bench/sites
+Environment=PATH=/home/zyd/.local/bin:/home/zyd/.local/opt/node24/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=FRAPPE_SITE_PATH=/home/zyd/frappe/native-bench/sites
+Environment=FRAPPE_SITE=child.myyr.top
+ExecStart=/home/zyd/frappe/native-bench/env/bin/python -m frappe.utils.bench_helper frappe worker --queue meal_chat
+Restart=always
+RestartSec=3
+KillMode=mixed
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

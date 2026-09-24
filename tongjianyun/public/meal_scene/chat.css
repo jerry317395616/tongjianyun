@@ -9,6 +9,12 @@
 .chat-message.user{align-self:flex-end;background:#3f8068;color:white;border-bottom-right-radius:5px}
 .chat-message.busy{color:#708778}
 .chat-message.error{background:#fff1ed;color:#9c5148}
+.chat-task{display:flex;flex-direction:column;gap:10px;min-width:0}
+.chat-progress{margin:0 8px;padding-left:10px;border-left:2px solid #dce8df;color:#738577;font-size:11px;line-height:1.8}
+.chat-progress:empty{display:none}
+.chat-progress[data-state="running"]{color:#3f8068}
+.chat-progress[data-state="failed"],.chat-task-status.error{color:#a65d4e}
+.chat-task-status{padding:0 8px;color:#849488;font-size:11px;line-height:1.6}
 .chat-form{flex:none;padding:12px;border-top:1px solid #e8eee6;background:#fff}
 .chat-composer{display:flex;align-items:flex-end;gap:8px;padding:6px;border:1px solid #d6e3d6;border-radius:14px;background:#fafcf9}
 .chat-composer:focus-within{border-color:#4b9175;box-shadow:0 0 0 2px #d9eee1}
