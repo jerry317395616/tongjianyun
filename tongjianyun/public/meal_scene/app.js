@@ -1,4 +1,4 @@
-import {STEPS,MEALS,SLOTS,stepFor,stepBadge,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
+import {STEPS,MEALS,SLOTS,stepFor,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
 
 const $=id=>document.getElementById(id),panel=$('panel');
 let data=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
@@ -37,20 +37,17 @@ async function load(automatic=false){
   try{
     const result=await api('get_overview',{day:$('day').value||'',meal:$('meal').value});if(ticket!==loadSequence)return;
     data=result;ready=true;$('day').value=data.day;$('meal').value=data.meal;$('user-label').textContent=data.user_label;
-    document.querySelectorAll('#flow-nav button').forEach(el=>el.title=stepBadge(el.dataset.step,data));
     renderWeekOverview();message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
     if(!active)await openStep('recipe');
   }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);}
   finally{if(ticket===loadSequence)$('refresh').disabled=false;}
 }
-$('flow-nav').innerHTML=STEPS.map(s=>`<button data-step="${s.id}" style="--tint:${s.color}" aria-label="${h(s.title)}"><span class="step-num">${s.number}</span><span><strong>${h(s.title)}</strong></span></button>`).join('');
 async function openStep(id){
   const step=stepFor(id);if(!step||!ready){notify('请先等待读取成功，或刷新后再操作。');return false;}if(!leaveDraft())return false;
   const ticket=++sequence;active=id;$('panel-title').textContent=step.title;$('panel-number').textContent=step.number;$('panel-subtitle').textContent=step.subtitle;
   panel.style.setProperty('--active-color',step.color);$('panel-context').textContent=`${data.day} · ${MEALS.find(([m])=>m===data.meal)?.[1]} · 仅当前账号可见范围`;
   $('previous-step').disabled=step.number===1;$('next-step').disabled=step.number===8;$('step-position').textContent=step.number+' / 8';
   panel.classList.remove('expanded','embedded-open');if(!panel.open)panel.show();
-  document.querySelectorAll('#flow-nav button').forEach(el=>{el.classList.toggle('active',el.dataset.step===id);el.setAttribute('aria-current',el.dataset.step===id?'step':'false');});
   panelBody(empty('正在读取原业务记录…'));
   try{
     if(step.cap&&!data.capabilities[step.cap]&&!(id==='purchase'&&data.capabilities.procurement)){panelBody(note('当前账号没有本环节所需业务权限。不会以空表或零值伪装正常，也不会因进入工作台自动授权。','warning'));return false;}
@@ -89,9 +86,6 @@ function renderWeekOverview(){
   if(!mobileWeekDay||!dates.includes(mobileWeekDay))mobileWeekDay=dates.includes(data.day)?data.day:dates[0];
   $('week-title').textContent=`${dates[0]} — ${dates.at(-1)}`;
   $('week-caption').textContent=editing?'正在编排草稿；点选周历格子，在右侧修改该餐次，保存前不会写入业务记录。':covering?`${recipe.title||weekPayload.name} · ${recipe.workflowStatus||'状态待核'}；未发布食谱不能作为采购依据。`:weekPayload?'所选食谱不覆盖本周；请选择本周食谱，不能将空白当作未供餐。':'尚未选定本周食谱；空白格不代表该日没有供餐。';
-  $('week-selection').textContent=editing?`正在编辑：${draftState.day} · ${MEALS.find(([key])=>SLOTS[key]===draftState.slot)?.[1]||draftState.slot}`:`当前业务：${data.day} · ${MEALS.find(([key])=>key===data.meal)?.[1]||data.meal}`;
-  $('week-new').hidden=!data.capabilities.recipe_create;$('week-import').hidden=!data.capabilities.recipe_create;
-  $('week-other-recipes').hidden=!data.capabilities.recipe;
   $('week-mobile-day').innerHTML=dates.map(date=>`<option value="${date}" ${date===mobileWeekDay?'selected':''}>${recipeWeekday(date)} · ${date.slice(5)}</option>`).join('');
   $('workbench-week').style.setProperty('--workbench-days',String(dates.length));
   const headers=dates.map(date=>`<div class="workbench-week-day ${date===data.day?'business-day':''} ${date===mobileWeekDay?'mobile-day':''}" data-week-date="${date}"><b>${h(recipeWeekday(date))}</b><span>${h(date.slice(5))}</span></div>`).join('');
@@ -379,7 +373,7 @@ document.addEventListener('click',event=>{
     revealPanel();
     return;
   }
-  const step=event.target.closest('[data-step]');if(step){$('search-results').hidden=true;openStep(step.dataset.step);revealPanel();return;}
+  const step=event.target.closest('[data-step]');if(step){openStep(step.dataset.step);revealPanel();return;}
   const native=event.target.closest('[data-native]');if(native){openNative(native.dataset.native,native.dataset.doc||'');return;}
   const draftCell=event.target.closest('[data-draft-day][data-draft-slot]');if(draftCell&&draftState?.kind==='draft'){captureDraftEditor();const top=$('panel-body').scrollTop,left=$('panel-body').querySelector('.recipe-week-scroll')?.scrollLeft||0;draftState.day=draftCell.dataset.draftDay;draftState.slot=draftCell.dataset.draftSlot;renderDraftEditor();$('panel-body').scrollTop=top;$('panel-body').querySelector('.recipe-week-scroll').scrollLeft=left;return;}
   const draftRemove=event.target.closest('[data-draft-remove]');if(draftRemove&&draftState?.kind==='draft'){captureDraftEditor();const portion=draftPortion(draftState.day,draftState.slot,true);portion.dishIngredientRows.splice(Number(draftRemove.dataset.draftRemove),1);dirty=true;const top=$('panel-body').scrollTop;renderDraftEditor();$('panel-body').scrollTop=top;return;}
@@ -406,11 +400,7 @@ function contextChange(el,requestedDay=$('day').value,requestedMeal=$('meal').va
 $('day').onchange=()=>{if($('day').value)contextChange($('day'));};$('meal').onchange=()=>contextChange($('meal'));
 $('refresh').onclick=()=>{if(!leaveDraft())return;if(panel.open)closePanel();load();};
 $('week-mobile-day').onchange=()=>{mobileWeekDay=$('week-mobile-day').value;renderWeekOverview();};
-$('week-new').onclick=async()=>{if(await openStep('recipe'))beginRecipeDraft();};
-$('week-import').onclick=async()=>{if(await openStep('recipe'))beginRecipeImport();};
-$('week-other-recipes').onclick=async()=>{if(await openStep('recipe'))document.querySelector('[data-sub="recipe-library"]')?.click();};
-$('search').oninput=()=>{const q=$('search').value.trim();$('search-results').hidden=!q;$('search-results').innerHTML=STEPS.filter(s=>(s.title+s.subtitle).includes(q)).map(s=>`<button data-step="${s.id}">${h(s.title)}</button>`).join('')||'<p class="muted">没有匹配的业务</p>';};
-document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'){if(!$('search-results').hidden){$('search-results').hidden=true;return;}if(panel.open){e.preventDefault();closePanel();}}if(e.key==='/'&&!editing){e.preventDefault();$('more-work').open=true;$('search').focus();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
+document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'&&panel.open){e.preventDefault();closePanel();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
 window.addEventListener('beforeunload',e=>{if(dirty||writing||embedded){e.preventDefault();e.returnValue='';}});
 const timer=setInterval(()=>load(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(true);});
 window.addEventListener('pagehide',()=>clearInterval(timer));window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
