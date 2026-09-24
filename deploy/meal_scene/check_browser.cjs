@@ -23,7 +23,14 @@ function overview(args){
     capabilities:{recipe:true,recipe_write:true,procurement:true,order:true,receipt:true,stock:true,meals:true,meals_write:true},
     unconnected:['加工执行记录','配送签收','温度传感器','留样消毒记录','特殊餐执行闭环'],scene:{mode:'illustrative',telemetry:false,workflow_order_not_completion:true}};
 }
-function payload(){return {recipe:{recipeId:'SYN-RECIPE',title:recipe.title,workflowStatus:'已发布',weekStart:recipe.week_start,weekEnd:recipe.week_end},days:[{date:'2026-09-23',day:'周三',portions:[{slot:'lunch',label:'午餐',dishes:['田园时蔬','米饭'],dishIngredientRows:[{dishName:'米饭',ingredient:'大米（示例）',amount:40,unit:'g'},{dishName:'田园时蔬',ingredient:'青菜（示例）',amount:60,unit:'g'}]}]}]};}
+function payload(){
+  const slots=[['breakfast','早餐','小米粥'],['morningSnack','早点','水果'],['lunch','午餐','田园时蔬'],['snack','午点','点心'],['dinner','晚餐','杂粮饭']];
+  const days=Array.from({length:5},(_,i)=>{
+    const date=new Date(Date.parse(recipe.week_start+'T00:00:00Z')+i*86400000).toISOString().slice(0,10);
+    return {date,day:['周一','周二','周三','周四','周五'][i],portions:slots.filter(([slot])=>!(i===1&&slot==='dinner')).map(([slot,label,dish])=>({slot,label,dishes:i===2&&slot==='lunch'?['田园时蔬','米饭']:[dish],dishIngredientRows:i===2&&slot==='lunch'?[{dishName:'米饭',ingredient:'大米（示例）',amount:40,unit:'g'},{dishName:'田园时蔬',ingredient:'青菜（示例）',amount:60,unit:'g'}]:[]}))};
+  });
+  return {recipe:{recipeId:'SYN-RECIPE',title:recipe.title,workflowStatus:'已发布',weekStart:recipe.week_start,weekEnd:recipe.week_end},days};
+}
 const server=http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,'http://localhost');
@@ -79,9 +86,13 @@ class CDP{
     await run(`window.confirm=()=>true`);
     // Pointer event hits actual geometry, independent of the HTML tag.
     await run(`(async()=>{const T=await import('/assets/tongjianyun/campus/vendor/three.module.js'),host=document.querySelector('#canvas'),r=host.getBoundingClientRect(),span=Math.max(23,39/(r.width/r.height)),camera=new T.OrthographicCamera(-span*r.width/r.height/2,span*r.width/r.height/2,span/2,-span/2,.1,180);camera.position.set(3.7,29,32);camera.lookAt(0,0,0);camera.updateProjectionMatrix();camera.updateMatrixWorld();const p=new T.Vector3(-10,3.12,-3.84).project(camera),ev={bubbles:true,isPrimary:true,clientX:r.left+(p.x+1)*r.width/2,clientY:r.top+(1-p.y)*r.height/2,pointerId:1};host.dispatchEvent(new PointerEvent('pointerdown',ev));host.dispatchEvent(new PointerEvent('pointerup',ev));})()`);
-    await until(`document.querySelector('#panel').open&&document.querySelector('.recipe-item')`,'geometry picking');check('actual building raycast opens business',true);
-    await click('.recipe-item');await until(`document.querySelectorAll('.menu-day').length===1`);await shot('recipe-panel.png');
-    await click('[data-sub="nutrition"]');await until(`document.querySelectorAll('.metric').length===7`);check('nutrition labels estimates explicitly',await run(`document.querySelector('#panel-body').textContent.includes('估算')`));await close();
+    await until(`document.querySelector('#panel').open&&document.querySelector('.recipe-week-grid')`,'geometry picking');check('actual building raycast opens business',true);
+    check('single covering recipe opens full five-by-five week directly',await run(`document.querySelectorAll('.recipe-week-cell').length===25&&document.querySelector('.recipe-week-cell.selected')?.dataset.calendarDay==='2026-09-23'`));
+    await shot('recipe-week-calendar.png');
+    await click('[data-calendar-day="2026-09-22"][data-calendar-slot="dinner"]');check('missing meal is clearly unplanned',await run(`document.querySelector('#recipe-calendar-preview').textContent.includes('尚未编排')`));
+    await click('[data-calendar-day="2026-09-23"][data-calendar-slot="lunch"]');check('calendar selection restores current lunch without changing global context',await run(`document.querySelector('#recipe-calendar-preview').textContent.includes('田园时蔬')&&document.querySelector('#day').value==='2026-09-23'`));
+    await click('[data-sub="nutrition"]');await until(`document.querySelectorAll('.metric').length===7`);check('nutrition labels weekly estimates explicitly',await run(`document.querySelector('#panel-body').textContent.includes('整周营养估算')`));
+    await click('[data-sub="recipe-back"]');await until(`!!document.querySelector('.recipe-week-grid')`);check('nutrition returns to selected week calendar',await run(`document.querySelector('.recipe-week-cell.selected')?.dataset.calendarSlot==='lunch'`));await close();
     for(const id of ['receipt','stock','kitchen','dispatch','trace']){await click('#flow-nav [data-step="'+id+'"]');await until(`!document.querySelector('#panel-body').textContent.includes('正在读取')`);await delay(180);check('station '+id+' loads',await run(`document.querySelector('#panel').open`));if(id==='stock')await shot('stock-panel.png');if(id==='kitchen')check('kitchen does not claim actual processing',await run(`document.querySelector('#panel-body').textContent.includes('不是加工执行')`));await close();}
     check('viewing eight stations never writes',calls.filter(c=>c.write).length===0);
     await click('#flow-nav [data-step="purchase"]');await until(`!!document.querySelector('#new-demand')`);await click('#new-demand');await until(`!!document.querySelector('#preview-demand')`);
@@ -96,6 +107,7 @@ class CDP{
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(600);
     check('mobile has no page horizontal overflow',await run(`document.documentElement.scrollWidth<=innerWidth+1`));await run(`document.querySelector('#toast').hidden=true`);await shot('mobile-overview.png');
     await click('#flow-nav [data-step="dispatch"]');await until(`!!document.querySelector('[data-meal-group]')`);await shot('mobile-panel.png');await close();
+    await click('#flow-nav [data-step="recipe"]');await until(`!!document.querySelector('.recipe-week-grid')`);check('mobile recipe week remains inside panel without page overflow',await run(`document.documentElement.scrollWidth<=innerWidth+1&&document.querySelector('.recipe-week-scroll').scrollWidth>0`));check('mobile week calendar explains horizontal scrolling',await run(`getComputedStyle(document.querySelector('.recipe-week-swipe')).display!=='none'`));await shot('mobile-recipe-week-calendar.png');await close();
     await run(`const day=document.querySelector('#day');day.value='2026-09-24';day.dispatchEvent(new Event('change',{bubbles:true}));`);await until(`document.querySelector('#message').hidden&&location.search.includes('2026-09-24')`);
     await click('#flow-nav [data-step="dining"]');await until(`!!document.querySelector('[data-meal-group]')`);await click('[data-meal-group]');await until(`!!document.querySelector('#meal-confirm')`);check('future actual confirmation disabled',await run(`document.querySelector('#meal-confirm').disabled`));await close();
     await run(`document.querySelector('#canvas canvas').dispatchEvent(new Event('webglcontextlost',{cancelable:true}))`);check('WebGL loss gives ordinary equivalent actions',await run(`!document.querySelector('#fallback').hidden`));
