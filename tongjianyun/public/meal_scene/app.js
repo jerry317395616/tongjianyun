@@ -1,7 +1,7 @@
 import {STEPS,MEALS,SLOTS,stepFor,stepBadge,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
 
 const $=id=>document.getElementById(id),panel=$('panel');
-let data=null,scene=null,scenePromise=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
+let data=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
 const notify=(text,error=false)=>{clearTimeout(toastTimer);$('toast').textContent=text;$('toast').hidden=false;$('toast').style.background=error?'#a56554':'';toastTimer=setTimeout(()=>$('toast').hidden=true,error?10000:5000);};
 const note=(text,kind='')=>`<div class="note ${kind}">${h(text)}</div>`;
 const empty=text=>`<div class="empty">${h(text)}</div>`;
@@ -28,37 +28,25 @@ async function api(method,args={},write=false){
 }
 function message(text='',error=false){$('message').textContent=text;$('message').hidden=!text;$('message').classList.toggle('error',error);}
 function leaveDraft(){if(writing)return false;if((dirty||embedded)&&!window.confirm(embedded?'离开原业务面板前，请确认已保存其中的修改。继续吗？':'有未保存的食谱修改，确认放弃并切换吗？'))return false;const hadDraft=!!draftState;dirty=false;draftState=null;embedded=false;panel.classList.remove('embedded-open');if(hadDraft)renderWeekOverview();return true;}
-function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panelBody(empty('请选择周历餐次或下方其他业务。'));scene?.focus(null);return true;}
+function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panelBody(empty('请选择周历餐次或下方其他业务。'));return true;}
 function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').scrollTop=0;}
 function revealPanel(){if(window.matchMedia('(max-width:950px)').matches)panel.scrollIntoView({behavior:'smooth',block:'start'});}
-function fallback(){ $('render-status').hidden=true;$('fallback').hidden=false;$('labels').hidden=true;scene?.dispose();scene=null; }
-function ensureScene(){
-  if(scenePromise||!$('scene-preview').open)return;
-  scenePromise=import('./scene.js?v=meal-flow-20260923-1').then(({MealScene})=>{
-    scene=new MealScene($('canvas'),$('labels'),{onSelect:openStep,onFailure:fallback});
-    if(data)scene.setData(data);
-    if(active)scene.focus(active);
-    $('render-status').hidden=true;
-  }).catch(()=>fallback());
-}
 async function load(automatic=false){
   if(writing||(automatic&&(panel.open||document.hidden)))return;
   const ticket=++loadSequence;ready=false;if(!automatic)message('正在读取所选日期与餐次的业务记录…');$('refresh').disabled=true;
   try{
     const result=await api('get_overview',{day:$('day').value||'',meal:$('meal').value});if(ticket!==loadSequence)return;
     data=result;ready=true;$('day').value=data.day;$('meal').value=data.meal;$('user-label').textContent=data.user_label;
-    $('sync').textContent='业务读取 '+String(data.generated_at).slice(11,19);
     document.querySelectorAll('#flow-nav button').forEach(el=>el.title=stepBadge(el.dataset.step,data));
-    renderWorklist();renderWeekOverview();scene?.setData(data);message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
-    if($('scene-preview').open)ensureScene();
+    renderWorklist();renderWeekOverview();message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
     if(!active)await openStep('recipe');
-  }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);$('render-status').hidden=true;}
+  }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);}
   finally{if(ticket===loadSequence)$('refresh').disabled=false;}
 }
 $('flow-nav').innerHTML=STEPS.map(s=>`<button data-step="${s.id}" style="--tint:${s.color}" aria-label="${h(s.title)}"><span class="step-num">${s.number}</span><span><strong>${h(s.title)}</strong></span></button>`).join('');
 async function openStep(id){
   const step=stepFor(id);if(!step||!ready){notify('请先等待读取成功，或刷新后再操作。');return false;}if(!leaveDraft())return false;
-  const ticket=++sequence;active=id;scene?.focus(id);$('panel-title').textContent=step.title;$('panel-number').textContent=step.number;$('panel-subtitle').textContent=step.subtitle;
+  const ticket=++sequence;active=id;$('panel-title').textContent=step.title;$('panel-number').textContent=step.number;$('panel-subtitle').textContent=step.subtitle;
   panel.style.setProperty('--active-color',step.color);$('panel-context').textContent=`${data.day} · ${MEALS.find(([m])=>m===data.meal)?.[1]} · 仅当前账号可见范围`;
   $('previous-step').disabled=step.number===1;$('next-step').disabled=step.number===8;$('step-position').textContent=step.number+' / 8';
   panel.classList.remove('expanded','embedded-open');if(!panel.open)panel.show();
@@ -353,7 +341,7 @@ function plansView(id){
     note(id==='dispatch'?'未保存预计的班级显示“待核对”，不是零份。当前没有特殊餐执行清单、配送批次或签收模块，不能把餐车模型当作凭证。':'修改已确认记录必须填写原因。未来只能保存预计，未发生的餐次不可提前确认实际。','warning'));
 }
 async function editMeals(group){
-  if(!leaveDraft())return;active='dining';scene?.focus('dining');$('panel-title').textContent='实际用餐确认';$('panel-number').textContent=7;$('panel-subtitle').textContent='逐生核对五餐';$('step-position').textContent='7 / 8';$('previous-step').disabled=false;$('next-step').disabled=false;
+  if(!leaveDraft())return;active='dining';$('panel-title').textContent='实际用餐确认';$('panel-number').textContent=7;$('panel-subtitle').textContent='逐生核对五餐';$('step-position').textContent='7 / 8';$('previous-step').disabled=false;$('next-step').disabled=false;
   const ticket=++sequence,day=data.day;panelBody(empty('读取班级已保存计划与实际状态…'));
   try{const result=await api('get_meals',{student_group:group,day});if(!live(ticket))return;
     const rows=result.record.students.map(mealDraft),editable=!!data.capabilities.meals_write&&result.editable!==false,future=day>data.today;
@@ -409,7 +397,6 @@ document.addEventListener('click',async event=>{
   const recipe=event.target.closest('[data-recipe]');if(recipe){selectedRecipe=recipe.dataset.recipe;const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(error=>live(ticket)&&panelBody(note(failure(error),'error')));return;}
   const group=event.target.closest('[data-meal-group]');if(group){editMeals(group.dataset.mealGroup);return;}
   const sub=event.target.closest('[data-sub]');if(sub){if(sub.dataset.sub==='nutrition')nutritionView();else if(sub.dataset.sub==='recipe-library'){selectedRecipe=null;recipeCalendarState=null;weekPayload=null;renderWeekOverview();const ticket=++sequence;recipesView(ticket,0,true).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-back'){const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-new')beginRecipeDraft();else if(sub.dataset.sub==='recipe-import')beginRecipeImport();else if(sub.dataset.sub==='recipe-edit')beginRecipeEdit();else if(sub.dataset.sub==='draft-cancel')openStep('recipe');return;}
-  const view=event.target.closest('[data-view]');if(view){scene?.setView(view.dataset.view);document.querySelectorAll('[data-view]').forEach(el=>{const on=el===view;el.classList.toggle('active',on);el.setAttribute('aria-pressed',String(on));});}
   if(event.target.closest('[data-print]'))window.print();
 });
 document.addEventListener('input',event=>{if(event.target.closest('#recipe-draft-editor'))dirty=true;});
@@ -429,16 +416,13 @@ function contextChange(el,requestedDay=$('day').value,requestedMeal=$('meal').va
 $('day').onchange=()=>{if($('day').value)contextChange($('day'));};$('meal').onchange=()=>contextChange($('meal'));
 $('refresh').onclick=()=>{if(!leaveDraft())return;if(panel.open)closePanel();load();};
 $('week-mobile-day').onchange=()=>{mobileWeekDay=$('week-mobile-day').value;renderWeekOverview();};
-$('scene-preview').addEventListener('toggle',()=>{if($('scene-preview').open)ensureScene();});
 $('week-new').onclick=async()=>{if(await openStep('recipe'))beginRecipeDraft();};
 $('week-import').onclick=async()=>{if(await openStep('recipe'))beginRecipeImport();};
 $('week-other-recipes').onclick=async()=>{if(await openStep('recipe'))document.querySelector('[data-sub="recipe-library"]')?.click();};
-$('labels-toggle').onclick=()=>{const hidden=document.body.classList.toggle('tags-off');$('labels-toggle').setAttribute('aria-pressed',String(!hidden));};
-$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch(_){notify('浏览器未允许全屏，所有业务仍可使用。');}};
 $('search').oninput=()=>{const q=$('search').value.trim();$('search-results').hidden=!q;$('search-results').innerHTML=STEPS.filter(s=>(s.title+s.subtitle).includes(q)).map(s=>`<button data-step="${s.id}">${h(s.title)}</button>`).join('')||'<p class="muted">没有匹配的业务</p>';};
 document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'){if(!$('search-results').hidden){$('search-results').hidden=true;return;}if(panel.open){e.preventDefault();closePanel();}}if(e.key==='/'&&!editing){e.preventDefault();$('more-work').open=true;$('search').focus();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
 window.addEventListener('beforeunload',e=>{if(dirty||writing||embedded){e.preventDefault();e.returnValue='';}});
 const timer=setInterval(()=>load(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(true);});
-window.addEventListener('pagehide',()=>{clearInterval(timer);scene?.dispose();});window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
+window.addEventListener('pagehide',()=>clearInterval(timer));window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 const params=new URLSearchParams(location.search);if(/^\d{4}-\d{2}-\d{2}$/.test(params.get('day')||''))$('day').value=params.get('day');if(MEALS.some(([m])=>m===params.get('meal')))$('meal').value=params.get('meal');
 load();

@@ -6,7 +6,6 @@
   <meta name="csrf-token" content="{{ csrf_token | e }}"><title>膳食管理工作台 · 童健云</title>
   <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-workbench-20260924-2">
-  <script type="importmap">{"imports":{"three":"/assets/tongjianyun/campus/vendor/three.module.js"}}</script>
 </head>
 <body>
   <a href="#workbench-week" class="skip">跳到本周食谱</a>
@@ -27,7 +26,7 @@
         <div class="week-bottom"><span id="week-selection">选中餐次后可查看与编辑</span><button id="week-other-recipes" type="button" class="quiet">选择其他食谱</button></div>
       </section>
       <details id="more-work" class="more-work"><summary>其他业务与食谱操作</summary><div class="more-work-content"><p>需要办理其他事项时，从这里选择。</p><nav id="flow-nav" aria-label="其他膳食业务" class="flow-nav"></nav><div class="more-recipe-actions"><button id="week-new" class="secondary" type="button">手动编排食谱</button><button id="week-import" class="secondary" type="button">上传 Excel 食谱</button></div><div class="search"><input id="search" type="search" autocomplete="off" placeholder="查找业务" aria-label="搜索业务环节"><div id="search-results" hidden></div></div>
-      <details id="scene-preview" class="scene-preview"><summary>查看业务流向示意（3D）</summary><div class="scene-viewport"><div id="canvas" role="img" aria-label="膳食业务示意场景；其他业务入口位于本页下方"></div><div id="labels" aria-label="场景物件"></div><div class="view-tools"><button data-view="overview" aria-pressed="true" class="active">全景</button><button data-view="top" aria-pressed="false">俯视</button><button id="labels-toggle" aria-pressed="true">标注</button><button id="fullscreen" aria-label="全屏场景">全屏</button></div><div id="render-status" class="render-status">展开后加载 3D 示意…</div><div id="fallback" hidden><h2>普通业务模式</h2><p>当前设备无法显示 3D；其他业务入口仍可完成相同业务。</p></div></div><p class="scene-note"><span id="sync">尚未读取</span> · 3D 仅用于定位业务环节，不代表任务已完成。</p></details></div></details>
+      </div></details>
     </section>
     <dialog id="panel" open aria-modal="false" aria-labelledby="panel-title">
       <header><span id="panel-number">1</span><div><small id="panel-subtitle">当前业务环节</small><h2 id="panel-title">食谱与营养</h2></div><button id="expand-panel" aria-label="展开业务面板">展开</button><button id="close-panel" aria-label="关闭业务面板">×</button></header>
@@ -38,5 +37,5 @@
   </main>
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p>请启用 JavaScript，或进入<a href="/desk/tongjianyun-workbench">原业务工作台</a>。</p></noscript>
-  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-workbench-20260924-2"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-workbench-20260924-3"></script>
 </body></html>
