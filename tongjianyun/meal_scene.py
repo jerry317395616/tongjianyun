@@ -6,6 +6,9 @@ write ERP documents. A displayed preparation/dispatch scene is not telemetry.
 from __future__ import annotations
 
 from datetime import date, timedelta
+from math import isfinite
+from uuid import uuid4
+import json
 import re
 
 import frappe
@@ -16,6 +19,7 @@ RECIPE = 'Tongjianyun Recipe'
 CLASS_MEAL = 'Tongjianyun Class Meal Confirmation'
 MEALS = ('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner')
 RECIPE_SLOTS = dict(zip(MEALS, ('breakfast', 'morningSnack', 'lunch', 'snack', 'dinner')))
+RECIPE_LABELS = dict(zip(RECIPE_SLOTS.values(), ('早餐', '早点', '午餐', '午点', '晚餐')))
 
 
 def can(doctype, action='read'):
@@ -141,6 +145,7 @@ def get_overview(day=None, meal='lunch'):
         'recipes': recipes, 'plans': class_plans(day, meal),
         'orders': purchase_rows(day), 'receipts': purchase_rows(day, 'receipt'),
         'capabilities': {'recipe': can(RECIPE), 'recipe_write': can(RECIPE, 'write'),
+            'recipe_create': can(RECIPE, 'create') and can(RECIPE, 'write'),
             'procurement': can('Material Request', 'create') and can('Material Request') and can(RECIPE),
             'order': can('Purchase Order'), 'receipt': can('Purchase Receipt'),
             'stock': all(can(dt) for dt in ('Bin', 'Item', 'Warehouse')),
@@ -175,6 +180,122 @@ def get_recipe(recipe):
             raise frappe.PermissionError('不能读取完整食谱明细')
     from tongjianyun.recipe_storage import get_recipe_detail
     return {'name': doc.name, 'revision': str(doc.modified), 'payload': get_recipe_detail(doc.name)}
+
+
+def require_recipe_create():
+    require_access()
+    if not (can(RECIPE, 'create') and can(RECIPE, 'write')):
+        raise frappe.PermissionError('当前账号没有新建食谱草稿的权限')
+
+
+def new_draft_payload(value):
+    """Accept only bounded recipe content; identity and lifecycle are server-owned."""
+    raw = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(raw, dict) or len(json.dumps(raw, ensure_ascii=False)) > 512000:
+        frappe.throw('食谱内容无效或过大')
+    source = raw.get('recipe') or {}
+    days = raw.get('days') or []
+    if not isinstance(source, dict) or not isinstance(days, list) or not 1 <= len(days) <= 7:
+        frappe.throw('请提供一至七天的食谱')
+    title = str(source.get('title') or '').strip()
+    if not title or len(title) > 140:
+        frappe.throw('请填写不超过 140 字的食谱名称')
+    clean_days = []
+    seen_dates = set()
+    ingredient_count = 0
+    for index, row in enumerate(days):
+        if not isinstance(row, dict):
+            frappe.throw('食谱日期内容无效')
+        if not row.get('date'):
+            frappe.throw('食谱日期不能为空')
+        day_date = business_day(row['date'])
+        if day_date in seen_dates:
+            frappe.throw('食谱日期不能重复')
+        seen_dates.add(day_date)
+        portions = row.get('portions') or []
+        if not isinstance(portions, list) or len(portions) > 5:
+            frappe.throw('每个日期最多五个餐次')
+        clean_portions = []
+        seen_slots = set()
+        for portion in portions:
+            if not isinstance(portion, dict) or portion.get('slot') not in RECIPE_SLOTS.values():
+                frappe.throw('食谱餐次无效')
+            slot = portion['slot']
+            if slot in seen_slots:
+                frappe.throw('同一天的餐次不能重复')
+            seen_slots.add(slot)
+            dishes = portion.get('dishes') or []
+            rows = portion.get('dishIngredientRows') or []
+            if not isinstance(dishes, list) or not isinstance(rows, list) or len(dishes) > 20:
+                frappe.throw('单餐菜品过多或格式无效')
+            names = [str(name).strip() for name in dishes]
+            if any(not name or len(name) > 140 for name in names) or len(set(names)) != len(names):
+                frappe.throw('菜品名称不能为空、重复或超过 140 字')
+            clean_rows = []
+            for item in rows:
+                if not isinstance(item, dict):
+                    frappe.throw('食材明细格式无效')
+                dish_name = str(item.get('dishName') or '').strip()
+                ingredient = str(item.get('ingredient') or '').strip()
+                unit = str(item.get('unit') or 'g').strip()
+                try:
+                    amount = float(item.get('amount') or 0)
+                except (TypeError, ValueError):
+                    frappe.throw('食材用量必须是数字')
+                if dish_name not in names or not ingredient or len(ingredient) > 140 or not unit or len(unit) > 12 or not isfinite(amount) or not 0 <= amount <= 100000:
+                    frappe.throw('请核对食材所属菜品、名称、用量和单位')
+                clean_rows.append({'dishName': dish_name, 'ingredient': ingredient, 'amount': amount, 'unit': unit})
+                ingredient_count += 1
+                if ingredient_count > 300:
+                    frappe.throw('食材明细超过 300 项，请拆分食谱')
+            clean_portions.append({'slot': slot, 'label': RECIPE_LABELS[slot],
+                'dishes': names, 'dishIngredientRows': clean_rows})
+        clean_days.append({'id': f'DAY-{index + 1}', 'date': str(day_date), 'day': str(row.get('day') or '')[:20],
+            'version': 1, 'portions': clean_portions})
+    clean_days.sort(key=lambda row: row['date'])
+    for index, row in enumerate(clean_days):
+        row['id'] = f'DAY-{index + 1}'
+    start = business_day(source.get('weekStart') or clean_days[0]['date'])
+    end = business_day(source.get('weekEnd') or clean_days[-1]['date'])
+    if end < start or (end - start).days > 6 or any(not start <= date.fromisoformat(row['date']) <= end for row in clean_days):
+        frappe.throw('食谱日期须位于同一周的起止范围内')
+    recipe_id = f'SCENE-{start:%Y%m%d}-{uuid4().hex.upper()}'
+    return {'recipe': {'recipeId': recipe_id, 'title': title, 'weekStart': str(start),
+        'weekEnd': str(end), 'workflowStatus': '草稿'}, 'days': clean_days}
+
+
+@frappe.whitelist(methods=['POST'])
+def create_recipe_draft(payload, import_id=''):
+    require_recipe_create()
+    from tongjianyun.recipe_storage import save_recipe_payload
+    clean = new_draft_payload(payload)
+    if import_id:
+        from tongjianyun.recipe_import import get_recipe_import_status
+        imported = get_recipe_import_status(import_id)
+        if imported.get('status') != 'completed':
+            frappe.throw('导入任务尚未完成，请先校对识别结果')
+        source = (imported.get('result') or {}).get('payload') or {}
+        source_recipe = source.get('recipe') or {}
+        clean['recipe']['sourceFileName'] = str(imported.get('source_file') or '')[:140]
+        clean['recipe']['parser'] = str(source_recipe.get('parser') or '')[:140]
+        clean['recipe']['relationSource'] = str(source_recipe.get('relationSource') or '')[:140]
+    result = save_recipe_payload(clean)
+    return {'name': result['erp_sync']['recipe'], 'title': clean['recipe']['title'],
+        'status': '草稿', 'sync': result['erp_sync']}
+
+
+@frappe.whitelist(methods=['POST'])
+def start_recipe_import(file_url):
+    require_recipe_create()
+    from tongjianyun.recipe_import import start_recipe_import as original
+    return original(file_url)
+
+
+@frappe.whitelist()
+def get_recipe_import_status(import_id):
+    require_recipe_create()
+    from tongjianyun.recipe_import import get_recipe_import_status as original
+    return original(import_id)
 
 
 @frappe.whitelist()

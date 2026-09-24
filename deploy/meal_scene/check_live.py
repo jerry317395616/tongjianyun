@@ -24,9 +24,12 @@ try:
     before={dt:frappe.db.count(dt) for dt in types}
     overview=service.get_overview()
     assert overview['scene']['telemetry'] is False
+    assert overview['capabilities']['recipe_create'] is True
     stock=service.get_stock() if overview['capabilities']['stock'] else None
     library=service.get_recipes()
     detail=service.get_recipe(library['rows'][0]['name']) if library['rows'] else None
+    clean_draft=service.new_draft_payload(detail['payload']) if detail else None
+    assert not clean_draft or clean_draft['recipe']['workflowStatus']=='草稿'
     profiles=entry.entry_model()['profiles']
     assert any(p['id']=='meals' and p['enabled'] for p in profiles)
     ordinary_teacher_denied=None
@@ -43,9 +46,11 @@ try:
     after={dt:frappe.db.count(dt) for dt in types}
     assert before==after,'Read-only scene created business rows'
     print(json.dumps({'passed':True,'day':overview['day'],'recipes_for_day':len(overview['recipes']['rows']),
+        'administrator_can_create_recipe_draft':overview['capabilities']['recipe_create'],
         'visible_meal_summary':overview['plans']['summary'], 'orders_in_page':len(overview['orders']['rows']),
         'receipts_in_page':len(overview['receipts']['rows']), 'stock_rows_in_page':len(stock['rows']) if stock else None,
         'recipe_detail_loaded':bool(detail),'ordinary_teacher_denied':ordinary_teacher_denied,
+        'real_recipe_payload_valid_for_scene_create':bool(clean_draft),
         'administrator_entries':[p['id'] for p in profiles], 'business_counts_unchanged':before==after},ensure_ascii=False,default=str))
 finally:
     frappe.db.rollback();frappe.destroy()

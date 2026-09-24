@@ -7,20 +7,20 @@ const ROOT=path.resolve(__dirname,'../..'),PUBLIC=path.join(ROOT,'tongjianyun/pu
 const CHROME=process.env.CLASSROOM_TEST_CHROME||'/home/zyd/.cache/ms-playwright/chromium_headless_shell-1228/chrome-linux/headless_shell';
 const OUT=process.env.MEAL_SCENE_OUTPUT||'/tmp/tjy-meal-scene-review';fs.mkdirSync(OUT,{recursive:true});
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
-let confirmed=false,demandCreated=false;const calls=[],errors=[],checks=[];
+let confirmed=false,demandCreated=false,createdRecipe=null,createdPayload=null,createdCount=0;const calls=[],errors=[],checks=[];
 const meals=['breakfast','morning_snack','lunch','afternoon_snack','dinner'];
 const kids=Array.from({length:4},(_,i)=>({student:'SYN-'+i,student_name:'合成幼儿'+(i+1),...Object.fromEntries(meals.flatMap(k=>[[k,k==='dinner'?'不供餐':'未确认'],[k+'_expected',k==='dinner'?0:1]]))}));
 const recipe={name:'SYN-RECIPE',title:'秋日食谱 · 验收演示',workflow_status:'已发布',week_start:'2026-09-21',week_end:'2026-09-25',modified:'rev1'};
 function overview(args){
   const day=args.day||'2026-09-23',meal=args.meal||'lunch';
   return {day,meal,today:'2026-09-23',generated_at:'2026-09-23 16:00:00',user_label:'演示膳食管理员',
-    recipes:{available:true,rows:day>=recipe.week_start&&day<=recipe.week_end?[recipe]:[],has_more:false},
+    recipes:{available:true,rows:[recipe,...(createdRecipe?[createdRecipe]:[])].filter(row=>day>=row.week_start&&day<=row.week_end),has_more:false},
     plans:{available:true,rows:[{group:'SYN-C1',label:'示例一班',record:'SYN-CM',has_plan:true,confirmed,expected:4,actual:confirmed?4:null,status:confirmed?'已确认':'待确认'},
       {group:'SYN-C2',label:'示例二班',has_plan:false,confirmed:false,expected:null,actual:null,status:'尚未保存预计'}],
       summary:{visible_groups:2,planned_groups:1,confirmed_groups:confirmed?1:0,expected:null,actual:null,confirmed_subtotal:confirmed?4:null,scope_label:'当前可见班级 · 合成数据'}},
     orders:{available:true,rows:[{name:'SYN-PO',supplier_name:'示例供应商',company:'示例园',transaction_date:'2026-09-23',status:'To Receive',docstatus:1,grand_total:160,currency:'CNY'}],has_more:false,doctype:'Purchase Order',date_field:'transaction_date',start:'2026-09-17',end:day,note:'合成订单，不是真实采购记录'},
     receipts:{available:true,rows:[],has_more:false,doctype:'Purchase Receipt',date_field:'posting_date',start:'2026-09-17',end:day,note:'所选日期向前七日，无合成收货单'},
-    capabilities:{recipe:true,recipe_write:true,procurement:true,order:true,receipt:true,stock:true,meals:true,meals_write:true},
+    capabilities:{recipe:true,recipe_write:true,recipe_create:true,procurement:true,order:true,receipt:true,stock:true,meals:true,meals_write:true},
     unconnected:['加工执行记录','配送签收','温度传感器','留样消毒记录','特殊餐执行闭环'],scene:{mode:'illustrative',telemetry:false,workflow_order_not_completion:true}};
 }
 function payload(){
@@ -37,10 +37,14 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==='/tongjianyun-meal-scene'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(fs.readFileSync(path.join(ROOT,'tongjianyun/www/tongjianyun-meal-scene.html'),'utf8').replace('{{ csrf_token | e }}','synthetic-csrf'));}
     if(u.pathname.startsWith('/desk/')){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end('<h1>原专业模块 · 合成验收占位</h1><p>该测试页不会提交任何生产单据。</p>');}
     if(u.pathname.startsWith('/api/method/')){
+      if(u.pathname==='/api/method/upload_file'){for await(const _ of req){}calls.push({method:'upload_file',write:true,args:{private:true}});res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({message:{file_url:'/private/files/synthetic-week.xlsx'}}));}
       let raw='';for await(const b of req)raw+=b;const args=req.method==='POST'?JSON.parse(raw||'{}'):Object.fromEntries(u.searchParams);const method=u.pathname.split('.').pop();calls.push({method,write:req.method==='POST',args});let result;
       if(method==='get_overview')result=overview(args);
-      else if(method==='get_recipes')result={available:true,rows:[recipe],has_more:false};
-      else if(method==='get_recipe')result={name:recipe.name,revision:'rev1',payload:payload()};
+      else if(method==='get_recipes')result={available:true,rows:[...(createdRecipe?[createdRecipe]:[]),recipe],has_more:false};
+      else if(method==='get_recipe')result=args.recipe===createdRecipe?.name?{name:createdRecipe.name,revision:'rev2',payload:createdPayload}:{name:recipe.name,revision:'rev1',payload:payload()};
+      else if(method==='start_recipe_import')result={import_id:'synthetic-import'};
+      else if(method==='get_recipe_import_status')result={status:'completed',progress:100,message:'识别完成',result:{payload:payload(),warnings:['合成提醒：请核对午餐食材。'],summary:{day_count:5}}};
+      else if(method==='create_recipe_draft'){assert.equal(args.payload.recipe.workflowStatus,'草稿');if(createdCount===1)assert.equal(args.import_id,'synthetic-import');createdCount++;createdPayload=structuredClone(args.payload);createdPayload.recipe.recipeId='SYN-CREATED-'+createdCount;createdPayload.recipe.workflowStatus='草稿';createdRecipe={name:'SYN-CREATED-'+createdCount,title:createdPayload.recipe.title,workflow_status:'草稿',week_start:createdPayload.recipe.weekStart,week_end:createdPayload.recipe.weekEnd,modified:'rev2'};result={name:createdRecipe.name,title:createdRecipe.title,status:'草稿',sync:{recipe:createdRecipe.name,status:'blocked'}};}
       else if(method==='nutrition')result={recipe:{title:recipe.title},nutrients:{energy:700,protein:20,calcium:250},evaluations:{energy:{status:'估算参考',garden_target:720}},rule:{},standard_label:'合成估算基准',garden_ratio:80,conclusion:'合成结果，不是生产营养结论。',basis:'分类代表值估算，不是实测摄入量。'};
       else if(method==='get_documents')result=args.kind==='receipt'?overview(args).receipts:overview(args).orders;
       else if(method==='get_stock')result={warehouses:[{name:'SYN-WH',company:'示例园'}],warehouse:'SYN-WH',rows:[{item_code:'SYN-RICE',item_name:'大米（示例）',actual_qty:28,projected_qty:34,ordered_qty:6,stock_uom:'Kg'},{item_code:'SYN-MILK',item_name:'牛奶（示例）',actual_qty:10,projected_qty:10,ordered_qty:0,stock_uom:'L'}],has_more:false,generated_at:'2026-09-23 16:00:00',basis:'当前账面库存，非实物盘点，不同单位不合计。'};
@@ -113,6 +117,16 @@ class CDP{
     await run(`document.querySelector('#day').value='2026-09-28';document.querySelector('#day').dispatchEvent(new Event('change',{bubbles:true}));`);await until(`document.querySelector('#message').hidden&&location.search.includes('2026-09-28')`);
     await click('#flow-nav [data-step="recipe"]');await until(`!!document.querySelector('.recipe-week-grid')`);check('date without recipe opens empty week calendar directly',await run(`document.querySelectorAll('.recipe-week-cell.unplanned').length===25&&document.querySelector('#panel-body').textContent.includes('不代表其他日期也未编排')&&!document.querySelector('iframe.professional')`));await shot('empty-recipe-week-calendar.png');
     await click('[data-sub="recipe-library"]');await until(`!!document.querySelector('[data-recipe="SYN-RECIPE"]')`);await click('[data-recipe="SYN-RECIPE"]');await until(`!!document.querySelector('.recipe-week-grid')`);check('other-week recipe stays preview with date mismatch warning',await run(`document.querySelector('#panel-body').textContent.includes('不覆盖顶部所选业务日期')&&document.querySelector('#day').value==='2026-09-28'`));await close();
+    await click('#flow-nav [data-step="recipe"]');await until(`!!document.querySelector('[data-sub="recipe-new"]')`);await click('[data-sub="recipe-new"]');await until(`!!document.querySelector('#draft-title')`);check('new recipe opens scene-native five-by-five editor',await run(`document.querySelectorAll('[data-draft-day]').length===25&&!document.querySelector('iframe.professional')`));await shot('new-recipe-editor.png');await run(`document.querySelector('#panel-body').scrollTop=1000`);await shot('new-recipe-editor-details.png');await run(`document.querySelector('#panel-body').scrollTop=0`);
+    await run(`(()=>{const title=document.querySelector('#draft-title'),dish=document.querySelector('#draft-dishes');title.value='本周合成草稿';dish.value=['米饭','清炒时蔬'].join(String.fromCharCode(10));dish.dispatchEvent(new Event('input',{bubbles:true}));})()`);await click('#draft-add-ingredient');
+    await run(`(()=>{const row=document.querySelector('.draft-ingredient-row');row.querySelector('[data-field="dish"]').value='米饭';row.querySelector('[data-field="ingredient"]').value='大米';row.querySelector('[data-field="amount"]').value='40';row.querySelector('[data-field="unit"]').value='g';})()`);
+    check('editing does not save before explicit draft button',calls.filter(c=>c.method==='create_recipe_draft').length===0);
+    await click('#draft-save');await until(`!!document.querySelector('.recipe-week-grid')&&!document.querySelector('#draft-title')`);check('scene-native create saves a draft then returns to week',createdCount===1&&await run(`document.querySelector('#panel-body').textContent.includes('本周合成草稿')&&document.querySelector('#panel-body').textContent.includes('米饭')`));await close();
+    await click('#flow-nav [data-step="recipe"]');await until(`!!document.querySelector('[data-sub="recipe-import"]')`);await click('[data-sub="recipe-import"]');await until(`!!document.querySelector('#recipe-import-file')`);
+    await run(`(()=>{const transfer=new DataTransfer();transfer.items.add(new File(['synthetic workbook'],'week.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));document.querySelector('#recipe-import-file').files=transfer.files;})()`);await click('#recipe-import-start');await until(`!!document.querySelector('#draft-title')&&document.querySelector('#panel-body').textContent.includes('Excel 识别结果')`);
+    check('import previews inside scene with warnings before saving',await run(`document.querySelector('#panel-body').textContent.includes('合成提醒')&&!document.querySelector('iframe.professional')`)&&createdCount===1);await shot('import-recipe-review.png');
+    await run(`(()=>{document.querySelector('#draft-title').value='导入后校对的食谱';document.querySelector('#draft-dishes').value='番茄炒蛋';})()`);
+    await click('#draft-save');await until(`!!document.querySelector('.recipe-week-grid')&&!document.querySelector('#draft-title')`);check('imported recipe saved only as reviewed draft',createdCount===2&&createdPayload.recipe.workflowStatus==='草稿'&&createdPayload.recipe.title==='导入后校对的食谱'&&createdPayload.days[0].portions.find(p=>p.slot==='lunch').dishes[0]==='番茄炒蛋'&&calls.some(c=>c.method==='upload_file'&&c.args.private));await close();
     await run(`document.querySelector('#canvas canvas').dispatchEvent(new Event('webglcontextlost',{cancelable:true}))`);check('WebGL loss gives ordinary equivalent actions',await run(`!document.querySelector('#fallback').hidden`));
     await click('#flow-nav [data-step="stock"]');await until(`!!document.querySelector('#stock-warehouse')`);check('stock works without WebGL',true);
     check('no automatic financial endpoints',calls.every(c=>!['start','create_purchase','complete_purchase_cycle'].includes(c.method)));
