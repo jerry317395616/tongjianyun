@@ -14,7 +14,7 @@ const recipe={name:'SYN-RECIPE',title:'秋日食谱 · 验收演示',workflow_st
 function overview(args){
   const day=args.day||'2026-09-23',meal=args.meal||'lunch';
   return {day,meal,today:'2026-09-23',generated_at:'2026-09-23 16:00:00',user_label:'演示膳食管理员',
-    recipes:{available:true,rows:[recipe],has_more:false},
+    recipes:{available:true,rows:day>=recipe.week_start&&day<=recipe.week_end?[recipe]:[],has_more:false},
     plans:{available:true,rows:[{group:'SYN-C1',label:'示例一班',record:'SYN-CM',has_plan:true,confirmed,expected:4,actual:confirmed?4:null,status:confirmed?'已确认':'待确认'},
       {group:'SYN-C2',label:'示例二班',has_plan:false,confirmed:false,expected:null,actual:null,status:'尚未保存预计'}],
       summary:{visible_groups:2,planned_groups:1,confirmed_groups:confirmed?1:0,expected:null,actual:null,confirmed_subtotal:confirmed?4:null,scope_label:'当前可见班级 · 合成数据'}},
@@ -110,6 +110,9 @@ class CDP{
     await click('#flow-nav [data-step="recipe"]');await until(`!!document.querySelector('.recipe-week-grid')`);check('mobile recipe week remains inside panel without page overflow',await run(`document.documentElement.scrollWidth<=innerWidth+1&&document.querySelector('.recipe-week-scroll').scrollWidth>0`));check('mobile week calendar explains horizontal scrolling',await run(`getComputedStyle(document.querySelector('.recipe-week-swipe')).display!=='none'`));await shot('mobile-recipe-week-calendar.png');await close();
     await run(`const day=document.querySelector('#day');day.value='2026-09-24';day.dispatchEvent(new Event('change',{bubbles:true}));`);await until(`document.querySelector('#message').hidden&&location.search.includes('2026-09-24')`);
     await click('#flow-nav [data-step="dining"]');await until(`!!document.querySelector('[data-meal-group]')`);await click('[data-meal-group]');await until(`!!document.querySelector('#meal-confirm')`);check('future actual confirmation disabled',await run(`document.querySelector('#meal-confirm').disabled`));await close();
+    await run(`document.querySelector('#day').value='2026-09-28';document.querySelector('#day').dispatchEvent(new Event('change',{bubbles:true}));`);await until(`document.querySelector('#message').hidden&&location.search.includes('2026-09-28')`);
+    await click('#flow-nav [data-step="recipe"]');await until(`!!document.querySelector('.recipe-week-grid')`);check('date without recipe opens empty week calendar directly',await run(`document.querySelectorAll('.recipe-week-cell.unplanned').length===25&&document.querySelector('#panel-body').textContent.includes('不代表其他日期也未编排')&&!document.querySelector('iframe.professional')`));await shot('empty-recipe-week-calendar.png');
+    await click('[data-sub="recipe-library"]');await until(`!!document.querySelector('[data-recipe="SYN-RECIPE"]')`);await click('[data-recipe="SYN-RECIPE"]');await until(`!!document.querySelector('.recipe-week-grid')`);check('other-week recipe stays preview with date mismatch warning',await run(`document.querySelector('#panel-body').textContent.includes('不覆盖顶部所选业务日期')&&document.querySelector('#day').value==='2026-09-28'`));await close();
     await run(`document.querySelector('#canvas canvas').dispatchEvent(new Event('webglcontextlost',{cancelable:true}))`);check('WebGL loss gives ordinary equivalent actions',await run(`!document.querySelector('#fallback').hidden`));
     await click('#flow-nav [data-step="stock"]');await until(`!!document.querySelector('#stock-warehouse')`);check('stock works without WebGL',true);
     check('no automatic financial endpoints',calls.every(c=>!['start','create_purchase','complete_purchase_cycle'].includes(c.method)));
