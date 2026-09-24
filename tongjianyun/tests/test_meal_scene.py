@@ -94,6 +94,39 @@ class MealSceneTests(unittest.TestCase):
             with self.assertRaises(frappe.PermissionError):service.get_recipe('R')
             get.assert_not_called()
 
+    def test_scene_create_needs_existing_recipe_create_permission(self):
+        with patch.object(service,'require_access'),patch.object(service,'can',side_effect=lambda dt, action='read': action != 'create'),patch('tongjianyun.recipe_storage.save_recipe_payload') as save:
+            with self.assertRaises(frappe.PermissionError):service.create_recipe_draft({})
+            save.assert_not_called()
+
+    def test_scene_draft_cannot_publish_or_overwrite_supplied_identity(self):
+        source={'recipe':{'recipeId':'EXISTING','title':'本周食谱','weekStart':'2026-09-21','weekEnd':'2026-09-25','workflowStatus':'已发布'},
+            'days':[{'date':'2026-09-21','portions':[{'slot':'lunch','dishes':['米饭'],'dishIngredientRows':[{'dishName':'米饭','ingredient':'大米','amount':40,'unit':'g'}]}]}]}
+        clean=service.new_draft_payload(source)
+        self.assertTrue(clean['recipe']['recipeId'].startswith('SCENE-20260921-'))
+        self.assertEqual(clean['recipe']['workflowStatus'],'草稿')
+        self.assertEqual(clean['days'][0]['portions'][0]['label'],'午餐')
+        with patch.object(service.frappe,'throw',side_effect=ValueError),self.assertRaises(ValueError):
+            service.new_draft_payload({'recipe':source['recipe'],'days':[source['days'][0],source['days'][0]]})
+
+    def test_scene_save_delegates_only_new_draft(self):
+        source={'recipe':{'recipeId':'EXISTING','title':'本周食谱','workflowStatus':'已发布'},
+            'days':[{'date':'2026-09-21','portions':[]}]}
+        with patch.object(service,'require_access'),patch.object(service,'can',return_value=True),patch('tongjianyun.recipe_storage.save_recipe_payload',return_value={'erp_sync':{'recipe':'NEW-DRAFT','status':'blocked'}}) as save:
+            result=service.create_recipe_draft(source)
+            self.assertEqual(result['name'],'NEW-DRAFT')
+            self.assertEqual(save.call_args.args[0]['recipe']['workflowStatus'],'草稿')
+            self.assertNotEqual(save.call_args.args[0]['recipe']['recipeId'],'EXISTING')
+
+    def test_scene_import_provenance_comes_from_same_user_job(self):
+        source={'recipe':{'title':'校对后的食谱'},'days':[{'date':'2026-09-21','portions':[]}]}
+        status={'status':'completed','source_file':'private-week.xlsx','result':{'payload':{'recipe':{'parser':'I-ONE Agent'}}}}
+        with patch.object(service,'require_access'),patch.object(service,'can',return_value=True),patch('tongjianyun.recipe_import.get_recipe_import_status',return_value=status) as imported,patch('tongjianyun.recipe_storage.save_recipe_payload',return_value={'erp_sync':{'recipe':'NEW-DRAFT','status':'blocked'}}) as save:
+            service.create_recipe_draft(source,'task-1')
+            imported.assert_called_once_with('task-1')
+            self.assertEqual(save.call_args.args[0]['recipe']['sourceFileName'],'private-week.xlsx')
+            self.assertEqual(save.call_args.args[0]['recipe']['parser'],'I-ONE Agent')
+
     def test_create_requires_explicit_confirmation(self):
         with patch.object(service,'require_access'),patch.object(service.frappe,'throw',side_effect=ValueError),patch('tongjianyun.recipe_procurement.create_request') as create:
             with self.assertRaises(ValueError):service.create_demand('R',{}, {},'t',0)
