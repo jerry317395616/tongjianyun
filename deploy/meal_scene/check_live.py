@@ -28,6 +28,8 @@ try:
     stock=service.get_stock() if overview['capabilities']['stock'] else None
     library=service.get_recipes()
     detail=service.get_recipe(library['rows'][0]['name']) if library['rows'] else None
+    edit_mode=detail['edit']['mode'] if detail else None
+    assert edit_mode in (None,'update','copy','none')
     clean_draft=service.new_draft_payload(detail['payload']) if detail else None
     assert not clean_draft or clean_draft['recipe']['workflowStatus']=='草稿'
     profiles=entry.entry_model()['profiles']
@@ -49,7 +51,8 @@ try:
         'administrator_can_create_recipe_draft':overview['capabilities']['recipe_create'],
         'visible_meal_summary':overview['plans']['summary'], 'orders_in_page':len(overview['orders']['rows']),
         'receipts_in_page':len(overview['receipts']['rows']), 'stock_rows_in_page':len(stock['rows']) if stock else None,
-        'recipe_detail_loaded':bool(detail),'ordinary_teacher_denied':ordinary_teacher_denied,
+        'recipe_detail_loaded':bool(detail),'recipe_edit_mode':edit_mode,
+        'ordinary_teacher_denied':ordinary_teacher_denied,
         'real_recipe_payload_valid_for_scene_create':bool(clean_draft),
         'administrator_entries':[p['id'] for p in profiles], 'business_counts_unchanged':before==after},ensure_ascii=False,default=str))
 finally:

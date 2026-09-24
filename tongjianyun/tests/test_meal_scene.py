@@ -127,6 +127,54 @@ class MealSceneTests(unittest.TestCase):
             self.assertEqual(save.call_args.args[0]['recipe']['sourceFileName'],'private-week.xlsx')
             self.assertEqual(save.call_args.args[0]['recipe']['parser'],'I-ONE Agent')
 
+    def test_scene_edit_policy_protects_published_linked_and_locked_recipes(self):
+        doc=_dict(recipe_id='R-ID',workflow_status='草稿')
+        payload={'days':[{'date':'2026-09-21','locked':False}]}
+        with patch.object(service,'can',return_value=True),patch('tongjianyun.recipe_storage._recipe_business_links',return_value=[]):
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'update')
+            doc.workflow_status='已发布'
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'copy')
+            doc.workflow_status='草稿';payload['days'][0]['locked']=True
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'copy')
+        payload['days'][0]['locked']=False
+        with patch.object(service,'can',return_value=True),patch('tongjianyun.recipe_storage._recipe_business_links',return_value=[{'doctype':'Material Request'}]):
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'copy')
+
+    def test_scene_edit_rejects_stale_revision_before_any_write(self):
+        source={'recipe':{'title':'原食谱'},'days':[{'date':'2026-09-21','portions':[]}]}
+        with patch.object(service,'require_access'),patch.object(service,'get_recipe',return_value={'revision':'new','payload':source}),patch.object(service.frappe,'throw',side_effect=ValueError),patch('tongjianyun.recipe_storage.save_recipe_payload') as save:
+            with self.assertRaises(ValueError):service.save_recipe_edit('R','old',source)
+            save.assert_not_called()
+
+    def test_scene_draft_edit_keeps_identity_and_provenance(self):
+        source={'recipe':{'title':'改后草稿','weekStart':'2026-09-21','weekEnd':'2026-09-25'},
+            'days':[{'date':'2026-09-21','portions':[{'slot':'lunch','dishes':['米饭'],'dishIngredientRows':[]}]}]}
+        previous={'recipe':{'title':'原草稿'},'days':[{'id':'OLD-DAY','date':'2026-09-21','version':3,'portions':[{'slot':'lunch','dishes':['粥'],'dishIngredientRows':[]}]}]}
+        doc=_dict(name='R',recipe_id='ORIGINAL',workflow_status='草稿',week_start='2026-09-21',week_end='2026-09-25',source_file_name='source.xlsx',parser='parser',relation_source='import',imported_at='2026-09-20')
+        doc.check_permission=MagicMock()
+        with patch.object(service,'require_access'),patch.object(service,'get_recipe',return_value={'revision':'rev1','payload':previous}),patch.object(service,'read_doc',return_value=doc),patch.object(service,'recipe_edit_policy',return_value={'mode':'update'}),patch.object(service.frappe.db,'sql',return_value=[{'modified':'rev1'}]),patch.object(service.frappe.db,'exists',return_value='R'),patch('tongjianyun.recipe_storage.save_recipe_payload',return_value={'erp_sync':{'recipe':'R'}}) as save:
+            result=service.save_recipe_edit('R','rev1',source)
+            sent=save.call_args.args[0]
+            self.assertEqual(result['mode'],'update');self.assertEqual(result['name'],'R')
+            self.assertEqual(sent['recipe']['recipeId'],'ORIGINAL')
+            self.assertEqual(sent['recipe']['sourceFileName'],'source.xlsx')
+            self.assertEqual(sent['days'][0]['id'],'OLD-DAY')
+            self.assertEqual(sent['days'][0]['version'],4)
+            self.assertEqual(sent['days'][0]['portions'][0]['dishes'],['米饭'])
+
+    def test_scene_published_edit_creates_independent_draft(self):
+        source={'recipe':{'recipeId':'EXISTING','title':'修订草稿','weekStart':'2026-09-21','weekEnd':'2026-09-25','workflowStatus':'已发布'},
+            'days':[{'date':'2026-09-21','portions':[]}]}
+        doc=_dict(name='PUBLISHED',recipe_id='EXISTING',workflow_status='已发布')
+        doc.check_permission=MagicMock()
+        with patch.object(service,'require_access'),patch.object(service,'get_recipe',return_value={'revision':'rev1','payload':source}),patch.object(service,'read_doc',return_value=doc),patch.object(service,'recipe_edit_policy',return_value={'mode':'copy'}),patch.object(service,'can',return_value=True),patch.object(service.frappe.db,'sql',return_value=[{'modified':'rev1'}]),patch('tongjianyun.recipe_storage.save_recipe_payload',return_value={'erp_sync':{'recipe':'NEW'}}) as save:
+            result=service.save_recipe_edit('PUBLISHED','rev1',source)
+            sent=save.call_args.args[0]
+            self.assertEqual(result['mode'],'copy');self.assertEqual(result['name'],'NEW')
+            self.assertNotEqual(sent['recipe']['recipeId'],'EXISTING')
+            self.assertEqual(sent['recipe']['workflowStatus'],'草稿')
+            self.assertEqual(sent['recipe']['relationSource'],'修订自 PUBLISHED')
+
     def test_create_requires_explicit_confirmation(self):
         with patch.object(service,'require_access'),patch.object(service.frappe,'throw',side_effect=ValueError),patch('tongjianyun.recipe_procurement.create_request') as create:
             with self.assertRaises(ValueError):service.create_demand('R',{}, {},'t',0)

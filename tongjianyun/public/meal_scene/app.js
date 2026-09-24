@@ -27,7 +27,7 @@ async function api(method,args={},write=false){
   finally{clearTimeout(timeout);}
 }
 function message(text='',error=false){$('message').textContent=text;$('message').hidden=!text;$('message').classList.toggle('error',error);}
-function leaveDraft(){if(writing)return false;if((dirty||embedded)&&!window.confirm(embedded?'离开原业务面板前，请确认已保存其中的修改。继续吗？':'有未保存的草稿，确认放弃并切换吗？'))return false;dirty=false;draftState=null;embedded=false;panel.classList.remove('embedded-open');return true;}
+function leaveDraft(){if(writing)return false;if((dirty||embedded)&&!window.confirm(embedded?'离开原业务面板前，请确认已保存其中的修改。继续吗？':'有未保存的食谱修改，确认放弃并切换吗？'))return false;dirty=false;draftState=null;embedded=false;panel.classList.remove('embedded-open');return true;}
 function closePanel(){if(!leaveDraft())return false;++sequence;panel.close();$('panel-body').replaceChildren();document.body.classList.remove('panel-open');scene?.focus(null);return true;}
 function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').scrollTop=0;}
 function fallback(){ $('render-status').hidden=true;$('fallback').hidden=false;$('labels').hidden=true;scene?.dispose();scene=null; }
@@ -92,6 +92,21 @@ function beginRecipeDraft(){
   draftState={kind:'draft',source:'new',payload:{recipe:{title:`${dates[0]} — ${dates[4]} 周食谱`,weekStart:dates[0],weekEnd:dates[4],workflowStatus:'草稿'},days:dates.map((date,index)=>({id:`DAY-${index+1}`,date,day:recipeWeekday(date),portions:[],version:1}))},day:dates.includes(data.day)?data.day:dates[0],slot:SLOTS[data.meal],warnings:[]};
   dirty=true;renderDraftEditor();
 }
+async function beginRecipeEdit(){
+  if(!selectedRecipe||!data.capabilities.recipe_write)return notify('当前账号没有编辑食谱权限。',true);
+  if(!leaveDraft())return;
+  const ticket=sequence,name=selectedRecipe;
+  try{
+    const result=await api('get_recipe',{recipe:name});
+    if(!live(ticket)||selectedRecipe!==name)return;
+    if(!result.edit||result.edit.mode==='none')return notify(result.edit?.reason||'当前食谱不能在此编辑。',true);
+    const payload=JSON.parse(JSON.stringify(result.payload));
+    if(result.edit.mode==='copy')payload.recipe.title=(payload.recipe.title||name).slice(0,132)+' · 修订草稿';
+    draftState={kind:'draft',source:'edit',editMode:result.edit.mode,recipe:name,revision:result.revision,
+      payload,day:recipeCalendarState?.day,slot:recipeCalendarState?.slot||SLOTS[data.meal],warnings:[]};
+    dirty=false;renderDraftEditor();
+  }catch(error){if(live(ticket))notify(failure(error),true);}
+}
 function draftDay(date){
   let day=draftState.payload.days.find(item=>item.date===date);
   if(!day){day={id:`DAY-${draftState.payload.days.length+1}`,date,day:recipeWeekday(date),portions:[],version:1};draftState.payload.days.push(day);draftState.payload.days.sort((a,b)=>a.date.localeCompare(b.date));}
@@ -123,7 +138,10 @@ function renderDraftEditor(){
   const grid=`<div class="recipe-week-scroll"><div class="recipe-week-grid" style="--week-columns:${dates.length};min-width:${52+dates.length*92}px" role="group" aria-label="编辑周食谱"><div class="recipe-week-axis">餐次</div>${dates.map(date=>`<div class="recipe-week-day ${date===data.day?'business-day':''}"><b>${h(recipeWeekday(date))}</b><span>${h(date.slice(5))}</span></div>`).join('')}${MEALS.map(([key,label])=>`<div class="recipe-week-meal">${h(label)}</div>${dates.map(date=>{const slot=SLOTS[key],names=draftPortion(date,slot)?.dishes||[],selected=date===draftState.day&&slot===draftState.slot;return `<button type="button" class="recipe-week-cell ${names.length?'':'unplanned'} ${selected?'selected':''}" data-draft-day="${h(date)}" data-draft-slot="${h(slot)}" aria-pressed="${selected}" aria-label="${h(date+' '+label+'：'+(names.join('、')||'待编排'))}"><b>${h(names.slice(0,2).join(' · ')||'待编排')}</b></button>`;}).join('')}`).join('')}</div></div>`;
   const ingredients=rows.map((row,index)=>`<div class="draft-ingredient-row"><input data-field="dish" aria-label="所属菜品" placeholder="所属菜品" value="${h(row.dishName||'')}"><input data-field="ingredient" aria-label="食材名称" placeholder="食材" value="${h(row.ingredient||'')}"><input data-field="amount" aria-label="每生用量" type="number" min="0" step="any" placeholder="用量" value="${h(row.amount??'')}"><input data-field="unit" aria-label="单位" placeholder="单位" value="${h(row.unit||'g')}"><button type="button" class="secondary" data-draft-remove="${index}" aria-label="移除此食材">移除</button></div>`).join('');
   const warnings=(draftState.warnings||[]).slice(0,20).map(item=>`<li>${h(String(item))}</li>`).join('');
-  panelBody(`<section id="recipe-draft-editor" class="recipe-draft-editor"><div class="recipe-week-heading"><div><small>${draftState.source==='import'?'Excel 识别结果 · 待校对':'新建食谱 · 尚未保存'}</small><h3>${h(payload.recipe.weekStart)} — ${h(payload.recipe.weekEnd)}</h3><span>保存后仅为草稿，不自动发布或采购</span></div></div>${warnings?note(`导入有 ${draftState.warnings.length} 项提醒，请逐项核对。`,'warning')+`<details class="draft-warnings"><summary>查看导入提醒</summary><ul>${warnings}</ul></details>`:''}<label class="field"><span>食谱名称</span><input id="draft-title" maxlength="140" value="${h(payload.recipe.title||'')}"></label>${grid}<p class="recipe-week-swipe">左右滑动查看其余日期</p><section class="recipe-calendar-preview"><div class="recipe-preview-heading"><div><small>点选周历格子编辑</small><h3>${h(draftState.day)} ${h(recipeWeekday(draftState.day))} · ${h(meal)}</h3></div></div><label class="field"><span>菜品名称 · 每行一道</span><textarea id="draft-dishes" rows="5" placeholder="例如：米饭&#10;清炒时蔬">${h(dishes.join('\n'))}</textarea></label><h4>每生食材用量</h4><p class="muted">食材须填写所属菜品、名称、用量和单位；可先只编排菜品，稍后补充食材。</p><div id="draft-ingredients">${ingredients||'<p class="muted">暂无食材明细</p>'}</div><button type="button" class="secondary" id="draft-add-ingredient">＋ 添加食材</button></section><div class="recipe-week-actions"><button type="button" class="primary" id="draft-save">保存为草稿</button><button type="button" class="secondary" data-sub="draft-cancel">取消</button></div>${note('保存草稿可能安排后台食材物料匹配；不会自动发布、创建采购需求或付款。')}</section>`);
+  const editing=draftState.source==='edit',copy=editing&&draftState.editMode==='copy';
+  const editorLabel=draftState.source==='import'?'Excel 识别结果 · 待校对':copy?'修订已有食谱 · 原记录不变':editing?'编辑已有草稿 · 尚未保存':'新建食谱 · 尚未保存';
+  const saveLabel=copy?'另存为修订草稿':editing?'保存草稿修改':'保存为草稿';
+  panelBody(`<section id="recipe-draft-editor" class="recipe-draft-editor"><div class="recipe-week-heading"><div><small>${editorLabel}</small><h3>${h(payload.recipe.weekStart)} — ${h(payload.recipe.weekEnd)}</h3><span>${copy?'保存后生成独立草稿，不覆盖原食谱':'保存后仅为草稿，不自动发布或采购'}</span></div></div>${editing?note(copy?'原食谱已发布、关联业务或含锁定日期。此次修改将创建新草稿；原食谱及其采购关联保持不变。':'只修改当前未关联业务的草稿。若他人已更新，保存时会提示刷新。',copy?'warning':''):''}${warnings?note(`导入有 ${draftState.warnings.length} 项提醒，请逐项核对。`,'warning')+`<details class="draft-warnings"><summary>查看导入提醒</summary><ul>${warnings}</ul></details>`:''}<label class="field"><span>食谱名称</span><input id="draft-title" maxlength="140" value="${h(payload.recipe.title||'')}"></label>${grid}<p class="recipe-week-swipe">左右滑动查看其余日期</p><section class="recipe-calendar-preview"><div class="recipe-preview-heading"><div><small>点选周历格子编辑</small><h3>${h(draftState.day)} ${h(recipeWeekday(draftState.day))} · ${h(meal)}</h3></div></div><label class="field"><span>菜品名称 · 每行一道</span><textarea id="draft-dishes" rows="5" placeholder="例如：米饭&#10;清炒时蔬">${h(dishes.join('\n'))}</textarea></label><h4>每生食材用量</h4><p class="muted">食材须填写所属菜品、名称、用量和单位；可先只编排菜品，稍后补充食材。</p><div id="draft-ingredients">${ingredients||'<p class="muted">暂无食材明细</p>'}</div><button type="button" class="secondary" id="draft-add-ingredient">＋ 添加食材</button></section><div class="recipe-week-actions"><button type="button" class="primary" id="draft-save">${saveLabel}</button><button type="button" class="secondary" data-sub="draft-cancel">取消</button></div>${note('保存草稿可能安排后台食材物料匹配；不会自动发布、创建采购需求或付款。')}</section>`);
   $('draft-add-ingredient').onclick=()=>{captureDraftEditor();const selected=draftPortion(draftState.day,draftState.slot,true);selected.dishIngredientRows.push({dishName:selected.dishes[0]||'',ingredient:'',amount:'',unit:'g'});dirty=true;const top=$('panel-body').scrollTop;renderDraftEditor();$('panel-body').scrollTop=top;};
   $('draft-save').onclick=saveRecipeDraft;
 }
@@ -131,7 +149,9 @@ async function saveRecipeDraft(){
   if(!draftState||draftState.kind!=='draft')return;
   captureDraftEditor();
   if(!draftState.payload.recipe.title)return notify('请填写食谱名称。',true);
-  const result=await save('create_recipe_draft',{payload:draftState.payload,...(draftState.importId?{import_id:draftState.importId}:{})});
+  const method=draftState.source==='edit'?'save_recipe_edit':'create_recipe_draft';
+  const args=draftState.source==='edit'?{recipe:draftState.recipe,revision:draftState.revision,payload:draftState.payload}:{payload:draftState.payload,...(draftState.importId?{import_id:draftState.importId}:{})};
+  const result=await save(method,args);
   if(!result?.name)return;
   draftState=null;selectedRecipe=result.name;recipeCalendarState=null;
   await load();
@@ -191,7 +211,7 @@ function renderRecipePreview(){
   document.querySelectorAll('.recipe-week-cell').forEach(cell=>{const selected=cell.dataset.calendarDay===day&&cell.dataset.calendarSlot===slot;cell.classList.toggle('selected',selected);cell.setAttribute('aria-pressed',String(selected));});
   const ingredients=portion?.dishIngredientRows||[];
   $('recipe-calendar-preview').innerHTML=`<div class="recipe-preview-heading"><div><small>${current?'当前业务餐次':'周历预览 · 顶部业务日期/餐次不变'}</small><h3>${h(day)} ${h(recipeWeekday(day))} · ${h(meal)}</h3></div><span>${portion?.dishes.length||0} 道菜</span></div>`+
-    (portion?.dishes.length?`<div class="recipe-preview-dishes">${portion.dishes.map(dish=>`<span>${h(dish)}</span>`).join('')}</div><details class="recipe-ingredients"><summary>查看食材明细 · ${ingredients.length} 项</summary>${ingredients.length?`<div class="table-wrap"><table><thead><tr><th>菜品</th><th>食材</th><th>每生用量</th></tr></thead><tbody>${ingredients.map(row=>`<tr><td>${h(row.dishName)}</td><td>${h(row.ingredient)}</td><td>${h(n(row.amount))} ${h(row.unit)}</td></tr>`).join('')}</tbody></table></div>`:note('原食谱没有可见食材明细，请进入原模块核对。','warning')}</details>`:note('该日期与餐次在所选食谱中尚未编排；不能用其他餐次代替。','warning'));
+    (portion?.dishes.length?`<div class="recipe-preview-dishes">${portion.dishes.map(dish=>`<span>${h(dish)}</span>`).join('')}</div><details class="recipe-ingredients"><summary>查看食材明细 · ${ingredients.length} 项</summary>${ingredients.length?`<div class="table-wrap"><table><thead><tr><th>菜品</th><th>食材</th><th>每生用量</th></tr></thead><tbody>${ingredients.map(row=>`<tr><td>${h(row.dishName)}</td><td>${h(row.ingredient)}</td><td>${h(n(row.amount))} ${h(row.unit)}</td></tr>`).join('')}</tbody></table></div>`:note('该餐次尚无食材明细，可在本页编辑食谱时补充。','warning')}</details>`:note('该日期与餐次在所选食谱中尚未编排；不能用其他餐次代替。','warning'));
 }
 function renderRecipeCalendar(){
   const {payload}=recipeCalendarState,r=payload.recipe,dates=recipeWeekDates(r,payload.days);
@@ -202,13 +222,14 @@ function renderRecipeCalendar(){
   const heading=`<div class="recipe-week-heading"><div><small>所选食谱 · ${h(r.workflowStatus||'状态待核')}</small><h3>${h(r.title||selectedRecipe)}</h3><span>${h(r.weekStart)} — ${h(r.weekEnd)}</span></div><button class="secondary" data-sub="recipe-library">更换食谱</button></div>`;
   const context=covering?'点选任一格预览菜品；不会改动顶部业务日期和餐次。':'这份食谱不覆盖顶部所选业务日期；周历仅供预览，不能直接作为该日餐次依据。';
   const grid=`<div class="recipe-week-scroll"><div class="recipe-week-grid" style="--week-columns:${dates.length};min-width:${52+dates.length*92}px" role="group" aria-label="按日期与餐次预览周食谱"><div class="recipe-week-axis">餐次</div>${dates.map(date=>`<div class="recipe-week-day ${date===data.day?'business-day':''}"><b>${h(recipeWeekday(date))}</b><span>${h(date.slice(5))}</span></div>`).join('')}${MEALS.map(([key,label])=>`<div class="recipe-week-meal">${h(label)}</div>${dates.map(date=>{const slot=SLOTS[key],portion=recipePortion(payload,date,slot),dishes=portion?.dishes||[],current=date===data.day&&slot===SLOTS[data.meal];return `<button type="button" class="recipe-week-cell ${dishes.length?'':'unplanned'} ${current?'business-current':''}" data-calendar-day="${h(date)}" data-calendar-slot="${h(slot)}" aria-pressed="false" aria-label="${h(date+' '+label+'：'+(dishes.join('、')||'未编排'))}"><b>${h(dishes.slice(0,2).join(' · ')||'未编排')}</b>${dishes.length>2?`<small>另有 ${dishes.length-2} 道</small>`:''}</button>`;}).join('')}`).join('')}</div></div>`;
-  panelBody(heading+note(context,covering?'':'warning')+(!published?note('该食谱尚未发布。可预览，但不能当作已发布采购依据。','warning'):'')+grid+`<p class="recipe-week-swipe">左右滑动查看其余日期</p><section id="recipe-calendar-preview" class="recipe-calendar-preview" aria-live="polite"></section>`+note('营养为按现有规则估算的周日均每生供给量，不是所选单餐的实测摄入。原食谱模块另有“发布并完成采购结算”动作，须按原流程单独确认。')+`<div class="recipe-week-actions"><button class="primary" data-sub="nutrition">查看整周营养估算 →</button>${recipeCreateActions()}${button('编辑 / 修订现有食谱','recipe')}</div>`);
+  const edit=recipeCalendarState.edit,editAction=edit?.mode==='none'?note(edit.reason,'warning'):`<button class="secondary" data-sub="recipe-edit">${edit?.mode==='copy'?'以此生成修订草稿':'编辑当前草稿'}</button>`;
+  panelBody(heading+note(context,covering?'':'warning')+(!published?note('该食谱尚未发布。可预览，但不能当作已发布采购依据。','warning'):'')+grid+`<p class="recipe-week-swipe">左右滑动查看其余日期</p><section id="recipe-calendar-preview" class="recipe-calendar-preview" aria-live="polite"></section>`+note('营养为按现有规则估算的周日均每生供给量，不是所选单餐的实测摄入。发布及采购结算仍须按原流程单独确认。')+`<div class="recipe-week-actions"><button class="primary" data-sub="nutrition">查看整周营养估算 →</button>${editAction}${recipeCreateActions()}</div>`);
   renderRecipePreview();
 }
 async function recipeView(ticket,name){
   const result=await api('get_recipe',{recipe:name});if(!live(ticket))return;selectedRecipe=name;
   const previous=recipeCalendarState?.name===name?recipeCalendarState:null;
-  recipeCalendarState={name,payload:result.payload,day:previous?.day||null,slot:previous?.slot||null};
+  recipeCalendarState={name,payload:result.payload,revision:result.revision,edit:result.edit,day:previous?.day||null,slot:previous?.slot||null};
   renderRecipeCalendar();
 }
 async function nutritionView(){
@@ -276,7 +297,7 @@ async function kitchenView(ticket){
   const result=await api('get_recipe',{recipe:selectedRecipe});if(!live(ticket))return;const day=result.payload.days.find(d=>d.date===data.day),portion=day?.portions.find(p=>p.slot===SLOTS[data.meal]);
   panelBody(note('当前是备餐配方参考，不是加工执行记录。每生带量来自原食谱，不能仅按人物动作判断已经加工。')+`<h3>${h(result.payload.recipe.title)}</h3><p class="muted">${h(data.day)} · ${h(MEALS.find(([m])=>m===data.meal)?.[1])} · ${h(result.payload.recipe.workflowStatus)}</p>`+
     (portion?`<h3 class="section-title">${h(portion.dishes.join(' · '))}</h3><div class="table-wrap"><table><thead><tr><th>菜品</th><th>食材</th><th>每生用量</th><th>单位</th></tr></thead><tbody>${portion.dishIngredientRows.map(r=>`<tr><td>${h(r.dishName)}</td><td>${h(r.ingredient)}</td><td>${h(n(r.amount))}</td><td>${h(r.unit)}</td></tr>`).join('')}</tbody></table></div>`:empty('所选食谱未包含当前日期或餐次，请重新选择，不用别的餐次代替。'))+
-    `<div class="buttons"><button class="secondary" data-step="dispatch">核对预计配餐人数</button><button class="secondary" data-print>打印配方参考</button>${button('原食谱编辑','recipe')}</div>`+note('仅核对本食谱适用范围后才能换算备餐总量；第 2 站提供基于原规则的毛料换算预览。加工执行、留样和消毒记录需后续单独设计。','warning'));
+    `<div class="buttons"><button class="secondary" data-step="dispatch">核对预计配餐人数</button><button class="secondary" data-print>打印配方参考</button><button class="secondary" data-step="recipe">返回周历编辑</button></div>`+note('仅核对本食谱适用范围后才能换算备餐总量；第 2 站提供基于原规则的毛料换算预览。加工执行、留样和消毒记录需后续单独设计。','warning'));
 }
 function plansView(id){
   const plans=data.plans,c=plans.summary;
@@ -313,7 +334,7 @@ async function traceView(ticket){
 }
 async function save(method,args){
   if(writing)return null;writing=true;const controls=[...panel.querySelectorAll('button,input,select,textarea')].map(el=>[el,el.disabled]);controls.forEach(([el])=>el.disabled=true);
-  try{const result=await api(method,args,true);dirty=false;notify(method==='create_demand'?'采购需求草稿已保存':method==='create_recipe_draft'?'食谱草稿已保存':'班级餐次记录已保存');return result;}
+  try{const result=await api(method,args,true);dirty=false;notify(method==='create_demand'?'采购需求草稿已保存':method==='create_recipe_draft'?'食谱草稿已保存':method==='save_recipe_edit'?(result.mode==='copy'?'修订草稿已创建，原食谱未改变':'食谱草稿修改已保存'):'班级餐次记录已保存');return result;}
   catch(error){notify(failure(error),true);return null;}
   finally{writing=false;controls.forEach(([el,disabled])=>{if(el.isConnected)el.disabled=disabled;});}
 }
@@ -332,7 +353,7 @@ document.addEventListener('click',event=>{
   const calendarCell=event.target.closest('[data-calendar-day][data-calendar-slot]');if(calendarCell&&recipeCalendarState){recipeCalendarState.day=calendarCell.dataset.calendarDay;recipeCalendarState.slot=calendarCell.dataset.calendarSlot;renderRecipePreview();return;}
   const recipe=event.target.closest('[data-recipe]');if(recipe){selectedRecipe=recipe.dataset.recipe;const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(error=>live(ticket)&&panelBody(note(failure(error),'error')));return;}
   const group=event.target.closest('[data-meal-group]');if(group){editMeals(group.dataset.mealGroup);return;}
-  const sub=event.target.closest('[data-sub]');if(sub){if(sub.dataset.sub==='nutrition')nutritionView();else if(sub.dataset.sub==='recipe-library'){selectedRecipe=null;recipeCalendarState=null;const ticket=++sequence;recipesView(ticket,0,true).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-back'){const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-new')beginRecipeDraft();else if(sub.dataset.sub==='recipe-import')beginRecipeImport();else if(sub.dataset.sub==='draft-cancel')openStep('recipe');return;}
+  const sub=event.target.closest('[data-sub]');if(sub){if(sub.dataset.sub==='nutrition')nutritionView();else if(sub.dataset.sub==='recipe-library'){selectedRecipe=null;recipeCalendarState=null;const ticket=++sequence;recipesView(ticket,0,true).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-back'){const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-new')beginRecipeDraft();else if(sub.dataset.sub==='recipe-import')beginRecipeImport();else if(sub.dataset.sub==='recipe-edit')beginRecipeEdit();else if(sub.dataset.sub==='draft-cancel')openStep('recipe');return;}
   const view=event.target.closest('[data-view]');if(view){scene?.setView(view.dataset.view);document.querySelectorAll('[data-view]').forEach(el=>{const on=el===view;el.classList.toggle('active',on);el.setAttribute('aria-pressed',String(on));});}
   if(event.target.closest('[data-print]'))window.print();
 });
