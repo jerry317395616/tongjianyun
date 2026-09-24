@@ -70,10 +70,19 @@ async function recipesView(ticket,offset=0,all=false){
   if(selectedRecipe&&!all)return recipeView(ticket,selectedRecipe);
   const result=all?await api('get_recipes',{offset}):data.recipes;if(!live(ticket))return;
   if(!all&&result.rows.length===1){selectedRecipe=result.rows[0].name;return recipeView(ticket,selectedRecipe);}
+  if(!all&&!result.rows.length){renderEmptyRecipeCalendar();return;}
   panelBody(note(all?'当前账号可见食谱库；食谱日期与当前业务日期不同会单独提示。':'仅显示覆盖所选日期的食谱。草稿不是已发布食谱，存在多份时请明确选择。')+
     `<div class="recipe-list">${result.rows.map(r=>`<button class="recipe-item" data-recipe="${h(r.name)}"><div><b>${h(r.title||r.name)}</b><small>${h(r.week_start)} — ${h(r.week_end)}</small></div>${status(r.workflow_status)}</button>`).join('')||empty('当前范围没有食谱')}</div><div class="buttons"><button class="secondary" id="all-recipes">全部可见食谱</button>${offset?'<button class="secondary" id="previous-recipes">上一页</button>':''}${result.has_more?'<button class="secondary" id="more-recipes">下一页</button>':''}${button('新建 / 导入食谱','recipe')}</div>`);
   const page=start=>{const next=++sequence;recipesView(next,start,true).catch(e=>live(next)&&panelBody(note(failure(e),'error')));};
   $('all-recipes').onclick=()=>page(0);if($('more-recipes'))$('more-recipes').onclick=()=>page(offset+20);if($('previous-recipes'))$('previous-recipes').onclick=()=>page(Math.max(0,offset-20));
+}
+function businessWeekDates(day){
+  const date=new Date(`${day}T00:00:00Z`),oneDay=86400000,weekday=date.getUTCDay(),monday=date.getTime()-((weekday+6)%7)*oneDay;
+  return Array.from({length:5},(_,index)=>new Date(monday+index*oneDay).toISOString().slice(0,10));
+}
+function renderEmptyRecipeCalendar(){
+  const dates=businessWeekDates(data.day),grid=`<div class="recipe-week-scroll"><div class="recipe-week-grid" style="--week-columns:5;min-width:512px" role="group" aria-label="尚未选择食谱的五餐周历"><div class="recipe-week-axis">餐次</div>${dates.map(date=>`<div class="recipe-week-day ${date===data.day?'business-day':''}"><b>${h(recipeWeekday(date))}</b><span>${h(date.slice(5))}</span></div>`).join('')}${MEALS.map(([key,label])=>`<div class="recipe-week-meal">${h(label)}</div>${dates.map(date=>`<div class="recipe-week-cell unplanned ${date===data.day&&key===data.meal?'business-current':''}" aria-label="${h(date+' '+label+'：未选择食谱')}"><b>未选择食谱</b></div>`).join('')}`).join('')}</div></div>`;
+  panelBody(`<div class="recipe-week-heading"><div><small>当前日期暂无覆盖食谱</small><h3>${h(dates[0])} — ${h(dates[4])}</h3><span>五天 × 五餐</span></div></div>`+note('所选日期没有覆盖食谱。以下是待选择的周历占位，不代表其他日期也未编排，不能作为供餐或采购依据。','warning')+grid+`<p class="recipe-week-swipe">左右滑动查看其余日期</p><section class="recipe-calendar-preview">查看已有食谱可预览其他周；若要编排当前日期，请在原模块新建或导入食谱。</section><div class="recipe-week-actions"><button class="primary" data-sub="recipe-library">查看已有食谱 →</button>${button('在原模块新建 / 导入','recipe')}</div>`);
 }
 function recipeWeekDates(recipe,days){
   const start=Date.parse(`${recipe.weekStart}T00:00:00Z`),end=Date.parse(`${recipe.weekEnd}T00:00:00Z`),oneDay=86400000;
