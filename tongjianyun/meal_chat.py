@@ -135,7 +135,7 @@ def _attachment(file_name):
 
 
 @frappe.whitelist(methods=['POST'])
-def send_message(message='', day=None, meal='lunch', file_name=None, request_id=None, stream=0):
+def send_message(message='', day=None, meal='lunch', file_name=None, request_id=None, stream=0, view_context=None):
     require_chat_access()
     if str(stream) != '1':
         frappe.throw('对话方式已升级，请刷新页面后再发送。')
@@ -147,6 +147,9 @@ def send_message(message='', day=None, meal='lunch', file_name=None, request_id=
         frappe.throw('请输入需求或上传食谱。')
     day = business_day(day)
     meal = meal_key(meal)
+    if view_context:
+        from tongjianyun.meal_views import selection
+        view_context = selection(view_context, str(day), meal)
     meal_label = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                           ('早餐', '早点', '午餐', '午点', '晚餐')))[meal]
     instruction = (
@@ -187,7 +190,7 @@ def send_message(message='', day=None, meal='lunch', file_name=None, request_id=
         try:
             frappe.enqueue('tongjianyun.meal_chat.run_task', queue='meal_chat', timeout=-1,
                            job_id=f'meal-chat-{task_id}', task_id=task_id,
-                           instruction=instruction, attachment=attachment)
+                           instruction=instruction, attachment=attachment, view_context=view_context)
         except Exception:
             store.finish(task_id, 'failed', '后台任务未能启动，请稍后重试。')
             raise
@@ -213,7 +216,7 @@ def _command(attachment):
     return command
 
 
-def run_task(task_id, instruction, attachment=None):
+def run_task(task_id, instruction, attachment=None, view_context=None):
     """RQ owns this process; HTTP disconnects cannot cancel or restart the turn."""
     store = TaskStore()
     _owned_task(store, task_id)
@@ -240,6 +243,8 @@ def run_task(task_id, instruction, attachment=None):
             return
         store.update(task_id, status='running', heartbeat=time.time())
         store.emit(task_id, {'kind': 'status', 'text': '助手已开始处理…'})
+        from tongjianyun.meal_views import tool_instruction
+        instruction += tool_instruction(task_id, store.site, view_context)
         for event in process_events(_command(attachment), instruction, PROJECT, cancelled, heartbeat):
             kind = event.get('type')
             if kind == 'thread.started' and SESSION_RE.fullmatch(str(event.get('thread_id', ''))):
@@ -252,9 +257,9 @@ def run_task(task_id, instruction, attachment=None):
                 completed = True
             if kind == 'process.exited':
                 if event['cancelled']:
-                    store.finish(task_id, 'cancelled', '已停止。已执行的操作不会自动撤销，请核对周历。')
+                    store.finish(task_id, 'cancelled', '已停止。已执行的操作不会自动撤销，请核对业务记录。')
                 elif completed and answer_seen and event['code'] == 0:
-                    store.finish(task_id, 'completed', '本次处理结束，请查看答复和周历。')
+                    store.finish(task_id, 'completed', '本次处理结束，请查看答复和左侧结果。')
                 else:
                     store.finish(task_id, 'failed', '助手未完成本次处理，请核对业务记录。')
     except Exception:

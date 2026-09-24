@@ -1,10 +1,11 @@
+import {initializeViews,showBusinessView,restoreBusinessView,currentViewContext} from './views.js?v=meal-views-20260925-2';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
 const messages=$('chat-messages'),chip=$('chat-file-chip'),fileName=$('chat-file-name');
 const mealNames={breakfast:'早餐',morning_snack:'早点',lunch:'午餐',afternoon_snack:'午点',dinner:'晚餐'};
 const api='/api/method/tongjianyun.meal_chat.';
 const tasks=new Map();
-let allowed=false,submitting=false,activeTask=null,source=null,recoveryTimer=null;
+let allowed=false,submitting=false,activeTask=null,source=null,recoveryTimer=null,historyLoaded=false;
 
 function addMessage(kind,text,parent=messages){
   const node=document.createElement('div');
@@ -63,7 +64,7 @@ function finish(view,event){
   for(const row of view.items.values()){if(row.dataset.state==='running'){row.dataset.state='stopped';row.textContent='· '+row.dataset.label+'（已结束）';}}
   if(activeTask===view.id){activeTask=null;source?.close();source=null;clearTimeout(recoveryTimer);controls();$('refresh').click();input.focus();}
 }
-function applyEvent(view,event,id){
+function applyEvent(view,event,id,replay=false){
   if(id){if(view.seen.has(id))return;view.seen.add(id);view.cursor=id;}
   if(event.kind==='status'){view.status.textContent=event.text;}
   if(event.kind==='progress'){
@@ -78,6 +79,11 @@ function applyEvent(view,event,id){
     let node=view.items.get(key);
     if(!node){node=addMessage('assistant','',view.root);view.root.insertBefore(node,view.status);view.items.set(key,node);}
     node.textContent=event.text;view.status.textContent='正在继续处理…';
+  }
+  if(event.kind==='view'&&event.version===1){
+    const button=document.createElement('button');button.type='button';button.className='chat-view-result';
+    button.textContent='查看：'+event.title+' ↗';button.addEventListener('click',()=>showBusinessView(event.selection));
+    view.root.insertBefore(button,view.status);if(!replay)showBusinessView(event.selection);
   }
   if(event.kind==='terminal')finish(view,event);
   scrollMessages();
@@ -108,14 +114,15 @@ function showFailure(error){
 }
 async function loadConversation(){
   const result=await request(api+'get_conversation');
-  let running=null;
+  const initial=!historyLoaded;let running=null,latestView=null;
   for(const task of result.tasks||[]){
     const view=taskView(task);view.state=task.status;
-    for(const event of task.events||[])applyEvent(view,event,event.id);
+    for(const event of task.events||[]){applyEvent(view,event,event.id,initial);if(event.kind==='view'&&event.version===1)latestView=event.selection;}
     if(['queued','running'].includes(view.state))running=view;
   }
   if(running)connect(running);
   else{activeTask=null;source?.close();source=null;clearTimeout(recoveryTimer);controls();}
+  historyLoaded=true;if(initial)await restoreBusinessView(latestView);
   scrollMessages();
 }
 
@@ -145,7 +152,7 @@ form.addEventListener('submit',async event=>{
   const sending=addMessage('assistant',file?'正在上传食谱…':'正在发送…');scrollMessages();
   try{
     const file_name=file?await upload(file):undefined;
-    const result=await post('send_message',{message:text,day,meal,file_name,stream:1,request_id:crypto.randomUUID()});
+    const result=await post('send_message',{message:text,day,meal,file_name,stream:1,request_id:crypto.randomUUID(),view_context:currentViewContext()});
     if(result.accepted){input.value='';input.style.height='auto';clearFile();}
     await loadConversation();
   }catch(error){
@@ -158,6 +165,6 @@ form.addEventListener('submit',async event=>{
 showContext();controls();
 request(api+'get_chat_access').then(async result=>{
   allowed=!!result?.allowed;controls();
-  if(allowed)await loadConversation();
+  if(allowed){initializeViews({request,user:result.user});await loadConversation();}
   else addMessage('assistant error','当前账号暂不能使用对话，请联系管理员。');
 }).catch(showFailure);

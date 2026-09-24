@@ -7,22 +7,30 @@
   <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-workbench-20260924-4">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/chat.css?v=meal-chat-sse-20260925-2">
+  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/views.css?v=meal-views-20260925-1">
 </head>
 <body>
-  <a href="#workbench-week" class="skip">跳到本周食谱</a>
+  <a href="#business-canvas" class="skip">跳到业务内容</a>
   <header class="topbar">
     <a class="brand" href="/tongjianyun-entry?choose=1"><img src="/assets/tongjianyun/images/tongjianyun-logo.svg" alt="童健云"><span><b>童健云</b><small>膳食管理工作台</small></span></a>
     <div class="filters"><label>业务日期 <input id="day" type="date" aria-label="业务日期"></label><label>餐次 <select id="meal" aria-label="餐次"><option value="breakfast">早餐</option><option value="morning_snack">早点</option><option value="lunch" selected>午餐</option><option value="afternoon_snack">午点</option><option value="dinner">晚餐</option></select></label><button id="refresh" title="刷新业务数据" aria-label="刷新业务数据">↻</button></div>
     <div class="account"><a href="/tongjianyun-entry?choose=1">切换工作空间 ↗</a><span id="user-label">膳食工作空间</span></div>
   </header>
   <main id="stage" class="workbench">
-    <section class="workbench-main" aria-label="本周膳食总览">
+    <section id="business-canvas" class="workbench-main" aria-label="本周膳食总览">
+      <div id="view-status" role="status" hidden></div>
+      <div id="recipe-workspace">
       <div class="intro"><h1>本周膳食工作</h1><span>点选周历餐次，直接告诉右侧助手需要处理什么。</span></div>
       <div id="message" role="status" class="message" hidden></div>
       <section class="week-shell" aria-labelledby="week-title">
         <div class="week-heading"><div><small>本周食谱 · 点选餐次查看</small><h2 id="week-title">正在读取本周食谱</h2><p id="week-caption">未确认的食谱和人数不会显示为已完成。</p></div></div>
         <label class="week-mobile-picker">选择日期 <select id="week-mobile-day" aria-label="周历显示日期"></select></label>
         <div id="workbench-week" class="workbench-week-grid" role="group" aria-label="本周五餐食谱"></div>
+      </section>
+      </div>
+      <section id="business-view" aria-labelledby="view-title" hidden>
+        <header class="view-heading"><div><h1 id="view-title"></h1><p id="view-subtitle"></p></div><button id="view-back" class="view-back" type="button">← 回到食谱</button></header>
+        <div id="view-content"></div><div id="view-actions" class="view-actions"></div><p id="view-source" class="view-source"></p>
       </section>
     </section>
     <aside id="meal-chat" class="meal-chat" aria-labelledby="chat-title">
@@ -45,5 +53,5 @@
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p>请启用 JavaScript，或进入<a href="/desk/tongjianyun-workbench">原业务工作台</a>。</p></noscript>
   <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-chat-20260924-1"></script>
-  <script type="module" src="/assets/tongjianyun/meal_scene/chat.js?v=meal-chat-sse-20260925-2"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/chat.js?v=meal-views-20260925-2"></script>
 </body></html>

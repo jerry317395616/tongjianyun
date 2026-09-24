@@ -10,6 +10,7 @@ class Element {
   append(node) { this.children.push(node); }
   insertBefore(node,anchor) { this.children=this.children.filter(item=>item!==node); this.children.splice(this.children.indexOf(anchor),0,node); }
   setAttribute() {}
+  addEventListener() {}
   click() {}
   focus() {}
 }
@@ -21,9 +22,10 @@ function setup() {
     createElement() { return new Element(); },
     querySelector() { return new Element(); },
   };
-  const context = vm.createContext({document,clearTimeout,setTimeout,URLSearchParams});
+  const opened=[];
+  const context = vm.createContext({document,clearTimeout,setTimeout,URLSearchParams,opened,restoreBusinessView:async()=>{},showBusinessView:value=>opened.push(value)});
   const source = fs.readFileSync(path.join(__dirname,'../public/meal_scene/chat.js'),'utf8');
-  vm.runInContext(source.split("fileInput.addEventListener('change'")[0],context);
+  vm.runInContext(source.replace(/^import .*;\r?\n/,'').split("fileInput.addEventListener('change'")[0],context);
   vm.runInContext("const view=taskView({task_id:'test',message:'测试',status:'running'});",context);
   return {context,nodes,run:code=>vm.runInContext(code,context)};
 }
@@ -60,4 +62,17 @@ test('cancellation ends unfinished stage without falsely marking success',()=>{
   run("applyEvent(view,{kind:'terminal',status:'cancelled',text:'已停止'},'2-0')");
   assert.equal(run("view.items.get('progress:p1').dataset.state"),'stopped');
   assert.equal(run('view.state'),'cancelled');
+});
+
+test('live view SSE selects the canvas once and adds a reopen button',()=>{
+  const {run}=setup();
+  const event="{kind:'view',version:1,title:'学生',selection:{view:'students'}}";
+  run(`applyEvent(view,${event},'1-0')`);run(`applyEvent(view,${event},'1-0')`);
+  assert.equal(run('opened.length'),1);assert.equal(run('view.root.children.length'),3);
+});
+
+test('historical view replay does not steal the selected canvas',()=>{
+  const {run}=setup();
+  run("applyEvent(view,{kind:'view',version:1,title:'学生',selection:{view:'students'}},'1-0',true)");
+  assert.equal(run('opened.length'),0);assert.equal(run('view.root.children.length'),3);
 });
