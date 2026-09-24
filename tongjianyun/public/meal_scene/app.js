@@ -1,7 +1,7 @@
 import {STEPS,MEALS,SLOTS,stepFor,stepBadge,factCards,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
 
 const $=id=>document.getElementById(id),panel=$('panel');
-let data=null,scene=null,scenePromise=null,active=null,selectedRecipe=null,recipeCalendarState=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer;
+let data=null,scene=null,scenePromise=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
 const notify=(text,error=false)=>{clearTimeout(toastTimer);$('toast').textContent=text;$('toast').hidden=false;$('toast').style.background=error?'#a56554':'';toastTimer=setTimeout(()=>$('toast').hidden=true,error?10000:5000);};
 const note=(text,kind='')=>`<div class="note ${kind}">${h(text)}</div>`;
 const empty=text=>`<div class="empty">${h(text)}</div>`;
@@ -27,10 +27,19 @@ async function api(method,args={},write=false){
   finally{clearTimeout(timeout);}
 }
 function message(text='',error=false){$('message').textContent=text;$('message').hidden=!text;$('message').classList.toggle('error',error);}
-function leaveDraft(){if(writing)return false;if((dirty||embedded)&&!window.confirm(embedded?'离开原业务面板前，请确认已保存其中的修改。继续吗？':'有未保存的食谱修改，确认放弃并切换吗？'))return false;dirty=false;draftState=null;embedded=false;panel.classList.remove('embedded-open');return true;}
-function closePanel(){if(!leaveDraft())return false;++sequence;panel.close();$('panel-body').replaceChildren();document.body.classList.remove('panel-open');scene?.focus(null);return true;}
+function leaveDraft(){if(writing)return false;if((dirty||embedded)&&!window.confirm(embedded?'离开原业务面板前，请确认已保存其中的修改。继续吗？':'有未保存的食谱修改，确认放弃并切换吗？'))return false;const hadDraft=!!draftState;dirty=false;draftState=null;embedded=false;panel.classList.remove('embedded-open');if(hadDraft)renderWeekOverview();return true;}
+function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panelBody(empty('请选择周历餐次或左侧业务环节。'));scene?.focus(null);return true;}
 function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').scrollTop=0;}
 function fallback(){ $('render-status').hidden=true;$('fallback').hidden=false;$('labels').hidden=true;scene?.dispose();scene=null; }
+function ensureScene(){
+  if(scenePromise||!$('scene-preview').open)return;
+  scenePromise=import('./scene.js?v=meal-flow-20260923-1').then(({MealScene})=>{
+    scene=new MealScene($('canvas'),$('labels'),{onSelect:openStep,onFailure:fallback});
+    if(data)scene.setData(data);
+    if(active)scene.focus(active);
+    $('render-status').hidden=true;
+  }).catch(()=>fallback());
+}
 async function load(automatic=false){
   if(writing||(automatic&&(panel.open||document.hidden)))return;
   const ticket=++loadSequence;ready=false;if(!automatic)message('正在读取所选日期与餐次的业务记录…');$('refresh').disabled=true;
@@ -40,22 +49,23 @@ async function load(automatic=false){
     $('sync').textContent='业务读取 '+String(data.generated_at).slice(11,19);
     $('facts').innerHTML=factCards(data).map(c=>`<button class="fact" data-step="dispatch"><span>${h(c.label)}</span><b>${h(c.value)}</b><small>${h(c.note)}</small></button>`).join('');
     document.querySelectorAll('#flow-nav button').forEach(el=>el.title=stepBadge(el.dataset.step,data));
-    scene?.setData(data);message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
-    if(!scenePromise){scenePromise=import('./scene.js?v=meal-flow-20260923-1').then(({MealScene})=>{scene=new MealScene($('canvas'),$('labels'),{onSelect:openStep,onFailure:fallback});scene.setData(data);$('render-status').hidden=true;}).catch(()=>fallback());}
+    renderWorklist();renderWeekOverview();scene?.setData(data);message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
+    if($('scene-preview').open)ensureScene();
+    if(!active)await openStep('recipe');
   }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);$('render-status').hidden=true;}
   finally{if(ticket===loadSequence)$('refresh').disabled=false;}
 }
 $('flow-nav').innerHTML=STEPS.map(s=>`<button data-step="${s.id}" style="--tint:${s.color}" aria-label="第${s.number}站：${h(s.title)}"><span class="step-num">${s.number}</span><span><strong>${h(s.title)}</strong><small>${s.number<5?'准备与供给':'参考与结果'}</small></span></button>`).join('');
 async function openStep(id){
-  const step=stepFor(id);if(!step||!ready)return notify('请先等待读取成功，或刷新后再操作。');if(!leaveDraft())return;
+  const step=stepFor(id);if(!step||!ready){notify('请先等待读取成功，或刷新后再操作。');return false;}if(!leaveDraft())return false;
   const ticket=++sequence;active=id;scene?.focus(id);$('panel-title').textContent=step.title;$('panel-number').textContent=step.number;$('panel-subtitle').textContent='第 '+step.number+' 站 · '+step.subtitle;
   panel.style.setProperty('--active-color',step.color);$('panel-context').textContent=`${data.day} · ${MEALS.find(([m])=>m===data.meal)?.[1]} · 仅当前账号可见范围`;
   $('previous-step').disabled=step.number===1;$('next-step').disabled=step.number===8;$('step-position').textContent=step.number+' / 8';
-  panel.classList.remove('expanded','embedded-open');if(!panel.open)panel.show();document.body.classList.add('panel-open');
+  panel.classList.remove('expanded','embedded-open');if(!panel.open)panel.show();
   document.querySelectorAll('#flow-nav button').forEach(el=>{el.classList.toggle('active',el.dataset.step===id);el.setAttribute('aria-current',el.dataset.step===id?'step':'false');});
   panelBody(empty('正在读取原业务记录…'));
   try{
-    if(step.cap&&!data.capabilities[step.cap]&&!(id==='purchase'&&data.capabilities.procurement)){panelBody(note('当前账号没有本环节所需业务权限。不会以空表或零值伪装正常，也不会因进入场景自动授权。','warning'));return;}
+    if(step.cap&&!data.capabilities[step.cap]&&!(id==='purchase'&&data.capabilities.procurement)){panelBody(note('当前账号没有本环节所需业务权限。不会以空表或零值伪装正常，也不会因进入工作台自动授权。','warning'));return false;}
     if(id==='recipe')await recipesView(ticket);
     else if(id==='purchase')await purchaseView(ticket);
     else if(id==='receipt')await documentView(ticket,'receipt');
@@ -63,7 +73,8 @@ async function openStep(id){
     else if(id==='kitchen')await kitchenView(ticket);
     else if(id==='dispatch'||id==='dining')plansView(id);
     else await traceView(ticket);
-  }catch(error){if(ticket===sequence&&panel.open)panelBody(note(failure(error),'error'));}
+  }catch(error){if(ticket===sequence&&panel.open)panelBody(note(failure(error),'error'));return false;}
+  return true;
 }
 function live(ticket){return ticket===sequence&&panel.open;}
 function recipeCreateActions(){return data.capabilities.recipe_create?'<button class="primary" data-sub="recipe-new">新建本周草稿</button><button class="secondary" data-sub="recipe-import">导入 Excel 食谱</button>':note('当前账号没有新建或导入食谱的权限。','warning');}
@@ -80,6 +91,38 @@ async function recipesView(ticket,offset=0,all=false){
 function businessWeekDates(day){
   const date=new Date(`${day}T00:00:00Z`),oneDay=86400000,weekday=date.getUTCDay(),monday=date.getTime()-((weekday+6)%7)*oneDay;
   return Array.from({length:5},(_,index)=>new Date(monday+index*oneDay).toISOString().slice(0,10));
+}
+function renderWorklist(){
+  if(!data)return;
+  const items=[],summary=data.plans?.summary;
+  if(data.capabilities.recipe&&data.recipes.rows.length===0)items.push(['recipe','所选日期暂无覆盖食谱','先编排或选择食谱']);
+  if(summary&&summary.visible_groups>summary.planned_groups)items.push(['dispatch','预计人数待核对',`${summary.planned_groups} / ${summary.visible_groups} 个可见班已保存预计`]);
+  if(summary&&data.day<=data.today&&summary.visible_groups>summary.confirmed_groups)items.push(['dining','实际用餐待确认',`${summary.confirmed_groups} / ${summary.visible_groups} 个可见班已确认`]);
+  if(data.capabilities.receipt&&data.receipts.rows.length)items.push(['receipt','查看近七日收货单',`${data.receipts.rows.length}${data.receipts.has_more?'＋':''} 条可见单据；不代表待验收`]);
+  $('worklist-items').innerHTML=items.slice(0,4).map(([id,title,detail])=>`<button type="button" class="worklist-item" data-step="${id}"><strong>${h(title)}</strong><small>${h(detail)}</small></button>`).join('')||'<p class="muted">当前没有可由已接入数据判定的待办；可从下方业务链路继续。</p>';
+}
+function renderWeekOverview(){
+  if(!data)return;
+  const editing=draftState?.kind==='draft';
+  const payload=editing?draftState.payload:weekPayload?.payload||null,recipe=payload?.recipe;
+  const dates=editing?recipeWeekDates(recipe,payload.days):businessWeekDates(data.day);
+  const covering=editing||!!payload&&dates.some(date=>payload.days.some(day=>day.date===date));
+  if(!mobileWeekDay||!dates.includes(mobileWeekDay))mobileWeekDay=dates.includes(data.day)?data.day:dates[0];
+  $('week-title').textContent=`${dates[0]} — ${dates.at(-1)}`;
+  $('week-caption').textContent=editing?'正在编排草稿；点选周历格子，在右侧修改该餐次，保存前不会写入业务记录。':covering?`${recipe.title||weekPayload.name} · ${recipe.workflowStatus||'状态待核'}；未发布食谱不能作为采购依据。`:weekPayload?'所选食谱不覆盖本周；请选择本周食谱，不能将空白当作未供餐。':'尚未选定本周食谱；空白格不代表该日没有供餐。';
+  $('week-selection').textContent=editing?`正在编辑：${draftState.day} · ${MEALS.find(([key])=>SLOTS[key]===draftState.slot)?.[1]||draftState.slot}`:`当前业务：${data.day} · ${MEALS.find(([key])=>key===data.meal)?.[1]||data.meal}`;
+  $('week-new').hidden=!data.capabilities.recipe_create;$('week-import').hidden=!data.capabilities.recipe_create;
+  $('week-other-recipes').hidden=!data.capabilities.recipe;
+  $('week-mobile-day').innerHTML=dates.map(date=>`<option value="${date}" ${date===mobileWeekDay?'selected':''}>${recipeWeekday(date)} · ${date.slice(5)}</option>`).join('');
+  $('workbench-week').style.setProperty('--workbench-days',String(dates.length));
+  const headers=dates.map(date=>`<div class="workbench-week-day ${date===data.day?'business-day':''} ${date===mobileWeekDay?'mobile-day':''}" data-week-date="${date}"><b>${h(recipeWeekday(date))}</b><span>${h(date.slice(5))}</span></div>`).join('');
+  const cells=MEALS.map(([meal,label])=>`<div class="workbench-week-meal">${h(label)}</div>`+dates.map(date=>{
+    const portion=covering?recipePortion(payload,date,SLOTS[meal]):null,dishes=portion?.dishes||[];
+    const current=editing?date===draftState.day&&SLOTS[meal]===draftState.slot:date===data.day&&meal===data.meal;
+    const text=dishes.length?dishes.slice(0,2).join(' · '):covering?'未编排':'待选择食谱';
+    return `<button type="button" class="workbench-week-cell ${current?'selected':''} ${date===mobileWeekDay?'mobile-day':''} ${dishes.length?'':'unplanned'}" data-workbench-date="${date}" data-workbench-meal="${meal}" aria-pressed="${current}" aria-label="${h(date+' '+label+'：'+(dishes.join('、')||text))}"><b>${h(text)}</b>${dishes.length>2?`<small>另有 ${dishes.length-2} 道菜</small>`:''}</button>`;
+  }).join('')).join('');
+  $('workbench-week').innerHTML='<div class="workbench-week-axis">餐次</div>'+headers+cells;
 }
 function renderEmptyRecipeCalendar(){
   const dates=businessWeekDates(data.day),grid=`<div class="recipe-week-scroll"><div class="recipe-week-grid" style="--week-columns:5;min-width:512px" role="group" aria-label="尚未选择食谱的五餐周历"><div class="recipe-week-axis">餐次</div>${dates.map(date=>`<div class="recipe-week-day ${date===data.day?'business-day':''}"><b>${h(recipeWeekday(date))}</b><span>${h(date.slice(5))}</span></div>`).join('')}${MEALS.map(([key,label])=>`<div class="recipe-week-meal">${h(label)}</div>${dates.map(date=>`<div class="recipe-week-cell unplanned ${date===data.day&&key===data.meal?'business-current':''}" aria-label="${h(date+' '+label+'：未选择食谱')}"><b>未选择食谱</b></div>`).join('')}`).join('')}</div></div>`;
@@ -142,6 +185,7 @@ function renderDraftEditor(){
   const editorLabel=draftState.source==='import'?'Excel 识别结果 · 待校对':copy?'修订已有食谱 · 原记录不变':editing?'编辑已有草稿 · 尚未保存':'新建食谱 · 尚未保存';
   const saveLabel=copy?'另存为修订草稿':editing?'保存草稿修改':'保存为草稿';
   panelBody(`<section id="recipe-draft-editor" class="recipe-draft-editor"><div class="recipe-week-heading"><div><small>${editorLabel}</small><h3>${h(payload.recipe.weekStart)} — ${h(payload.recipe.weekEnd)}</h3><span>${copy?'保存后生成独立草稿，不覆盖原食谱':'保存后仅为草稿，不自动发布或采购'}</span></div></div>${editing?note(copy?'原食谱已发布、关联业务或含锁定日期。此次修改将创建新草稿；原食谱及其采购关联保持不变。':'只修改当前未关联业务的草稿。若他人已更新，保存时会提示刷新。',copy?'warning':''):''}${warnings?note(`导入有 ${draftState.warnings.length} 项提醒，请逐项核对。`,'warning')+`<details class="draft-warnings"><summary>查看导入提醒</summary><ul>${warnings}</ul></details>`:''}<label class="field"><span>食谱名称</span><input id="draft-title" maxlength="140" value="${h(payload.recipe.title||'')}"></label>${grid}<p class="recipe-week-swipe">左右滑动查看其余日期</p><section class="recipe-calendar-preview"><div class="recipe-preview-heading"><div><small>点选周历格子编辑</small><h3>${h(draftState.day)} ${h(recipeWeekday(draftState.day))} · ${h(meal)}</h3></div></div><label class="field"><span>菜品名称 · 每行一道</span><textarea id="draft-dishes" rows="5" placeholder="例如：米饭&#10;清炒时蔬">${h(dishes.join('\n'))}</textarea></label><h4>每生食材用量</h4><p class="muted">食材须填写所属菜品、名称、用量和单位；可先只编排菜品，稍后补充食材。</p><div id="draft-ingredients">${ingredients||'<p class="muted">暂无食材明细</p>'}</div><button type="button" class="secondary" id="draft-add-ingredient">＋ 添加食材</button></section><div class="recipe-week-actions"><button type="button" class="primary" id="draft-save">${saveLabel}</button><button type="button" class="secondary" data-sub="draft-cancel">取消</button></div>${note('保存草稿可能安排后台食材物料匹配；不会自动发布、创建采购需求或付款。')}</section>`);
+  mobileWeekDay=draftState.day;renderWeekOverview();
   $('draft-add-ingredient').onclick=()=>{captureDraftEditor();const selected=draftPortion(draftState.day,draftState.slot,true);selected.dishIngredientRows.push({dishName:selected.dishes[0]||'',ingredient:'',amount:'',unit:'g'});dirty=true;const top=$('panel-body').scrollTop;renderDraftEditor();$('panel-body').scrollTop=top;};
   $('draft-save').onclick=saveRecipeDraft;
 }
@@ -169,7 +213,7 @@ function beginRecipeImport(){
   if(!data.capabilities.recipe_create)return notify('当前账号没有导入食谱权限。',true);
   if(!leaveDraft())return;
   draftState={kind:'import'};
-  panelBody(`<div class="recipe-week-heading"><div><small>导入周食谱 · 场景内校对</small><h3>选择 Excel 食谱</h3><span>仅支持 .xlsx，最大 10 MB</span></div></div>${note('上传后由现有识别服务提取菜品和每生带量。识别结果先在周历中校对；只有点击“保存为草稿”才创建食谱。','warning')}<label class="field"><span>食谱文件</span><input id="recipe-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label><div class="recipe-week-actions"><button class="primary" id="recipe-import-start">上传并识别</button><button class="secondary" data-sub="draft-cancel">取消</button></div><p id="recipe-import-status" role="status" aria-live="polite" class="muted">尚未上传文件</p>`);
+  panelBody(`<div class="recipe-week-heading"><div><small>导入周食谱 · 工作台内校对</small><h3>选择 Excel 食谱</h3><span>仅支持 .xlsx，最大 10 MB</span></div></div>${note('上传后由现有识别服务提取菜品和每生带量。识别结果先在周历中校对；只有点击“保存为草稿”才创建食谱。','warning')}<label class="field"><span>食谱文件</span><input id="recipe-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label><div class="recipe-week-actions"><button class="primary" id="recipe-import-start">上传并识别</button><button class="secondary" data-sub="draft-cancel">取消</button></div><p id="recipe-import-status" role="status" aria-live="polite" class="muted">尚未上传文件</p>`);
   $('recipe-import-start').onclick=async()=>{
     const file=$('recipe-import-file').files?.[0];
     if(!file||!file.name.toLowerCase().endsWith('.xlsx')||file.size>10*1024*1024)return notify('请选择不超过 10 MB 的 .xlsx 食谱文件。',true);
@@ -230,6 +274,7 @@ async function recipeView(ticket,name){
   const result=await api('get_recipe',{recipe:name});if(!live(ticket))return;selectedRecipe=name;
   const previous=recipeCalendarState?.name===name?recipeCalendarState:null;
   recipeCalendarState={name,payload:result.payload,revision:result.revision,edit:result.edit,day:previous?.day||null,slot:previous?.slot||null};
+  weekPayload={name,payload:result.payload};renderWeekOverview();
   renderRecipeCalendar();
 }
 async function nutritionView(){
@@ -240,7 +285,7 @@ async function nutritionView(){
     panelBody(note(result.basis)+`<h3>${h(result.recipe.title)}</h3><p class="muted">整周营养估算 · ${h(result.standard_label)} · 园内供给目标 ${h(result.garden_ratio)}%</p><div class="metric-grid">${Object.entries(labels).map(([key,[label,unit]])=>{const e=result.evaluations[key];return `<div class="metric"><span>${label}</span><b>${h(n(result.nutrients[key]))} <small>${unit}</small></b><small>${e?h(e.status)+' · 目标 '+h(n(e.garden_target))+' '+unit:'未配置评价规则'}</small></div>`;}).join('')}</div>`+note(result.conclusion)+`<div class="buttons">${button('调整标准 / 导出分析报表','nutrition')}<button class="secondary" data-sub="recipe-back">返回周历</button></div>`);
   }catch(error){if(live(ticket))panelBody(note(failure(error),'error'));}
 }
-function chooseFirst(text){notify(text);selectedRecipe=null;recipeCalendarState=null;openStep('recipe');}
+function chooseFirst(text){notify(text);selectedRecipe=null;recipeCalendarState=null;weekPayload=null;renderWeekOverview();openStep('recipe');}
 async function documentView(ticket,kind,offset=0){
   const result=offset===0?(kind==='order'?data.orders:data.receipts):await api('get_documents',{day:data.day,kind,offset});if(!live(ticket))return;
   const prefix=kind==='order'?'<button class="primary" id="new-demand">从食谱预览采购需求</button>':'';
@@ -248,7 +293,7 @@ async function documentView(ticket,kind,offset=0){
     `<div class="buttons">${prefix}${button(kind==='order'?'原采购订单 / 供应商':'原收货单 / 实际验收',kind==='order'?'orders':'receipts')}${kind==='order'?button('查看采购需求草稿','requests'):''}</div>`+
     (result.available?`<div class="table-wrap"><table><thead><tr><th>单据</th><th>日期</th><th>供应商</th><th>状态</th><th>金额</th><th></th></tr></thead><tbody>${result.rows.map(r=>`<tr><td>${h(r.name)}</td><td>${h(r[result.date_field])}</td><td>${h(r.supplier_name)}</td><td>${status((r.docstatus===0?'草稿 · ':'')+(r.status||''))}</td><td>${h(n(r.grand_total))} ${h(r.currency)}</td><td>${button('打开原单',kind,r.name)}</td></tr>`).join('')||'<tr><td colspan="6">该范围暂无可见单据</td></tr>'}</tbody></table></div>`:note('当前没有该单据的读取权限。','warning'))+
     `<div class="buttons">${offset?'<button class="secondary" id="doc-prev">上一页</button>':''}${result.has_more?'<button class="secondary" id="doc-next">下一页</button>':''}</div>`+
-    (kind==='receipt'?note('新建、验收、部分收货、退货、提交与库存入账沿用原 ERPNext 单据。打开场景不会自动登记到货或生成付款。','warning'):''));
+    (kind==='receipt'?note('新建、验收、部分收货、退货、提交与库存入账沿用原 ERPNext 单据。打开工作台不会自动登记到货或生成付款。','warning'):''));
   if($('new-demand'))$('new-demand').onclick=demandView;
   const page=start=>{const next=++sequence;documentView(next,kind,start).catch(e=>live(next)&&panelBody(note(failure(e),'error')));};
   if($('doc-prev'))$('doc-prev').onclick=()=>page(Math.max(0,offset-20));if($('doc-next'))$('doc-next').onclick=()=>page(offset+20);
@@ -341,11 +386,19 @@ async function save(method,args){
 function openNative(key,name=''){
   const route=professionalRoute(key,name);if(!route)return notify('不支持的专业入口。',true);if(!leaveDraft())return;
   ++sequence;embedded=true;panel.classList.add('expanded','embedded-open');
-  panelBody(note('正在同一场景内打开原 Frappe 专业模块，沿用其登录、权限、校验和提交规则。离开前请保存其中的修改。')+
+  panelBody(note('正在同一工作台内打开原 Frappe 专业模块，沿用其登录、权限、校验和提交规则。离开前请保存其中的修改。')+
     `<div class="buttons"><a class="secondary" href="${h(route)}" target="_blank" rel="noopener">在新页打开原模块 ↗</a><button class="secondary" id="native-back">返回本站业务</button></div><iframe class="professional" title="原 Frappe 专业业务模块" src="${h(route)}" referrerpolicy="same-origin"></iframe>`);
   $('native-back').onclick=()=>openStep(active);
 }
 document.addEventListener('click',event=>{
+  const weekCell=event.target.closest('[data-workbench-date][data-workbench-meal]');if(weekCell){
+    const day=weekCell.dataset.workbenchDate,meal=weekCell.dataset.workbenchMeal;
+    if(draftState?.kind==='draft'){
+      captureDraftEditor();draftState.day=day;draftState.slot=SLOTS[meal];mobileWeekDay=day;renderDraftEditor();return;
+    }
+    if(day===data?.day&&meal===data?.meal)openStep('recipe');else contextChange(null,day,meal);
+    return;
+  }
   const step=event.target.closest('[data-step]');if(step){$('search-results').hidden=true;openStep(step.dataset.step);return;}
   const native=event.target.closest('[data-native]');if(native){openNative(native.dataset.native,native.dataset.doc||'');return;}
   const draftCell=event.target.closest('[data-draft-day][data-draft-slot]');if(draftCell&&draftState?.kind==='draft'){captureDraftEditor();const top=$('panel-body').scrollTop,left=$('panel-body').querySelector('.recipe-week-scroll')?.scrollLeft||0;draftState.day=draftCell.dataset.draftDay;draftState.slot=draftCell.dataset.draftSlot;renderDraftEditor();$('panel-body').scrollTop=top;$('panel-body').querySelector('.recipe-week-scroll').scrollLeft=left;return;}
@@ -353,7 +406,7 @@ document.addEventListener('click',event=>{
   const calendarCell=event.target.closest('[data-calendar-day][data-calendar-slot]');if(calendarCell&&recipeCalendarState){recipeCalendarState.day=calendarCell.dataset.calendarDay;recipeCalendarState.slot=calendarCell.dataset.calendarSlot;renderRecipePreview();return;}
   const recipe=event.target.closest('[data-recipe]');if(recipe){selectedRecipe=recipe.dataset.recipe;const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(error=>live(ticket)&&panelBody(note(failure(error),'error')));return;}
   const group=event.target.closest('[data-meal-group]');if(group){editMeals(group.dataset.mealGroup);return;}
-  const sub=event.target.closest('[data-sub]');if(sub){if(sub.dataset.sub==='nutrition')nutritionView();else if(sub.dataset.sub==='recipe-library'){selectedRecipe=null;recipeCalendarState=null;const ticket=++sequence;recipesView(ticket,0,true).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-back'){const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-new')beginRecipeDraft();else if(sub.dataset.sub==='recipe-import')beginRecipeImport();else if(sub.dataset.sub==='recipe-edit')beginRecipeEdit();else if(sub.dataset.sub==='draft-cancel')openStep('recipe');return;}
+  const sub=event.target.closest('[data-sub]');if(sub){if(sub.dataset.sub==='nutrition')nutritionView();else if(sub.dataset.sub==='recipe-library'){selectedRecipe=null;recipeCalendarState=null;weekPayload=null;renderWeekOverview();const ticket=++sequence;recipesView(ticket,0,true).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-back'){const ticket=++sequence;recipeView(ticket,selectedRecipe).catch(e=>live(ticket)&&panelBody(note(failure(e),'error')));}else if(sub.dataset.sub==='recipe-new')beginRecipeDraft();else if(sub.dataset.sub==='recipe-import')beginRecipeImport();else if(sub.dataset.sub==='recipe-edit')beginRecipeEdit();else if(sub.dataset.sub==='draft-cancel')openStep('recipe');return;}
   const view=event.target.closest('[data-view]');if(view){scene?.setView(view.dataset.view);document.querySelectorAll('[data-view]').forEach(el=>{const on=el===view;el.classList.toggle('active',on);el.setAttribute('aria-pressed',String(on));});}
   if(event.target.closest('[data-print]'))window.print();
 });
@@ -362,9 +415,22 @@ $('close-panel').onclick=closePanel;panel.addEventListener('cancel',e=>{e.preven
 $('expand-panel').onclick=()=>panel.classList.toggle('expanded');
 $('previous-step').onclick=()=>{const step=stepFor(active);if(step.number>1)openStep(STEPS[step.number-2].id);};
 $('next-step').onclick=()=>{const step=stepFor(active);if(step.number<8)openStep(STEPS[step.number].id);};
-function contextChange(el){const old=el.id==='day'?data?.day:data?.meal;if(!leaveDraft()){if(old)el.value=old;return;}if(panel.open)closePanel();selectedRecipe=null;recipeCalendarState=null;load();}
+function contextChange(el,requestedDay=$('day').value,requestedMeal=$('meal').value){
+  if(!leaveDraft()){if(data){$('day').value=data.day;$('meal').value=data.meal;}return;}
+  if(panel.open)closePanel();
+  $('day').value=requestedDay;$('meal').value=requestedMeal;
+  const covers=weekPayload?.payload?.days.some(row=>row.date===requestedDay);
+  if(!covers){selectedRecipe=null;recipeCalendarState=null;weekPayload=null;}
+  else if(recipeCalendarState){recipeCalendarState.day=requestedDay;recipeCalendarState.slot=SLOTS[requestedMeal];}
+  load();
+}
 $('day').onchange=()=>{if($('day').value)contextChange($('day'));};$('meal').onchange=()=>contextChange($('meal'));
 $('refresh').onclick=()=>{if(!leaveDraft())return;if(panel.open)closePanel();load();};
+$('week-mobile-day').onchange=()=>{mobileWeekDay=$('week-mobile-day').value;renderWeekOverview();};
+$('scene-preview').addEventListener('toggle',()=>{if($('scene-preview').open)ensureScene();});
+$('week-new').onclick=async()=>{if(await openStep('recipe'))beginRecipeDraft();};
+$('week-import').onclick=async()=>{if(await openStep('recipe'))beginRecipeImport();};
+$('week-other-recipes').onclick=async()=>{if(await openStep('recipe'))document.querySelector('[data-sub="recipe-library"]')?.click();};
 $('labels-toggle').onclick=()=>{const hidden=document.body.classList.toggle('tags-off');$('labels-toggle').setAttribute('aria-pressed',String(!hidden));};
 $('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch(_){notify('浏览器未允许全屏，所有业务仍可使用。');}};
 $('search').oninput=()=>{const q=$('search').value.trim();$('search-results').hidden=!q;$('search-results').innerHTML=STEPS.filter(s=>(s.title+s.subtitle).includes(q)).map(s=>`<button data-step="${s.id}">${s.number} · ${h(s.title)}</button>`).join('')||'<p class="muted">没有匹配的业务物件</p>';};
