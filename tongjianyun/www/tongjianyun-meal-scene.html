@@ -5,7 +5,7 @@
   <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="same-origin">
   <meta name="csrf-token" content="{{ csrf_token | e }}"><title>膳食管理工作台 · 童健云</title>
   <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
-  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-workbench-20260924-1">
+  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-workbench-20260924-2">
   <script type="importmap">{"imports":{"three":"/assets/tongjianyun/campus/vendor/three.module.js"}}</script>
 </head>
 <body>
@@ -16,31 +16,27 @@
     <div class="account"><a href="/tongjianyun-entry?choose=1">切换工作空间 ↗</a><span id="user-label">膳食工作空间</span></div>
   </header>
   <main id="stage" class="workbench">
-    <aside class="workbench-sidebar" aria-label="待办与业务流程">
-      <section class="worklist"><h2>当前要处理</h2><div id="worklist-items" aria-live="polite">正在读取真实业务记录…</div></section>
-      <nav id="flow-nav" aria-label="按业务顺序选择" class="flow-nav"></nav>
-      <div class="search"><input id="search" type="search" autocomplete="off" placeholder="查找业务环节 /" aria-label="搜索业务环节"><div id="search-results" hidden></div></div>
-    </aside>
     <section class="workbench-main" aria-label="本周膳食总览">
-      <div class="intro"><p>MEAL WORKBENCH / 每周每餐都在眼前</p><h1>一张周历，处理整条膳食业务链</h1><span>选中餐次后，在右侧直接完成当前环节的工作。</span></div>
+      <div class="intro"><h1>本周膳食工作</h1><span>先看下一步，再点周历中的餐次处理。</span></div>
       <div id="message" role="status" class="message" hidden></div>
-      <section class="facts" id="facts" aria-label="所选餐次真实登记摘要"></section>
+      <section class="worklist" aria-labelledby="worklist-title"><div class="worklist-heading"><span class="worklist-mark" aria-hidden="true">1</span><div><h2 id="worklist-title">接下来做什么</h2><p>根据当前可见记录提示，不会自动修改业务数据。</p></div></div><div id="worklist-items" aria-live="polite">正在读取真实业务记录…</div></section>
       <section class="week-shell" aria-labelledby="week-title">
-        <div class="week-heading"><div><small>周食谱总览 · 五天 × 五餐</small><h2 id="week-title">正在读取本周食谱</h2><p id="week-caption">未确认的食谱和人数不会显示为已完成。</p></div><div class="week-actions"><button id="week-import" class="primary" type="button">上传 Excel 食谱</button><button id="week-new" class="secondary" type="button">编排本周</button></div></div>
+        <div class="week-heading"><div><small>本周食谱 · 点选餐次查看</small><h2 id="week-title">正在读取本周食谱</h2><p id="week-caption">未确认的食谱和人数不会显示为已完成。</p></div></div>
         <label class="week-mobile-picker">选择日期 <select id="week-mobile-day" aria-label="周历显示日期"></select></label>
         <div id="workbench-week" class="workbench-week-grid" role="group" aria-label="本周五餐食谱"></div>
         <div class="week-bottom"><span id="week-selection">选中餐次后可查看与编辑</span><button id="week-other-recipes" type="button" class="quiet">选择其他食谱</button></div>
       </section>
-      <details id="scene-preview" class="scene-preview"><summary>查看 3D 业务流向示意</summary><div class="scene-viewport"><div id="canvas" role="img" aria-label="八站膳食业务示意场景；左侧业务流程提供等效入口"></div><div id="labels" aria-label="场景物件"></div><div class="view-tools"><button data-view="overview" aria-pressed="true" class="active">全景</button><button data-view="top" aria-pressed="false">俯视</button><button id="labels-toggle" aria-pressed="true">标注</button><button id="fullscreen" aria-label="全屏场景">全屏</button></div><div id="render-status" class="render-status">展开后加载 3D 示意…</div><div id="fallback" hidden><h2>普通业务模式</h2><p>当前设备无法显示 3D；左侧入口仍可完成相同业务。</p></div></div><p class="scene-note"><span id="sync">尚未读取</span> · 3D 仅用于定位业务环节，不代表任务已完成。</p></details>
+      <details id="more-work" class="more-work"><summary>其他业务与食谱操作</summary><div class="more-work-content"><p>需要办理其他事项时，从这里选择。</p><nav id="flow-nav" aria-label="其他膳食业务" class="flow-nav"></nav><div class="more-recipe-actions"><button id="week-new" class="secondary" type="button">手动编排食谱</button><button id="week-import" class="secondary" type="button">上传 Excel 食谱</button></div><div class="search"><input id="search" type="search" autocomplete="off" placeholder="查找业务" aria-label="搜索业务环节"><div id="search-results" hidden></div></div>
+      <details id="scene-preview" class="scene-preview"><summary>查看业务流向示意（3D）</summary><div class="scene-viewport"><div id="canvas" role="img" aria-label="膳食业务示意场景；其他业务入口位于本页下方"></div><div id="labels" aria-label="场景物件"></div><div class="view-tools"><button data-view="overview" aria-pressed="true" class="active">全景</button><button data-view="top" aria-pressed="false">俯视</button><button id="labels-toggle" aria-pressed="true">标注</button><button id="fullscreen" aria-label="全屏场景">全屏</button></div><div id="render-status" class="render-status">展开后加载 3D 示意…</div><div id="fallback" hidden><h2>普通业务模式</h2><p>当前设备无法显示 3D；其他业务入口仍可完成相同业务。</p></div></div><p class="scene-note"><span id="sync">尚未读取</span> · 3D 仅用于定位业务环节，不代表任务已完成。</p></details></div></details>
     </section>
     <dialog id="panel" open aria-modal="false" aria-labelledby="panel-title">
       <header><span id="panel-number">1</span><div><small id="panel-subtitle">当前业务环节</small><h2 id="panel-title">食谱与营养</h2></div><button id="expand-panel" aria-label="展开业务面板">展开</button><button id="close-panel" aria-label="关闭业务面板">×</button></header>
       <div id="panel-context" class="panel-context">等待业务数据</div>
       <div id="panel-body">正在读取原业务记录…</div>
-      <footer><button id="previous-step">← 上一站</button><span id="step-position">1 / 8</span><button id="next-step">下一站 →</button></footer>
+      <footer><button id="previous-step">← 上一步</button><span id="step-position" class="visually-hidden">1 / 8</span><button id="next-step">下一步 →</button></footer>
     </dialog>
   </main>
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p>请启用 JavaScript，或进入<a href="/desk/tongjianyun-workbench">原业务工作台</a>。</p></noscript>
-  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-workbench-20260924-1"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-workbench-20260924-2"></script>
 </body></html>
