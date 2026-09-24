@@ -6,6 +6,7 @@
   <meta name="csrf-token" content="{{ csrf_token | e }}"><title>膳食管理工作台 · 童健云</title>
   <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-workbench-20260924-4">
+  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/chat.css?v=meal-chat-20260924-1">
 </head>
 <body>
   <a href="#workbench-week" class="skip">跳到本周食谱</a>
@@ -16,7 +17,7 @@
   </header>
   <main id="stage" class="workbench">
     <section class="workbench-main" aria-label="本周膳食总览">
-      <div class="intro"><h1>本周膳食工作</h1><span>点选周历餐次，在右侧查看或编辑。</span></div>
+      <div class="intro"><h1>本周膳食工作</h1><span>点选周历餐次，直接告诉右侧助手需要处理什么。</span></div>
       <div id="message" role="status" class="message" hidden></div>
       <section class="week-shell" aria-labelledby="week-title">
         <div class="week-heading"><div><small>本周食谱 · 点选餐次查看</small><h2 id="week-title">正在读取本周食谱</h2><p id="week-caption">未确认的食谱和人数不会显示为已完成。</p></div></div>
@@ -24,14 +25,25 @@
         <div id="workbench-week" class="workbench-week-grid" role="group" aria-label="本周五餐食谱"></div>
       </section>
     </section>
-    <dialog id="panel" open aria-modal="false" aria-labelledby="panel-title">
+    <aside id="meal-chat" class="meal-chat" aria-labelledby="chat-title">
+      <header class="meal-chat-header"><div><h2 id="chat-title">膳食助手</h2><p id="chat-context">正在读取业务日期…</p></div></header>
+      <div id="chat-messages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions">
+        <div class="chat-message assistant">你好，直接说需要处理什么，也可以上传食谱。</div>
+      </div>
+      <form id="chat-form" class="chat-form">
+        <div id="chat-file-chip" class="chat-file-chip" hidden><span id="chat-file-name"></span><button id="chat-remove-file" type="button" aria-label="移除所选文件">×</button></div>
+        <div class="chat-composer"><label class="chat-attach" for="chat-file" title="上传食谱" aria-label="上传食谱">＋</label><input id="chat-file" type="file" accept=".xlsx,.xls,.csv,.txt,.pdf,.png,.jpg,.jpeg" hidden><textarea id="chat-input" rows="1" maxlength="2000" placeholder="说出需求，或上传食谱…" aria-label="给膳食助手发送消息"></textarea><button id="chat-send" type="submit" aria-label="发送消息">↑</button></div>
+      </form>
+    </aside>
+    <div hidden aria-hidden="true"><dialog id="panel" open aria-modal="false" aria-labelledby="panel-title">
       <header><span id="panel-number">1</span><div><small id="panel-subtitle">当前业务环节</small><h2 id="panel-title">食谱与营养</h2></div><button id="expand-panel" aria-label="展开业务面板">展开</button><button id="close-panel" aria-label="关闭业务面板">×</button></header>
       <div id="panel-context" class="panel-context">等待业务数据</div>
       <div id="panel-body">正在读取原业务记录…</div>
       <footer><button id="previous-step">← 上一步</button><span id="step-position" class="visually-hidden">1 / 8</span><button id="next-step">下一步 →</button></footer>
-    </dialog>
+    </dialog></div>
   </main>
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p>请启用 JavaScript，或进入<a href="/desk/tongjianyun-workbench">原业务工作台</a>。</p></noscript>
-  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-workbench-20260924-5"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-chat-20260924-1"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/chat.js?v=meal-chat-20260924-1"></script>
 </body></html>

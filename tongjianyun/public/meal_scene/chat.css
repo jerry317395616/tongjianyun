@@ -1,0 +1,28 @@
+/* A single conversation surface beside the weekly meal calendar. */
+#stage.workbench #meal-chat{position:sticky;top:86px;display:flex;flex-direction:column;min-width:0;height:calc(100dvh - 98px);min-height:480px;overflow:hidden;border:1px solid #dce8db;border-radius:16px;background:#fff;box-shadow:0 2px 14px #345d3e0a}
+.meal-chat-header{flex:none;padding:17px 18px 14px;border-bottom:1px solid #e8eee6}
+.meal-chat-header h2{margin:0;color:#264637;font-size:19px;line-height:1.3}
+.meal-chat-header p{margin:5px 0 0;color:#789083;font-size:11px;line-height:1.4}
+.chat-messages{display:flex;flex:1;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;padding:20px 16px;overscroll-behavior:contain}
+.chat-message{max-width:94%;padding:11px 13px;border-radius:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-message.assistant{align-self:flex-start;background:#f1f6ef;color:#315041;border-bottom-left-radius:5px}
+.chat-message.user{align-self:flex-end;background:#3f8068;color:white;border-bottom-right-radius:5px}
+.chat-message.busy{color:#708778}
+.chat-message.error{background:#fff1ed;color:#9c5148}
+.chat-form{flex:none;padding:12px;border-top:1px solid #e8eee6;background:#fff}
+.chat-composer{display:flex;align-items:flex-end;gap:8px;padding:6px;border:1px solid #d6e3d6;border-radius:14px;background:#fafcf9}
+.chat-composer:focus-within{border-color:#4b9175;box-shadow:0 0 0 2px #d9eee1}
+.chat-attach,#chat-send{flex:none;display:grid;place-items:center;width:33px;height:33px;border:0;border-radius:9px;cursor:pointer}
+.chat-attach{color:#4c7860;font-size:24px;line-height:1;background:transparent}
+.chat-attach:hover{background:#e8f2e9}
+#chat-input{flex:1;min-width:0;max-height:132px;min-height:33px;padding:7px 3px;border:0!important;outline:none;box-shadow:none!important;background:transparent!important;resize:none;font-size:13px;line-height:1.45}
+#chat-input::placeholder{color:#94a69a}
+#chat-send{background:#3f8068;color:#fff;font-size:21px;font-weight:700}
+#chat-send:disabled,.chat-attach.disabled{opacity:.45;cursor:not-allowed}
+.chat-file-chip{display:flex;align-items:center;gap:7px;max-width:100%;margin-bottom:8px;padding:6px 8px;border-radius:8px;background:#edf5ed;color:#476d55;font-size:11px}
+.chat-file-chip[hidden]{display:none}
+.chat-file-chip span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-file-chip button{border:0;background:transparent;color:inherit;font-size:17px;cursor:pointer}
+@media(max-width:950px){#stage.workbench #meal-chat{position:static;top:auto;height:570px;min-height:460px;margin-bottom:10px}}
+@media(max-width:760px){#stage.workbench #meal-chat{height:65dvh;min-height:430px;border-radius:15px}.chat-messages{padding:15px 12px}.chat-message{font-size:12px}}
+@media print{#stage.workbench #meal-chat{display:none!important}}

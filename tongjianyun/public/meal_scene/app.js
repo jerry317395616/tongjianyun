@@ -1,6 +1,6 @@
 import {STEPS,MEALS,SLOTS,stepFor,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
 
-const $=id=>document.getElementById(id),panel=$('panel');
+const $=id=>document.getElementById(id),panel=$('panel'),chatMode=!!$('meal-chat');
 let data=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
 const notify=(text,error=false)=>{clearTimeout(toastTimer);$('toast').textContent=text;$('toast').hidden=false;$('toast').style.background=error?'#a56554':'';toastTimer=setTimeout(()=>$('toast').hidden=true,error?10000:5000);};
 const note=(text,kind='')=>`<div class="note ${kind}">${h(text)}</div>`;
@@ -32,13 +32,22 @@ function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panel
 function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').scrollTop=0;}
 function revealPanel(){if(window.matchMedia('(max-width:950px)').matches)panel.scrollIntoView({behavior:'smooth',block:'start'});}
 async function load(automatic=false){
-  if(writing||(automatic&&(panel.open||document.hidden)))return;
+  if(writing||(automatic&&((panel.open&&!chatMode)||document.hidden)))return;
   const ticket=++loadSequence;ready=false;if(!automatic)message('正在读取所选日期与餐次的业务记录…');$('refresh').disabled=true;
   try{
     const result=await api('get_overview',{day:$('day').value||'',meal:$('meal').value});if(ticket!==loadSequence)return;
     data=result;ready=true;$('day').value=data.day;$('meal').value=data.meal;$('user-label').textContent=data.user_label;
+    if(chatMode){
+      weekPayload=null;selectedRecipe=null;
+      if(data.recipes?.rows?.length===1){
+        const recipe=data.recipes.rows[0].name;
+        try{const detail=await api('get_recipe',{recipe});if(ticket!==loadSequence)return;selectedRecipe=recipe;weekPayload={name:recipe,payload:detail.payload};}
+        catch(_){weekPayload=null;}
+      }
+    }
     renderWeekOverview();message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
-    if(!active)await openStep('recipe');
+    document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:getContext()}));
+    if(!chatMode&&!active)await openStep('recipe');
   }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);}
   finally{if(ticket===loadSequence)$('refresh').disabled=false;}
 }
@@ -366,6 +375,12 @@ function openNative(key,name=''){
 document.addEventListener('click',event=>{
   const weekCell=event.target.closest('[data-workbench-date][data-workbench-meal]');if(weekCell){
     const day=weekCell.dataset.workbenchDate,meal=weekCell.dataset.workbenchMeal;
+    if(chatMode){
+      if(day!==data?.day||meal!==data?.meal)contextChange(null,day,meal);
+      else document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{day,meal}}));
+      if(window.matchMedia('(max-width:950px)').matches)$('meal-chat').scrollIntoView({behavior:'smooth',block:'start'});
+      return;
+    }
     if(draftState?.kind==='draft'){
       captureDraftEditor();draftState.day=day;draftState.slot=SLOTS[meal];mobileWeekDay=day;renderDraftEditor();return;
     }
@@ -398,7 +413,7 @@ function contextChange(el,requestedDay=$('day').value,requestedMeal=$('meal').va
   load();
 }
 $('day').onchange=()=>{if($('day').value)contextChange($('day'));};$('meal').onchange=()=>contextChange($('meal'));
-$('refresh').onclick=()=>{if(!leaveDraft())return;if(panel.open)closePanel();load();};
+$('refresh').onclick=()=>{if(chatMode){load();return;}if(!leaveDraft())return;if(panel.open)closePanel();load();};
 $('week-mobile-day').onchange=()=>{mobileWeekDay=$('week-mobile-day').value;renderWeekOverview();};
 document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'&&panel.open){e.preventDefault();closePanel();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
 window.addEventListener('beforeunload',e=>{if(dirty||writing||embedded){e.preventDefault();e.returnValue='';}});
