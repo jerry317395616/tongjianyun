@@ -55,7 +55,7 @@ body{height:auto;min-height:100dvh;overflow:auto;background:#f3f6f2}
 
 /* Simple workbench: one suggested action, the week, and optional work below it. */
 #stage.workbench{grid-template-columns:minmax(0,1fr) minmax(330px,390px)}
-#stage.workbench .workbench-main{min-width:0}
+#stage.workbench .workbench-main{min-width:0;min-height:0}
 #stage.workbench .intro{margin-bottom:13px}
 #stage.workbench .intro h1{font-size:22px;letter-spacing:0}
 #stage.workbench .intro>span{display:block}
