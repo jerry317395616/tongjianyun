@@ -129,11 +129,13 @@ class FrappeBusinessQueue:
 
 class BusinessChatApplication:
     """Transport-independent application; identity comes from a trusted Viewer."""
-    def __init__(self, store, authority, queue, *, lock=submission_lock, writes=None):
+    def __init__(self, store, authority, queue, *, lock=submission_lock, writes=None, attachments=None, proposals=None):
         if store.site != authority.site or store.site != queue.site:
             raise PermissionError('Business application site mismatch')
         self.store, self.authority, self.queue, self.lock = store, authority, queue, lock
         self.writes = writes
+        self.attachments = attachments
+        self.proposals = proposals
 
     def viewer(self):
         return self.authority.capture_viewer()
@@ -146,7 +148,7 @@ class BusinessChatApplication:
         self._viewer(viewer)
         return TaskIdentity(self.store.site, viewer.owner, task_id)
 
-    def submit(self, viewer, request_id, message, context):
+    def submit(self, viewer, request_id, message, context, *, file_name=None):
         identity = self.identity(viewer, request_id)
         scopes = self.authority.view_scopes(identity, context['selection']) if 'selection' in context else ()
         with self.lock(self.store.directory, viewer.owner):
@@ -156,6 +158,21 @@ class BusinessChatApplication:
             active = self.store.active_task(viewer.owner)
             if not existing and active:
                 return {'accepted': False, 'task_id': active['task_id'], 'status': active['status']}
+            if 'attachments' in context:
+                raise ValueError('Attachment descriptors must be prepared by the trusted service')
+            if file_name is not None:
+                if self.attachments is None:
+                    raise ValueError('File processing is unavailable')
+                from tongjianyun.business_agent_attachments import AttachmentInputError
+                try:
+                    descriptor = self.attachments.prepare(identity, file_name)
+                except AttachmentInputError:
+                    if existing:
+                        # A file changed after an earlier accepted request is
+                        # NOT proof that the earlier task was never accepted.
+                        raise PermissionError('An existing request attachment can no longer be verified') from None
+                    raise
+                context = {**context, 'attachments': [descriptor]}
             result = self.store.create(viewer.owner, request_id, message, context, authority_scopes=scopes)
             self._viewer(viewer)
             # Dispatching/acknowledged jobs are reconciled against the real RQ
@@ -204,10 +221,18 @@ class BusinessChatApplication:
         history = self.store.history(viewer.owner, before=before, limit=20)
         result = []
         for task in reversed(history['tasks']):
-            page = self.event_page(viewer, task['task_id'])
-            task = self.store.task(TaskIdentity(self.store.site, viewer.owner, task['task_id']))
+            identity = TaskIdentity(self.store.site, viewer.owner, task['task_id'])
+            try:
+                page = self.event_page(viewer, task['task_id'])
+                task = self.store.task(identity)
+            except PermissionError:
+                if not self.store._history_may_omit(identity):
+                    raise
+                continue
             context = task['context']
-            result.append({**task, **page, 'day': context.get('day'), 'meal': context.get('meal'), 'file_name': ''})
+            attached = context.get('attachments', [])
+            result.append({**task, **page, 'day': context.get('day'), 'meal': context.get('meal'),
+                           'file_name': attached[0]['display_name'] if attached else ''})
         self._viewer(viewer)
         return {'mode': 'business', 'tasks': result, 'next_before': history['next_before']}
 
@@ -288,6 +313,11 @@ def application(*, require_ready=False):
     # provision filesystem roots, choose a path or silently fix bad permissions.
     private_directory(directory)
     authority = FrappeBusinessAuthority(site, run_check=FreshFrappeChecks(site, sites_path))
+    from tongjianyun.business_agent_proposals import ProposalRepository, ProposalAuthority, BusinessProposals
+    proposal_directory = Path(sites_path) / site / 'private' / 'business-codex' / 'proposals'
+    repository = ProposalRepository(site, sites_path) if proposal_directory.exists() or proposal_directory.is_symlink() else None
+    if repository is not None:
+        authority = ProposalAuthority(authority, repository)
     queue = FrappeBusinessQueue(site)
     if require_ready and not queue.ready():
         raise PermissionError('Business queue worker is unavailable')
@@ -299,7 +329,7 @@ def application(*, require_ready=False):
     from tongjianyun.business_agent_writes import BusinessWriteLedger, BusinessWrites
     adapter = FrappeWriteAdapter(site, sites_path, store=store)
     ledger = BusinessWriteLedger(directory, site, authorize=adapter.authorize)
-    runtime = BusinessExecutionRuntime(runtime, ledger)
+    runtime = BusinessExecutionRuntime(runtime, ledger, proposals=repository)
     # The SAME composition is used in RQ and in fresh web/SSE reconciliation.
     # A native cgroup cannot certify host-side database transaction drainage.
     store.observe_execution, store.seal_execution = runtime.observe, runtime.seal_before_start
@@ -309,7 +339,10 @@ def application(*, require_ready=False):
                           'title': '班级当日出勤' if selection['view'] == 'classroom_day' else '用餐人数'})
     writes = BusinessWrites(ledger, transaction_factory=adapter.transaction_factory,
                             fresh_read=adapter.fresh_read, publish_view=publish_view)
-    return BusinessChatApplication(store, authority, queue, writes=writes), runtime
+    from tongjianyun.business_agent_attachments import BusinessAttachments
+    return BusinessChatApplication(store, authority, queue, writes=writes,
+                                   attachments=BusinessAttachments(authority, store),
+                                   proposals=BusinessProposals(authority, store, repository) if repository is not None else None), runtime
 
 
 def run_task(owner, task_id):
@@ -330,5 +363,7 @@ def run_task(owner, task_id):
         read_tools=BusinessReads(app.authority, app.store).dispatch,
         write_tools=app.writes,
         catalog_tools=BusinessCatalog(app.authority, app.store).dispatch,
+        attachment_tools=app.attachments.dispatch,
+        proposal_tools=app.proposals.dispatch if app.proposals is not None else None,
         model_key=_model_key)
     return worker.run(identity, app.store.job_id(identity))

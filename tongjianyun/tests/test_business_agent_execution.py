@@ -104,6 +104,42 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(len(self.readbacks), 2)
         self.assertTrue(results[1]['replayed'])
 
+    def test_draft_gate_is_opened_before_native_bind_and_drained_before_exit_observation(self):
+        calls = []
+        proposals = SimpleNamespace(site=self.site,
+            open_task=MagicMock(side_effect=lambda claim:calls.append('draft-open')),
+            close_task=MagicMock(side_effect=lambda *args:calls.append('draft-drain') or True))
+        runtime = BusinessExecutionRuntime(self.native, self.ledger, proposals=proposals)
+        claim = self.store.claim(self.identity, self.ticket.job_id)
+        runtime.bind(claim)
+        self.assertEqual(calls, ['draft-open'])
+        self.native.state, self.native.code = 'exited', 0
+        self.ledger.close_task(self.identity, claim.claim_id)
+        observation = runtime.observe(self.identity, claim.claim_id)
+        self.assertEqual(observation.state, 'exited')
+        self.assertEqual(calls, ['draft-open','draft-drain'])
+
+    def test_busy_draft_database_never_becomes_verified_task_drainage(self):
+        proposals = SimpleNamespace(site=self.site,open_task=MagicMock(),close_task=MagicMock(side_effect=OSError))
+        runtime = BusinessExecutionRuntime(self.native,self.ledger,proposals=proposals)
+        claim = self.store.claim(self.identity, self.ticket.job_id)
+        runtime.bind(claim)
+        self.native.state, self.native.code = 'exited',0
+        self.ledger.close_task(self.identity,claim.claim_id)
+        with self.assertRaises(OSError):
+            runtime.observe(self.identity,claim.claim_id)
+        with self.assertRaises(OSError):
+            runtime.stop(claim)
+        self.assertIn('stop', self.calls, 'Draft I/O failure must not leave native model running')
+
+    def test_nonliteral_draft_drain_receipt_is_rejected(self):
+        proposals = SimpleNamespace(site=self.site,open_task=MagicMock(),close_task=MagicMock(return_value=None))
+        runtime = BusinessExecutionRuntime(self.native,self.ledger,proposals=proposals)
+        claim = self.store.claim(self.identity,self.ticket.job_id)
+        runtime.bind(claim)
+        with self.assertRaises(ValueError):
+            runtime.close_admission(claim)
+
     def test_unknown_commit_cannot_be_promoted_by_successful_model_turn(self):
         self.transaction.failure = 'commit'
         results = []

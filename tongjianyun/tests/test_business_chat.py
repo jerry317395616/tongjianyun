@@ -77,6 +77,66 @@ class BusinessChatApplicationTests(unittest.TestCase):
         self.assertEqual(result, {'accepted': False, 'task_id': self.id, 'status': 'queued'})
         self.assertIsNone(self.store.find_task(TaskIdentity(self.site, self.owner, new_id)))
 
+    def attach_adapter(self):
+        self.descriptor = {'version':1, 'file_id':'FILE-1', 'display_name':'meal.csv', 'format':'csv',
+                           'size':20, 'sha256':'a'*64, 'revision':'b'*64}
+        self.app.attachments = SimpleNamespace(prepare=MagicMock(return_value=self.descriptor))
+        return self.app.attachments
+
+    def test_attachment_prepared_with_trusted_identity_bound_and_registered_before_dispatch(self):
+        adapter = self.attach_adapter()
+        result = self.app.submit(self.viewer, self.id, '分析食谱', self.context, file_name='FILE-1')
+        self.assertTrue(result['accepted'])
+        adapter.prepare.assert_called_once_with(self.identity, 'FILE-1')
+        self.assertEqual(self.store.task(self.identity)['context']['attachments'], [self.descriptor])
+        self.assertIn({'kind':'attachment','descriptor':self.descriptor}, self.store.required_scopes(self.identity))
+        self.assertEqual(self.app.conversation(self.viewer)['tasks'][0]['file_name'], 'meal.csv')
+
+    def test_same_request_cannot_substitute_or_modify_attachment(self):
+        adapter = self.attach_adapter()
+        self.app.submit(self.viewer, self.id, '分析', self.context, file_name='FILE-1')
+        self.queue_state = 'present'
+        self.assertTrue(self.app.submit(self.viewer, self.id, '分析', self.context, file_name='FILE-1')['accepted'])
+        adapter.prepare.return_value = {**self.descriptor, 'sha256':'c'*64}
+        with self.assertRaises(ValueError):
+            self.app.submit(self.viewer, self.id, '分析', self.context, file_name='FILE-1')
+        self.assertEqual(self.queue.enqueue.call_count, 1)
+
+    def test_existing_task_file_error_is_not_reported_as_never_accepted(self):
+        from tongjianyun.business_agent_attachments import AttachmentInputError
+        adapter = self.attach_adapter()
+        self.app.submit(self.viewer, self.id, '分析', self.context, file_name='FILE-1')
+        adapter.prepare.side_effect = AttachmentInputError('invalid_content')
+        with self.assertRaises(PermissionError):
+            self.app.submit(self.viewer, self.id, '分析', self.context, file_name='FILE-1')
+        self.assertEqual(self.queue.enqueue.call_count, 1)
+
+    def test_attachment_permission_failure_creates_no_task_and_does_not_dispatch(self):
+        adapter = self.attach_adapter()
+        adapter.prepare.side_effect = PermissionError
+        with self.assertRaises(PermissionError):
+            self.app.submit(self.viewer, self.id, '分析', self.context, file_name='FILE-1')
+        self.assertIsNone(self.store.find_task(self.identity))
+        self.queue.enqueue.assert_not_called()
+
+    def test_other_active_task_does_not_read_or_bind_unsent_attachment(self):
+        self.submit()
+        adapter = self.attach_adapter()
+        result = self.app.submit(self.viewer, str(uuid.uuid4()), '分析', self.context, file_name='FILE-1')
+        self.assertFalse(result['accepted'])
+        adapter.prepare.assert_not_called()
+
+    def test_caller_cannot_supply_a_trusted_attachment_descriptor(self):
+        self.attach_adapter()
+        with self.assertRaises(ValueError):
+            self.app.submit(self.viewer, self.id, '分析', {**self.context, 'attachments':[self.descriptor]})
+        self.queue.enqueue.assert_not_called()
+
+    def test_unconfigured_attachment_adapter_fails_not_silent_drop(self):
+        with self.assertRaises(ValueError):
+            self.app.submit(self.viewer, self.id, '分析', self.context, file_name='FILE-1')
+        self.assertIsNone(self.store.find_task(self.identity))
+
     def test_active_lookup_is_not_limited_by_recent_history(self):
         self.submit()
         with self.store._transaction() as db:
@@ -248,11 +308,32 @@ class BusinessChatHttpTests(unittest.TestCase):
                 http.send_message(message='hi', stream=1, **kwargs)
         self.app.submit.assert_not_called()
 
-    def test_attachments_rejected_not_dropped_or_forwarded_to_admin(self):
-        for attachment in ('FILE-1', '', {'path':'/private/file'}):
+    def test_invalid_attachment_identifiers_rejected_before_submission(self):
+        for attachment in ('', {'path':'/private/file'}, 'x'*141, 'File\0name'):
             with self.subTest(attachment=attachment), self.assertRaises(frappe.ValidationError):
                 http.send_message(message='read', file_name=attachment, stream=1)
         self.app.submit.assert_not_called()
+
+    def test_attachment_id_is_passed_only_to_the_trusted_application(self):
+        http.send_message(message='分析表格', file_name='FILE-1', request_id=self.id, stream=1)
+        self.app.submit.assert_called_once_with(self.viewer, self.id, '分析表格',
+            {'day':'2026-09-16','meal':'lunch'}, file_name='FILE-1')
+
+    def test_file_only_request_means_analysis_not_an_implicit_write(self):
+        http.send_message(file_name='FILE-1', request_id=self.id, stream=1)
+        self.assertEqual(self.app.submit.call_args.args[2], '请分析上传的文件。')
+
+    def test_attachment_input_errors_are_fixed_helpful_messages_not_parser_details(self):
+        from tongjianyun.business_agent_attachments import AttachmentInputError
+        self.app.submit.side_effect = AttachmentInputError('encoding')
+        with self.assertRaises(frappe.ValidationError) as error:
+            http.send_message(message='分析', file_name='FILE-1', request_id=self.id, stream=1)
+        self.assertIn('UTF-8', str(error.exception))
+        self.assertTrue(frappe.local.response['business_request_not_accepted'])
+        self.app.submit.side_effect = ValueError('/private/path raw cell secret')
+        with self.assertRaises(frappe.ValidationError) as error:
+            http.send_message(message='分析', file_name='FILE-1', request_id=self.id, stream=1)
+        self.assertNotIn('/private', str(error.exception))
 
     def test_bad_message_uuid_and_context_fail_before_submit(self):
         values = ({'message':['x']}, {'message':''}, {'message':'x'*8001}, {'request_id':'../escape'},

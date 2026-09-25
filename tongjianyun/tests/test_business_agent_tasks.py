@@ -974,6 +974,40 @@ class BusinessTaskTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.store.create(self.identity.owner, str(uuid.uuid4()), '请求', authority_scopes=[scope])
 
+    def test_revoked_terminal_history_cannot_hide_new_authorized_active_task(self):
+        old = self.store.create(self.identity.owner, str(uuid.uuid4()), 'PRIVATE_OLD_FILE',
+            authority_scopes=[{'kind':'class','group':'REVOKED','actions':['read']}])['identity']
+        self.store.cancel(old)
+        current = self.create(message='当前授权任务')
+        self.authorize.side_effect = lambda identity, scopes: all(scope.get('group') != 'REVOKED' for scope in scopes)
+        page = self.store.history(self.identity.owner)
+        self.assertIn(current.task_id, [task['task_id'] for task in page['tasks']])
+        self.assertNotIn('PRIVATE_OLD_FILE', str(page))
+        self.assertNotIn(old.task_id, str(page))
+        self.assertEqual(self.store.task(current)['status'], 'queued')
+
+    def test_empty_filtered_history_page_advances_by_scanned_rows(self):
+        hidden = []
+        for _ in range(2):
+            identity = self.store.create(self.identity.owner, str(uuid.uuid4()), 'PRIVATE_OLD',
+                authority_scopes=[{'kind':'class','group':'REVOKED','actions':['read']}])['identity']
+            self.store.cancel(identity)
+            hidden.append(identity)
+        self.authorize.side_effect = lambda identity, scopes: all(scope.get('group') != 'REVOKED' for scope in scopes)
+        page = self.store.history(self.identity.owner, limit=2)
+        self.assertEqual(page, {'tasks':[], 'next_before':hidden[0].task_id})
+        older = self.store.history(self.identity.owner, before=page['next_before'], limit=2)
+        self.assertEqual([task['task_id'] for task in older['tasks']], [self.identity.task_id])
+
+    def test_revoked_active_history_is_not_omitted_or_falsely_finished(self):
+        claim = self.claim()
+        self.store.register_authority(claim, {'kind':'class','group':'REVOKED','actions':['read']})
+        self.authorize.side_effect = lambda identity, scopes: all(scope.get('group') != 'REVOKED' for scope in scopes)
+        with self.assertRaises(PermissionError):
+            self.store.history(self.identity.owner)
+        self.assertEqual(self.store._owned(self.identity)['status'], 'stopping')
+        self.assertFalse(self.store._history_may_omit(self.identity))
+
     def test_lost_g1_scope_while_g2_remains_stops_old_text_and_tool_receipt_access(self):
         allowed_groups = {'G1', 'G2'}
         self.authorize.side_effect = lambda identity, scopes: all(

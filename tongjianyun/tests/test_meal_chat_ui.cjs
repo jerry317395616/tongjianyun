@@ -34,7 +34,8 @@ function setup(options={}) {
   };
   const opened=[];
   const refreshed=[];
-  const context = vm.createContext({document,clearTimeout:timer=>{if(timer)timer.cleared=true;},setTimeout:fn=>{const timer={fn};timers.push(timer);return timer;},URLSearchParams,opened,EventSource,
+  class FormData { constructor(){this.entries=[];} append(...values){this.entries.push(values);} }
+  const context = vm.createContext({document,FormData,clearTimeout:timer=>{if(timer)timer.cleared=true;},setTimeout:fn=>{const timer={fn};timers.push(timer);return timer;},URLSearchParams,opened,EventSource,
     crypto:{randomUUID:()=>businessTask},fetch:()=>{throw Error('Unexpected network request in a unit test');},
     currentViewContext:()=>({view:'classroom_day',group:'Synthetic Class'}),initializeViews:value=>{initialized.push(value);},
     context:()=>({day:'2026-09-24',meal:'lunch'}),refreshMealData:()=>refreshed.push(true),showBusinessView:value=>{opened.push(value);return {status:'rendered',selection:value};}});
@@ -164,7 +165,7 @@ test('bootstrap business mode selects only business history and cursor namespace
   await run('loadConversation()');
   assert.deepEqual(calls,['/api/method/tongjianyun.business_chat.get_conversation']);
   assert.match(streams[0].url,/business_chat\.stream_events/);assert.equal(new URLSearchParams(streams[0].url.split('?')[1]).get('after'),'0');
-  assert.equal(nodes.get('chat-file').disabled,true);assert.match(attach.title,/暂不支持上传/);
+  assert.equal(nodes.get('chat-file').disabled,true);assert.match(attach.title,/TXT.*CSV.*XLSX/);
 });
 
 test('missing mode retains administrator API and unknown mode never falls back',()=>{
@@ -268,13 +269,80 @@ test('old source callbacks cannot affect a switched user or administrator histor
   assert.equal(nodes.get('chat-messages').children.length,0);
 });
 
-test('business selected file is preserved and rejected, never uploaded or sent to admin',async()=>{
+test('unsupported business file is preserved and rejected before upload',async()=>{
   const {run,nodes,context}=setup({mode:'business'}),calls=[];
-  nodes.get('chat-input').value='处理附件';nodes.get('chat-file').files=[{name:'private.xlsx',size:100}];
+  nodes.get('chat-input').value='处理附件';nodes.get('chat-file').files=[{name:'private.exe',size:100}];
   context.fetch=async url=>{calls.push(url);throw Error('must not call');};
   await run('submitMessage({preventDefault(){}})');assert.equal(calls.length,0);
-  assert.equal(nodes.get('chat-file').files[0].name,'private.xlsx');assert.equal(nodes.get('chat-input').value,'处理附件');
-  assert.match(nodes.get('chat-messages').children.at(-1).textContent,/尚未发送/);
+  assert.equal(nodes.get('chat-file').files[0].name,'private.exe');assert.equal(nodes.get('chat-input').value,'处理附件');
+  assert.match(nodes.get('chat-messages').children.at(-1).textContent,/其他格式尚未接通/);
+});
+
+test('business upload is private and lost send response retries the same file and task',async()=>{
+  const {run,nodes,context}=setup({mode:'business'}),calls=[],posts=[];let attempts=0;
+  nodes.get('chat-input').value='分析这个食谱';nodes.get('chat-file').files=[{name:'recipe.xlsx',size:100}];
+  context.fetch=async(url,options)=>{
+    calls.push(url);assert.doesNotMatch(url,/meal_chat\./);
+    if(url.endsWith('upload_file')){
+      assert.equal(options.method,'POST');assert.equal(options.body.entries.find(row=>row[0]==='is_private')[1],'1');
+      return {ok:true,json:async()=>({message:{name:'FILE-BOUND'}})};
+    }
+    if(url.endsWith('send_message')){
+      posts.push(JSON.parse(options.body));attempts++;
+      if(attempts===1)throw Error('response lost');
+      return {ok:true,json:async()=>({message:{accepted:true,task_id:businessTask,status:'running'}})};
+    }
+    return {ok:true,json:async()=>({message:{mode:'business',tasks:[]}})};
+  };
+  await run('submitMessage({preventDefault(){}})');
+  await run('submitMessage({preventDefault(){}})');
+  assert.equal(calls.filter(url=>url.endsWith('upload_file')).length,1);
+  assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);assert.equal(posts[0].file_name,'FILE-BOUND');
+});
+
+test('replacing an unresolved business attachment cannot create a new request',async()=>{
+  const {run,nodes,context}=setup({mode:'business'}),calls=[];
+  nodes.get('chat-input').value='分析文件';nodes.get('chat-file').files=[{name:'changed.csv',size:20}];
+  run("pendingSend={file:{name:'old.csv',size:10},payload:{request_id:'old',message:'分析文件',file_name:'FILE-OLD'}}");
+  context.fetch=async url=>{calls.push(url);return {ok:true,json:async()=>({message:{mode:'business',tasks:[]}})};};
+  await run('submitMessage({preventDefault(){}})');
+  assert.equal(calls.length,1);assert.match(calls[0],/get_conversation/);
+  assert.match(nodes.get('chat-messages').children.at(-1).textContent,/上次发送结果尚未确认/);
+});
+
+test('business attachment limits and empty text uploads are explicit',async()=>{
+  const {run,nodes,context}=setup({mode:'business'}),posts=[];
+  assert.match(run("fileError({name:'data.csv',size:2*1024*1024+1})"),/2 MB/);
+  assert.equal(run("fileError({name:'data.XLSX',size:10})"),'');
+  nodes.get('chat-file').files=[{name:'text.txt',size:10}];
+  context.fetch=async(url,options)=>{
+    if(url.endsWith('send_message'))posts.push(JSON.parse(options.body));
+    return {ok:true,json:async()=>({message:url.endsWith('upload_file')?{name:'FILE-ONE'}:
+      url.endsWith('send_message')?{accepted:true,task_id:businessTask,status:'running'}:{mode:'business',tasks:[]}})};
+  };
+  await run('submitMessage({preventDefault(){}})');
+  assert.equal(posts.length,1);assert.equal(posts[0].message,'');assert.equal(posts[0].file_name,'FILE-ONE');
+});
+
+test('native 417 with explicit not-accepted evidence permits correcting a rejected attachment',async()=>{
+  const {run,nodes,context}=setup({mode:'business'});let posts=0;
+  nodes.get('chat-input').value='分析文件';nodes.get('chat-file').files=[{name:'bad.csv',size:100}];
+  context.fetch=async(url)=>({ok:!url.endsWith('send_message'),status:417,json:async()=>{
+    if(url.endsWith('upload_file'))return {message:{name:'FILE-'+posts}};
+    if(url.endsWith('send_message')){posts++;return {business_request_not_accepted:true};}
+    return {message:{mode:'business',tasks:[]}};
+  }});
+  await run('submitMessage({preventDefault(){}})');assert.equal(run('pendingSend'),null);
+  nodes.get('chat-file').files=[{name:'correct.csv',size:100}];
+  await run('submitMessage({preventDefault(){}})');assert.equal(posts,2);
+});
+
+test('a generic native 417 cannot erase the identity of an unconfirmed business request',async()=>{
+  const {run,nodes,context}=setup({mode:'business'});
+  nodes.get('chat-input').value='办理业务';
+  context.fetch=async url=>({ok:!url.endsWith('send_message'),status:417,json:async()=>
+    url.endsWith('send_message')?{}:{message:{mode:'business',tasks:[]}}});
+  await run('submitMessage({preventDefault(){}})');assert.equal(run('pendingSend.payload.request_id'),businessTask);
 });
 
 test('business send contains no attachment field and lost response reuses request identity on explicit retry',async()=>{

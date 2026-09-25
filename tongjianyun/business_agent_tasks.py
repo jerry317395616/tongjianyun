@@ -220,11 +220,14 @@ authorizer. This is a protocol, not a generic Frappe permission fingerprint.
 """
     schemas = {'class': {'kind', 'group', 'actions'}, 'doctype': {'kind', 'doctype', 'actions'},
                'document': {'kind', 'doctype', 'document', 'actions'}, 'view': {'kind', 'selection'},
-               'capability': {'kind', 'name'}}
+               'capability': {'kind', 'name'}, 'attachment': {'kind', 'descriptor'}}
     if type(value) is not dict or not isinstance(value.get('kind'), str) or value['kind'] not in schemas or set(value) != schemas[value['kind']]:
         raise ValueError('Invalid registered authority scope')
     result = dict(value)
-    if value['kind'] == 'view':
+    if value['kind'] == 'attachment':
+        from tongjianyun.business_agent_attachments import normalize_descriptor
+        result['descriptor'] = normalize_descriptor(value['descriptor'])
+    elif value['kind'] == 'view':
         result['selection'] = _selection(value['selection'])
     else:
         for key in set(value) - {'kind', 'actions'}:
@@ -404,11 +407,20 @@ class BusinessTaskStore:
             raise ValueError('A bounded business request is required')
         if context is None:
             context = {}
-        if type(context) is not dict or set(context) - {'day', 'meal', 'selection', 'business_area'}:
+        if type(context) is not dict or set(context) - {'day', 'meal', 'selection', 'business_area', 'attachments'}:
             raise ValueError('Invalid business context')
         if 'selection' in context:
             context = {**context, 'selection': _selection(context['selection'])}
-        for field in set(context) - {'selection'}:
+        if 'attachments' in context:
+            from tongjianyun.business_agent_attachments import normalize_descriptor, source_scope
+            attachments = context['attachments']
+            if type(attachments) is not list or len(attachments) != 1:
+                raise ValueError('Exactly one trusted attachment is supported per request')
+            context = {**context, 'attachments': [normalize_descriptor(attachments[0])]}
+            # A bound file is a dependency from admission onward, not only
+            # after the model elects to read it. It cannot outlive revocation.
+            authority_scopes = (*authority_scopes, source_scope(context['attachments'][0]))
+        for field in set(context) - {'selection', 'attachments'}:
             if not isinstance(context[field], str) or len(context[field]) > 140:
                 raise ValueError('Invalid business context field')
         encoded = _json(context, MAX_CONTEXT_BYTES)
@@ -511,8 +523,27 @@ authorize. No per-task capability, model thread ID or worker token is returned.
                 values.append(rowid)
             values.append(limit + 1)
             rows = db.execute('SELECT task_id FROM tasks WHERE owner=?' + clause + ' ORDER BY rowid DESC LIMIT ?', values).fetchall()
-        page = [self.task(TaskIdentity(self.site, owner, row['task_id'])) for row in rows[:limit]]
-        return {'tasks': page, 'next_before': page[-1]['task_id'] if len(rows) > limit else None}
+        page = []
+        for row in rows[:limit]:
+            identity = TaskIdentity(self.site, owner, row['task_id'])
+            try:
+                page.append(self.task(identity))
+            except PermissionError:
+                if not self._history_may_omit(identity):
+                    raise
+        # Use the last scanned row, not the last visible one: an entirely
+        # unavailable page must neither loop nor hide earlier authorized work.
+        return {'tasks': page, 'next_before': rows[limit - 1]['task_id'] if len(rows) > limit else None}
+
+    def _history_may_omit(self, identity):
+        """Never turn account revocation or undrained work into an empty history.
+
+        A removed/changed private attachment may revoke an old terminal task,
+        but cannot suppress this owner's unrelated authorized conversations.
+        No content, source ids or file metadata from the omitted task is sent.
+        """
+        row = self._owned(identity)
+        return row['status'] in TERMINAL and self.authorize(identity, ()) is True
 
     def binding_state(self, claim):
         """Trusted BusinessBinding.read_task adapter; never expose worker token."""

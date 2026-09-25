@@ -10,13 +10,17 @@ from tongjianyun.business_agent_writes import BusinessWriteLedger, combine_execu
 
 
 class BusinessExecutionRuntime:
-    def __init__(self, native, ledger):
+    def __init__(self, native, ledger, *, proposals=None):
         required = ('ready', 'bind', 'start', 'poll', 'stop', 'record_projection',
                     'observe', 'seal_before_start', 'close')
         if (not isinstance(ledger, BusinessWriteLedger)
                 or any(not callable(getattr(native, name, None)) for name in required)):
             raise ValueError('Trusted native runtime and durable host ledger required')
         self.native, self.write_ledger = native, ledger
+        if proposals is not None and (getattr(proposals, 'site', None) != ledger.site
+                or any(not callable(getattr(proposals, name, None)) for name in ('open_task', 'close_task'))):
+            raise ValueError('Draft mutations need a same-site durable admission gate')
+        self.proposal_repository = proposals
 
     def ready(self):
         return self.native.ready()
@@ -25,6 +29,8 @@ class BusinessExecutionRuntime:
         # Register before any native launch or proxy capability exists. A web
         # cancellation tombstone cannot be reopened by a delayed queue worker.
         self.write_ledger.open_task(claim)
+        if self.proposal_repository is not None:
+            self.proposal_repository.open_task(claim)
         return self.native.bind(claim)
 
     def start(self, claim, **inputs):
@@ -34,7 +40,18 @@ class BusinessExecutionRuntime:
         return self.native.poll(claim)
 
     def close_admission(self, claim):
-        return self.write_ledger.close_task(claim.identity, claim.claim_id)
+        try:
+            return self.write_ledger.close_task(claim.identity, claim.claim_id)
+        finally:
+            self._close_proposals(claim.identity, claim.claim_id)
+
+    def _close_proposals(self, identity, claim_id):
+        if self.proposal_repository is not None:
+            # BEGIN IMMEDIATE serializes the permanent gate with real draft
+            # transactions in the SAME database. Busy/I/O failure is unknown,
+            # never proof of zero outstanding writes in a fresh web process.
+            if self.proposal_repository.close_task(identity, claim_id) is not True:
+                raise ValueError('Proposal transaction drainage is not verified')
 
     def stop(self, claim):
         try:
@@ -56,10 +73,15 @@ class BusinessExecutionRuntime:
             # Any host operation already admitted remains durably active until
             # its own connection closes. Late callbacks now fail admission.
             self.write_ledger.close_task(identity, claim_id)
-        return combine_execution(native, self.write_ledger.observe(identity, claim_id))
+        host = self.write_ledger.observe(identity, claim_id)
+        if (isinstance(native, ExecutionObservation) and native.claim_id == claim_id
+                and native.state in {'exited', 'never_started_and_sealed'} and host.admission_closed):
+            self._close_proposals(identity, claim_id)
+        return combine_execution(native, host)
 
     def seal_before_start(self, identity, claim_id):
         self.write_ledger.close_task(identity, claim_id)
+        self._close_proposals(identity, claim_id)
         native = self.native.seal_before_start(identity, claim_id)
         return combine_execution(native, self.write_ledger.observe(identity, claim_id))
 

@@ -42,6 +42,7 @@ VIEW_FIELDS = {
     'frappe_doctype': {'doctype'},
     'frappe_document': {'doctype', 'document'},
     'frappe_new': {'doctype'},
+    'business_proposal': {'proposal_id', 'revision'},
 }
 MAX_ARGUMENT_BYTES = 128 * 1024
 MAX_ROSTER = 500

@@ -19,7 +19,8 @@ from tongjianyun.frappe_project_views import VIEWS as PROJECT_VIEWS, FIELDS as P
 
 VIEWS = {'students': '在园学生', 'class_students': '班级学生',
          'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析',
-         'business_blueprint': '新业务方案', 'stock_reconciliation': '库存核对', **BUSINESS_VIEWS, **PROJECT_VIEWS}
+         'business_blueprint': '新业务方案', 'business_proposal': '我的新业务方案',
+         'stock_reconciliation': '库存核对', **BUSINESS_VIEWS, **PROJECT_VIEWS}
 LABELS = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                   ('早餐', '早点', '午餐', '午点', '晚餐')))
 PAGE_SIZE = 50
@@ -39,12 +40,17 @@ def selection(value, default_day=None, default_meal='lunch'):
             frappe.throw('展示指令格式无效。')
     from tongjianyun.meal_nutrition_view import FIELDS, nutrition_selection
     from tongjianyun.stock_reconciliation import FIELDS as STOCK_FIELDS, selection as stock_selection
-    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components', 'proposal_id'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS | STOCK_FIELDS):
+    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components', 'proposal_id', 'revision'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS | STOCK_FIELDS):
         frappe.throw('展示指令含不支持的内容。')
     view = value.get('view')
     if not isinstance(view, str) or view not in VIEWS:
         frappe.throw('暂不支持这种业务视图。')
     clean = {'view': view}
+    if view == 'business_proposal':
+        from tongjianyun.business_agent_proposals import canonical_selection
+        return canonical_selection(value)
+    if 'revision' in value:
+        frappe.throw('方案版本仅用于我的新业务方案视图。')
     if view == 'stock_reconciliation':
         return stock_selection(value)
     if set(value) & STOCK_FIELDS:
@@ -290,6 +296,12 @@ def get_view(selection_json):
     elif choice['view'] == 'business_blueprint':
         from tongjianyun.business_blueprints import preview
         result = preview(choice['proposal_id'])
+    elif choice['view'] == 'business_proposal':
+        from tongjianyun.business_agent_service import application
+        app, _ = application()
+        if app.proposals is None:
+            raise frappe.PermissionError('新业务方案存储尚未配置，未启用任何业务结构。')
+        result = app.proposals.preview_owned(app.viewer(), choice['proposal_id'], choice['revision'])
     elif choice['view'] == 'stock_reconciliation':
         from tongjianyun.stock_reconciliation import get_view as stock_view
         result = stock_view(choice)

@@ -21,10 +21,16 @@ def _request(*, require_ready=False):
 
 
 def _call(action):
+    from tongjianyun.business_agent_attachments import AttachmentInputError
     try:
         return action()
     except (PermissionError, frappe.PermissionError):
         raise frappe.PermissionError('当前账号或会话无权访问这项任务。') from None
+    except AttachmentInputError as error:
+        # Only this finite fixed-message exception is safe to expose. Never
+        # return arbitrary parser/DB/path errors from other ValueErrors.
+        frappe.local.response['business_request_not_accepted'] = True
+        frappe.throw(str(error), exc=frappe.ValidationError)
     except (ValueError, TypeError):
         raise frappe.ValidationError('请求内容或进度位置无效，请刷新页面后核对。') from None
 
@@ -46,13 +52,15 @@ def send_message(message='', day=None, meal='lunch', file_name=None, request_id=
     app, viewer = _request(require_ready=True)
     if str(stream) != '1':
         raise frappe.ValidationError('请刷新页面后使用流式业务对话。')
-    if file_name is not None:
-        raise frappe.ValidationError('业务对话的文件处理尚未接通，本次没有接收或处理附件。')
     def submit():
         task_id = _uuid(request_id) if request_id is not None else str(uuid.uuid4())
-        if not isinstance(message, str) or not 1 <= len(message.strip()) <= 8000:
+        if file_name is not None and (not isinstance(file_name, str) or not 1 <= len(file_name) <= 140
+                                     or any(ord(c) < 32 for c in file_name)):
+            raise ValueError('Invalid File document identifier')
+        if not isinstance(message, str) or len(message.strip()) > 8000 or (not message.strip() and file_name is None):
             raise ValueError('Invalid message')
-        return app.submit(viewer, task_id, message, _context(day, meal, view_context))
+        return app.submit(viewer, task_id, message if message.strip() else '请分析上传的文件。',
+                          _context(day, meal, view_context), **({'file_name': file_name} if file_name is not None else {}))
     return _call(submit)
 
 

@@ -3,7 +3,7 @@ import {mealContext,setMealContext,refreshMealData} from './state.js?v=meal-head
 const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
   'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
-  'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint','stock_reconciliation']);
+  'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint','business_proposal','stock_reconciliation']);
 let request,current=null,ticket=0,nativeSession=null,registerSession=null,loadingTicket=0;
 let sceneHome={view:'recipe_week'},sceneRecipeAllowed=true,sceneGroup=null,sceneNavigation=null;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
@@ -300,6 +300,14 @@ function renderBlueprint(block){
   return section;
 }
 const attendanceLabels={Unknown:'待登记',Present:'到园',Absent:'缺勤',Leave:'请假'};
+function renderProposal(block){
+  // Ordinary users preview their own versioned drafts. This component cannot
+  // inherit the separate administrator blueprint's activation action.
+  if(block.state!=='proposed'||typeof block.proposal_id!=='string'||!/^[a-f0-9]{64}$/.test(block.revision||''))throw Error('个人业务方案版本不完整。');
+  const section=renderBlueprint({...block,can_activate:false});
+  section.append(node('p','需要修改时，直接在右侧说明，例如“增加数量字段”。当前是方案草稿，不代表业务已经启用。','view-note'));
+  return section;
+}
 function renderAttendance(block){
   return renderRegister(block,'attendance');
 }
@@ -418,7 +426,7 @@ function renderStockRepair(block){
   });
   return section;
 }
-const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,attendance_register:renderAttendance,meal_register:renderMealRegister,stock_repair:renderStockRepair};
+const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,business_proposal:renderProposal,attendance_register:renderAttendance,meal_register:renderMealRegister,stock_repair:renderStockRepair};
 export function buildComponents(data){
   if(data?.version!==1||!validViews.has(data.selection?.view)||!Array.isArray(data.components)||data.components.length>12)throw Error('展示结果格式不受支持，已保留当前页面。');
   const content=document.createDocumentFragment();

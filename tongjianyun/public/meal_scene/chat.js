@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=unified-business-20260925-6';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=business-proposals-20260926-1';
 import {mealContext as context,refreshMealData} from './state.js?v=meal-header-20260925-1';
 import {getSceneBootstrap} from './scene_bootstrap.js?v=teacher-scene-20260925-1';
 const $=id=>document.getElementById(id);
@@ -23,6 +23,7 @@ function configureChat(bootstrap){
     if(chatUser&&user!==chatUser){clearFile();input.value='';}
   }
   chatMode=nextMode;chatUser=user;api=chatMode==='business'?businessApi:adminApi;
+  fileInput.accept=chatMode==='business'?'.txt,.csv,.xlsx':'.xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp,.txt';
   allowed=bootstrap.chat.allowed===true;canSubmit=bootstrap.chat.can_submit!==false;
   readinessReason=bootstrap.chat.reason||'后台助手暂不可用，仍可查看已有记录或停止任务。';controls();
   if(chatMode==='business'){
@@ -43,11 +44,11 @@ function controls(){
   const stopping=tasks.get(activeTask)?.state==='stopping';
   send.disabled=!allowed||submitting||stopping||(!activeTask&&!canSubmit);
   input.disabled=!allowed||submitting||!!activeTask||!canSubmit;
-  fileInput.disabled=input.disabled||chatMode==='business';
+  fileInput.disabled=input.disabled;
   $('chat-remove-file').disabled=input.disabled;
   const attach=document.querySelector('.chat-attach');
   attach.classList.toggle('disabled',fileInput.disabled);attach.setAttribute('aria-disabled',String(fileInput.disabled));
-  attach.title=chatMode==='business'?'业务对话暂不支持上传文件，请直接输入需求。':'上传业务文件';
+  attach.title=chatMode==='business'?'上传 TXT、CSV 或 XLSX 文件（最多 2 MB）':'上传业务文件';
   send.textContent=activeTask?'■':'↑';
   send.setAttribute('aria-label',stopping?'正在停止':activeTask?'停止处理':'发送消息');
   send.title=stopping?'正在停止':activeTask?'停止处理':'发送消息';
@@ -64,10 +65,16 @@ async function request(path,options={}){
   const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,
     headers:{Accept:'application/json',...(options.method==='POST'?{'X-Frappe-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content}:{}),...options.headers}});
   const body=await response.json().catch(()=>({}));
-  if(!response.ok||body.exc){const error=Error(errorText(body,response.status));error.status=response.status;throw error;}
+  if(!response.ok||body.exc){const error=Error(errorText(body,response.status));error.status=response.status;error.notAccepted=body.business_request_not_accepted===true;throw error;}
   return body.message;
 }
 function clearFile(){fileInput.value='';chip.hidden=true;fileName.textContent='';}
+function fileError(file,mode=chatMode){
+  if(!file)return '';
+  if(mode==='business'&&!/\.(txt|csv|xlsx)$/i.test(file.name))return '当前支持 TXT、CSV、XLSX 文件，其他格式尚未接通。';
+  const limit=mode==='business'?2:10;
+  return file.size>limit*1024*1024?`文件不能超过 ${limit} MB。`:'';
+}
 async function upload(file){
   const data=new FormData();data.append('file',file);data.append('is_private','1');
   const uploaded=await request('/api/method/upload_file',{method:'POST',body:data});
@@ -220,6 +227,7 @@ function loadConversation(){
       }else throw Error('任务状态尚未确认，请刷新核对。');
       if(pendingSend?.payload.request_id===task.task_id){
         if(input.value.trim()===pendingSend.payload.message){input.value='';input.style.height='auto';}
+        if(pendingSend.file&&fileInput.files?.[0]===pendingSend.file)clearFile();
         pendingSend=null;
       }
     }
@@ -261,9 +269,9 @@ async function submitMessage(event){
   }
   if(!canSubmit){addMessage('assistant error',readinessReason);return;}
   const text=input.value.trim(),file=fileInput.files?.[0];if(!text&&!file)return input.focus();
-  if(mode==='business'&&file){addMessage('assistant error','业务对话暂不支持上传文件。所选文件尚未发送，请先移除附件后再发送文字。');return;}
+  const invalidFile=fileError(file,mode);if(invalidFile){addMessage('assistant error',invalidFile);return;}
   const {day,meal}=context();if(!day)return addMessage('assistant error','业务日期还没读取完成，请稍等。');
-  if(mode==='business'&&pendingSend&&pendingSend.payload.message!==text){
+  if(mode==='business'&&pendingSend&&(pendingSend.payload.message!==text||pendingSend.file!==file)){
     try{await loadConversation();}catch(error){if(epoch===generation)showFailure(error);}
     if(epoch===generation&&pendingSend)addMessage('assistant error','上次发送结果尚未确认，请先恢复进度或刷新核对，不要改成新请求重复办理。');
     return;
@@ -273,7 +281,11 @@ async function submitMessage(event){
   try{
     let payload;
     if(mode==='business'){
-      if(!pendingSend)pendingSend={payload:{message:text,day,meal,stream:1,request_id:crypto.randomUUID(),view_context:currentViewContext()}};
+      if(!pendingSend){
+        const file_name=file?await upload(file):undefined;
+        if(epoch!==generation)return;
+        pendingSend={file,payload:{message:text,day,meal,stream:1,request_id:crypto.randomUUID(),view_context:currentViewContext(),...(file_name?{file_name}:{})}};
+      }
       payload=pendingSend.payload;
     }else{
       const file_name=file?await upload(file):undefined;
@@ -286,7 +298,7 @@ async function submitMessage(event){
     pendingSend=null;
     if(result.accepted){input.value='';input.style.height='auto';clearFile();}
     if(mode==='business'){
-      const view=taskView({task_id:result.task_id,message:result.accepted?text:'正在恢复已有任务…',status:result.status||'queued'});
+      const view=taskView({task_id:result.task_id,message:result.accepted?text:'正在恢复已有任务…',file_name:result.accepted?file?.name:'',status:result.status||'queued'});
       activeTask=view.id;controls();
     }
     await loadConversation();
@@ -296,7 +308,7 @@ async function submitMessage(event){
     // an explicit same-text retry reuses its original business request_id.
     try{await loadConversation();}catch(_){}
     if(epoch!==generation)return;
-    if(error.status===400||error.status===422)pendingSend=null;
+    if(error.notAccepted===true||error.status===400||error.status===422)pendingSend=null;
     showFailure(error);
     if(activeTask&&allowed){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{if(epoch===generation)loadConversation().catch(showFailure);},5000);}
   }finally{sending.remove();if(epoch===generation){submitting=false;controls();}}
@@ -317,17 +329,10 @@ async function initializeChat(bootstrap){
 
 fileInput.addEventListener('change',()=>{
   const file=fileInput.files?.[0];if(!file)return clearFile();
-  if(chatMode==='business'){
-    fileName.textContent=file.name;chip.hidden=false;
-    addMessage('assistant error','业务对话暂不支持上传文件，附件未发送。请移除附件后发送文字。');return;
-  }
-  if(file.size>10*1024*1024){clearFile();addMessage('assistant error','文件不能超过 10 MB。');return;}
+  const error=fileError(file);if(error){clearFile();addMessage('assistant error',error);return;}
   fileName.textContent=file.name;chip.hidden=false;
 });
 $('chat-remove-file').addEventListener('click',clearFile);
-document.querySelector('.chat-attach').addEventListener('click',event=>{
-  if(chatMode==='business'){event.preventDefault();addMessage('assistant','业务对话暂不支持上传文件，请直接输入需求。');}
-});
 input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,132)+'px';});
 input.addEventListener('keydown',event=>{
   if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}

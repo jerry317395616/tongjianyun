@@ -343,3 +343,42 @@ Python缺少 `memfd_create`，不能代替该运行器；安全要求与真实se
 
 隔离网页/资产/教师回读/回归入口守卫测试 **47/47通过**。补齐候选缺少的既有受跟踪测试依赖，
 并将所有测试路径常量指向临时根；没有修改真实QA marker、凭据、服务配置或原安全规则。
+
+### 2026-09-26：真实网页业务目录闭环
+
+独立 run `d76fb013-b35f-496a-8364-f831fc27719d`，任务
+`994f1ff9-9803-4b53-8e41-ece64ef6fb38`。使用原生已登录合成教师会话，在网页发送固定只读
+目录请求；未使用管理员身份、伪造 Cookie 或直接工具调用替代 HTTP/RQ。
+
+- 网页 submit 为200；两次 `stream_events`（刷新前后）均为200，原生边界日志只保留方法、
+  参数键及命令摘要，不记录值/凭据。首次只提交一次，刷新没有再次 POST/send_message。
+- 页面实际显示阶段消息、工具步骤、结果按钮和最终答复；左侧实际加载“全部 Frappe 业务”
+  的30条目录行。刷新保持原任务，历史 view 不强抢当前主页；点击本轮结果按钮可重新打开目录，
+  显示“已显示：可用业务”，终态后发送按钮恢复。以上为 computer-use 直接观察，非模型自报。
+- 模型目录工具页为20个入口，独立浏览器原生目录页为30个入口，两者分页大小目前不同；不把
+  入口数当业务记录数，也不宣称所有入口已完成实际业务验收。
+- 后台任务 completed，31条事件（message/progress/status/terminal/view）；登记27项来源，
+  其中21个DocType。RQ finished/result completed；精确claim原生退出0、租约关闭，宿主写账本
+  closed、active=0、uncertain=0、committed=0。新连接真实目录回读通过。
+- 本轮声明保护的全部业务表、相关Comment/Version和教师非敏感字段摘要完全相同：
+  expected/unexpected/authentication_metadata均为空。范围不是全数据库审计，旧失败摘要仍不能归因。
+
+私有后台证据：
+`business-journeys/d76fb013-b35f-496a-8364-f831fc27719d/evidence-4cd44ce6-de68-4894-a4bf-9fec58bc797b.json`。
+其中 `backend_passed=true`，`browser_sse_and_display_verified=false` **保持原值**：脚本不控制
+浏览器，网页验证由上文独立人工工具观察记录补充，不能倒改脚本报告。
+
+没有隐藏失败：第8、11、17条为失败的 command_execution 阶段；模型随后成功读取目录并完成。
+当前安全事件没有工具名/HTTP分类，无法证实是参数、QA拒绝、权限还是工具异常。后续补有限
+分类诊断，不读取/保存原始内部推理或凭据，也不把这3次失败误说成整轮失败或整轮无错误。
+
+准备时另发现 `get_queue` 在自定义队列尚未配置前即验证配置失败；已改为原生命名空间的只读
+Redis检查。Registry默认count和Worker.all存在隐式清理，现显式禁用清理、只读登记集合。
+首次失败发生在建run目录/配置修改之前，无模型启动或业务写入；不通过删除标记重试。
+
+任务结束后按精确PID/start_ticks/命令停止本轮Web、RQ和Windows SSH转发，专属QA配置恢复，
+run.state=restored；记录、基线、旧失败及新证据均保留，临时浏览器标签关闭。没有部署生产。
+当前候选最终回归：Linux后端954/954、前端167/167、部署252/252、隔离守卫47/47。
+
+附件与私有提案代码另见 [实现边界](business-agent-attachments-proposals.md)。本轮catalog明确
+禁止附件/方案工具和业务写操作，不能据此宣布真实上传/保存、新业务启用、全项目接管已完成。

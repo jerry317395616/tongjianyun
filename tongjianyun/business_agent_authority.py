@@ -310,6 +310,11 @@ def _check_scope(scope):
         _doctype(scope['doctype'], scope['actions'])
     elif kind == 'document':
         _document(scope['doctype'], scope['document'], scope['actions'])
+    elif kind == 'attachment':
+        # File access is its native document policy, not a grant to browse
+        # the File DocType or arbitrary paths. The descriptor is host-bound.
+        from tongjianyun.business_agent_attachments import check_source
+        check_source(scope['descriptor'])
     elif kind == 'view':
         from tongjianyun.scene_access import require_view_access
         # Reject unknown/admin views BEFORE require_view_access can use its

@@ -127,6 +127,25 @@ const blueprintV2={...blueprint,fields:[...blueprint.fields,{fieldname:'items',l
 const elementTree=element=>[element,...element.children.flatMap(elementTree)];
 const elementText=element=>elementTree(element).map(child=>child.textContent).join('\n');
 const blueprintData=block=>({...data,selection:{view:'business_blueprint',proposal_id:block.proposal_id},components:[block]});
+test('ordinary versioned proposal uses safe blueprint preview without administrator activation',async()=>{
+  const {run,context,nodes}=setup();
+  context.proposal={...data,selection:{view:'business_proposal',proposal_id:'11111111-1111-4111-8111-111111111111',revision:'a'.repeat(64)},
+    title:'我的新业务方案',components:[{...blueprintV2,type:'business_proposal'}]};
+  run('initializeViews({request:async()=>proposal})');
+  const result=await run('showBusinessView(proposal.selection)');
+  assert.equal(result.status,'rendered');assert.equal(run('current.view'),'business_proposal');
+  const section=nodes.get('view-content').children[0].children[0];
+  assert.match(elementText(section),/在右侧说明/);
+  assert.equal(elementTree(section).some(node=>node.className==='view-blueprint-activate'),false);
+  assert.equal(run('registerSession'),null);
+});
+
+test('ordinary proposal never silently renders an activated or unversioned draft',()=>{
+  const {run,context}=setup();
+  for(const patch of [{state:'active'},{revision:''},{revision:'not-a-hash'}]){
+    context.block={...blueprint,...patch};assert.throws(()=>run('renderProposal(block)'),/个人业务方案版本/);
+  }
+});
 async function blueprintSetup(block=blueprint){
   const fixture=setup();fixture.context.responses=blueprintData(block);fixture.context.activeResponse=blueprintData({...block,state:'active',can_activate:false});
   fixture.context.ack={state:'active',doctype:block.doctype,proposal_id:block.proposal_id,revision:block.revision};fixture.context.calls=[];

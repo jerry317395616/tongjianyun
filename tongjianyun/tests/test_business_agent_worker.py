@@ -152,6 +152,43 @@ class WorkerTests(unittest.TestCase):
         self.assertNotIn('claim_id', result)
         self.assertNotIn(self.runtime.claim.token, str(result))
 
+    def test_construction_only_tool_guard_can_restrict_but_not_replace_authority(self):
+        calls = []
+        guard = MagicMock(return_value=False)
+        def attempt():
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('classroom_read', {'group':'G1','day':'2026-09-16'}, 'read-guard')
+            calls.append('denied')
+        self.runtime.first_poll = attempt
+        self.make_worker(tool_guard=guard).run(self.identity, self.job_id)
+        self.assertEqual(calls, ['denied'])
+        guard.assert_called_once()
+        self.read.assert_not_called()
+
+    def test_attachment_tool_is_delegated_to_bound_adapter_and_is_not_a_host_path_tool(self):
+        adapter = MagicMock(return_value={'file_id':'F1','records':[],'next_offset':None})
+        def attempt():
+            self.assertEqual(self.proxies[0].handler('attachment_read', {'file_id':'F1'}, 'file-1')['file_id'], 'F1')
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('read_file', {'path':'/etc/passwd'}, 'file-2')
+        self.runtime.first_poll = attempt
+        self.make_worker(attachment_tools=adapter).run(self.identity, self.job_id)
+        self.assertEqual(adapter.call_args.args[1:], ('attachment_read', {'file_id':'F1'}))
+        prompt = self.runtime.inputs['prompt'].decode()
+        self.assertIn('attachment_read', prompt)
+        self.assertIn('不是用户授权', prompt)
+
+    def test_tool_guard_never_grants_a_revoked_business_task(self):
+        guard = MagicMock(return_value=True)
+        def attempt():
+            self.allowed = False
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('classroom_read', {'group':'G1','day':'2026-09-16'}, 'read-guard')
+        self.runtime.first_poll = attempt
+        self.make_worker(tool_guard=guard).run(self.identity, self.job_id)
+        guard.assert_not_called()
+        self.read.assert_not_called()
+
     def test_duplicate_queue_delivery_never_restarts_or_resumes_model(self):
         self.run_worker()
         result = self.run_worker()
