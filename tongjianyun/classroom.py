@@ -9,6 +9,7 @@ import hashlib
 import html
 import json
 import re
+from dataclasses import dataclass
 from datetime import date
 
 import frappe
@@ -58,22 +59,86 @@ def _scope(group, workspace=None):
     return doc
 
 
+def _roster_members(group_doc):
+    """One native active-membership order, shared by full and paged readers."""
+    members = [r for r in group_doc.get("students", []) if r.get("active") and r.get("student")]
+    result, seen = [], set()
+    for row in sorted(members, key=lambda r: (int(r.get("group_roll_number") or 0), r.student)):
+        if row.student not in seen:
+            seen.add(row.student)
+            result.append(row)
+    return result
+
+
 def _roster(group_doc):
     frappe.has_permission("Student", "read", throw=True)
-    members = [r for r in group_doc.get("students", []) if r.get("active") and r.get("student")]
+    members = _roster_members(group_doc)
     if not members:
         return []
     visible = {r.name: r for r in frappe.get_list(
         "Student", filters={"name": ["in", list({r.student for r in members})], "enabled": 1},
         fields=["name", "student_name"], limit_page_length=0,
     )}
-    result, seen = [], set()
-    for row in sorted(members, key=lambda r: (int(r.get("group_roll_number") or 0), r.student)):
-        if row.student in visible and row.student not in seen:
-            seen.add(row.student)
+    result = []
+    for row in members:
+        if row.student in visible:
             result.append({"student": row.student, "student_name": visible[row.student].student_name or row.student,
                            "roll_number": row.get("group_roll_number") or None})
     return result
+
+
+@dataclass(frozen=True)
+class RosterPageReadSources:
+    """Private exact-query dependency IDs, including the one-row lookahead."""
+    group: str
+    revision: str
+    students: tuple[str, ...]
+
+
+def _roster_page(group_doc, *, start=0, revision=None, page_size=25, source_observer=None):
+    """Bounded private projection of the SAME native roster, not an HTTP API.
+
+    Scan native active members in their original order, querying only small
+    permission-filtered Student batches. An opaque cursor can resume scanning
+    without rereading all previous students or exposing inaccessible IDs.
+    No whole-class count is computed on later/incomplete pages.
+    """
+    if (type(start) is not int or start < 0 or type(page_size) is not int or not 1 <= page_size <= 50
+            or source_observer is not None and not callable(source_observer)):
+        raise ValueError('Invalid private roster page')
+    frappe.has_permission('Student', 'read', throw=True)
+    members = _roster_members(group_doc)
+    current = hashlib.sha256(json.dumps([group_doc.name,
+        [(r.student, r.get('group_roll_number') or None) for r in members]],
+        ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    if (revision is not None and revision != current) or (start and revision is None) or start > len(members):
+        raise ValueError('Roster changed; request its first page again')
+    scanned, collected, source_ids = 0, [], []
+    while start + scanned < len(members) and len(collected) <= page_size and scanned < 500:
+        count = min(page_size + 1 - len(collected), 500 - scanned)
+        batch = members[start + scanned:start + scanned + count]
+        rows = frappe.get_list('Student', filters={'name': ['in', [r.student for r in batch]], 'enabled': 1},
+                               fields=['name', 'student_name'], limit_page_length=len(batch))
+        visible = {r.name: r for r in rows}
+        if len(visible) != len(rows) or not set(visible) <= {r.student for r in batch}:
+            raise ValueError('Unexpected native Student projection')
+        source_ids.extend(r.name for r in rows)
+        for index, member in enumerate(batch, start + scanned):
+            if member.student in visible:
+                collected.append((index, {'student': member.student,
+                    'student_name': visible[member.student].student_name or member.student}))
+        scanned += len(batch)
+    if len(collected) > page_size:
+        more, next_index = True, collected[page_size][0]
+    elif start + scanned == len(members):
+        more, next_index = False, None
+    else:
+        more, next_index = None, start + scanned  # Visible rows beyond scan limit are UNKNOWN.
+    if source_observer is not None:
+        source_observer(RosterPageReadSources(group_doc.name, current, tuple(source_ids)))
+    return {'rows': [r for _, r in collected[:page_size]], 'revision': current,
+            'has_more': more, 'next_index': next_index, 'scan_limited': more is None,
+            'visible_class_count': len(collected) if start == 0 and more is False else None}
 
 
 def attendance_facts(roster, records, leaves):
@@ -101,7 +166,22 @@ def attendance_facts(roster, records, leaves):
     return students, counts
 
 
-def _attendance(group_doc, day):
+@dataclass(frozen=True)
+class AttendanceReadSources:
+    """Private same-query read dependencies; never part of HTTP result JSON."""
+    group: str
+    day: str
+    revision: str
+    students: tuple[str, ...]
+    attendance_records: tuple[str, ...]
+    leave_records: tuple[str, ...]
+
+
+def _attendance(group_doc, day, *, source_observer=None):
+    # Only trusted Python adapters pass this private callback. Whitelisted
+    # classroom endpoints do not accept or forward a source_observer parameter.
+    if source_observer is not None and not callable(source_observer):
+        raise TypeError('Attendance source observer must be callable')
     roster = _roster(group_doc)
     students = [r["student"] for r in roster]
     readable = _can("Student Attendance")
@@ -117,6 +197,14 @@ def _attendance(group_doc, day):
     rows, counts = attendance_facts(roster, records, leaves)
     revision = hashlib.sha256(json.dumps([group_doc.name, str(day), roster, records, leaves],
         sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+    if source_observer is not None:
+        # attendance_facts chooses latest rows, but revision includes ALL rows.
+        # Capture from these exact query results, never a later re-query.
+        source_observer(AttendanceReadSources(
+            group=group_doc.name, day=str(day), revision=revision,
+            students=tuple(students), attendance_records=tuple(r['name'] for r in records),
+            leave_records=tuple(r['name'] for r in leaves),
+        ))
     return {"students": rows, "counts": counts, "revision": revision, "available": readable,
             "source": "Student Attendance / Student Leave Application"}
 

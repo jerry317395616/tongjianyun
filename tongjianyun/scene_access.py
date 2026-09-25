@@ -78,6 +78,9 @@ def get_bootstrap(day=None, meal='lunch', group=None):
     attendance = roster and bool(groups) and all(can(dt) for dt in ('Student Attendance', 'Student Leave Application'))
     meals = roster and bool(groups) and can(CLASS_MEAL)
     chat = can_use_admin_chat()
+    from tongjianyun.business_agent_service import chat_access as business_chat_access
+    business_access = business_chat_access() if not chat else {}
+    business_chat = business_access.get('allowed', False)
     navigation = []
     if calendar:
         navigation.append({'label': '周食谱', 'selection': {'view': 'recipe_week', **context}})
@@ -92,10 +95,12 @@ def get_bootstrap(day=None, meal='lunch', group=None):
         'version': 1, 'user': frappe.session.user,
         'user_label': frappe.db.get_value('User', frappe.session.user, 'full_name') or frappe.session.user,
         **context, 'recipe_calendar': calendar,
-        'chat': {'allowed': chat, 'mode': 'admin_project' if chat else 'unavailable',
-                 'reason': '' if chat else '当前账号的业务对话尚未开通，可先在左侧办理已有权限的业务。'},
+        'chat': {'allowed': chat or business_chat,
+                 'can_submit': chat or business_access.get('can_submit', False),
+                 'mode': 'admin_project' if chat else 'business' if business_chat else 'unavailable',
+                 'reason': '' if chat else business_access['reason']},
         'default_view': navigation[0]['selection'], 'navigation': navigation,
         'scope': {'group_count': len(groups), 'selected_group': selected},
-        'phase': 'views_only_for_non_admin',
+        'phase': 'business_codex' if business_chat else 'views_only_for_non_admin',
         'coverage': 'audited_classroom_and_native_doctypes' if not chat else 'administrator_business_views',
     }

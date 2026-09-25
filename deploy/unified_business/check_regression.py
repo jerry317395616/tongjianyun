@@ -16,7 +16,10 @@ try:
                'test_business_views', 'test_meal_views', 'test_meal_nutrition_view', 'test_meal_chat',
                'test_recipe_week', 'test_recipe_revision', 'test_recipe_deletion_links', 'test_student_meals',
                'test_classroom', 'test_attendance_scope', 'test_meal_scene', 'test_scene_access', 'test_workspace_entry',
-               'test_stock_operations', 'test_stock_reconciliation', 'test_payables_acceptance_runner']
+               'test_stock_operations', 'test_stock_reconciliation', 'test_payables_acceptance_runner',
+               'test_asset_history', 'test_business_agent_tools', 'test_business_agent_transport',
+               'test_business_agent_tasks', 'test_business_agent_events', 'test_business_agent_authority',
+               'test_business_chat', 'test_business_agent_worker', 'test_business_agent_reads']
     result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(
         ['tongjianyun.tests.' + name for name in modules]))
 finally:

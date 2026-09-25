@@ -115,6 +115,27 @@ class SceneAccessTests(unittest.TestCase):
         self.assertEqual(result['chat']['mode'], 'admin_project')
         self.assertEqual(result['default_view']['view'], 'recipe_week')
 
+    def test_teacher_business_chat_requires_verified_readiness_and_never_admin_mode(self):
+        with patch('tongjianyun.business_agent_service.chat_access', return_value={'allowed':True,'can_submit':True,'reason':''}):
+            result = self.bootstrap()
+        self.assertTrue(result['chat']['allowed'])
+        self.assertEqual(result['chat']['mode'], 'business')
+        self.assertEqual(result['phase'], 'business_codex')
+        self.assertFalse(access.can_use_admin_chat())
+
+    def test_runtime_offline_keeps_business_history_and_stop_access(self):
+        with patch('tongjianyun.business_agent_service.chat_access', return_value={'allowed':True,'can_submit':False,'reason':'后台不可用'}):
+            result = self.bootstrap()
+        self.assertEqual(result['chat']['mode'], 'business')
+        self.assertTrue(result['chat']['allowed'])
+        self.assertFalse(result['chat']['can_submit'])
+
+    def test_admin_mode_does_not_probe_or_fall_back_to_business_runtime(self):
+        self.roles.return_value = ['System Manager']
+        self.readable.add(meal_scene.RECIPE)
+        with patch('tongjianyun.business_agent_service.available', side_effect=AssertionError('unexpected probe')):
+            self.assertEqual(self.bootstrap()['chat']['mode'], 'admin_project')
+
     def test_bootstrap_does_not_invent_chat_access_for_manager_without_meal_access(self):
         self.roles.return_value = ['System Manager']
         self.assertFalse(self.bootstrap()['chat']['allowed'])

@@ -1,9 +1,19 @@
 # Fixed-assets acceptance: native acquisition and movement
 
-## Candidate history fix, 2026-09-25 — isolated QA only
+## History fix, 2026-09-25 — deployed after isolated QA
 
-The Tongjianyun candidate now preserves cancelled Asset Movement history when
-cancelling a native asset acquisition. It has **not been deployed to production**.
+Implementation `5be3e8b` is now fast-forward deployed to the Native Bench and
+pushed to GitHub `develop`. Deployment found no active conversation and preserved
+the existing untracked IDE directory and excluded camera download archive.
+Only the three feature services were gracefully reloaded; all are active.
+Production read-only checks confirm both acquisition controllers load the mixin,
+14 asset unit tests and 343 existing regressions pass, and the operational view
+probe leaves protected record counts unchanged. No production asset transaction,
+schema migration or historic record reconstruction was performed.
+The lifecycle evidence below remains isolated QA evidence, not production writes.
+
+The Tongjianyun extension now preserves cancelled Asset Movement history when
+cancelling a native asset acquisition. Its production deployment is recorded above.
 No ERPNext core source, production data, permissions, or site configuration was
 changed. This is acquisition/movement acceptance, not complete asset-module,
 browser, or Codex-driven write acceptance.
@@ -165,8 +175,8 @@ movement was fabricated or restored.
 
 The candidate extension and strict regressions above address this tested history
 defect for future cancellations. They do not alter these original reports or
-retroactively restore missing movements. Production remains unchanged until a
-separate reviewed deployment.
+retroactively restore missing movements. The reviewed implementation was deployed
+as recorded above; existing production business records remain unchanged.
 
 ## Evidence and rerun
 
