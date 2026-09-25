@@ -47,6 +47,11 @@ override_doctype_class = {
     "Student": "tongjianyun.education_integration.TongjianyunStudent",
 }
 
+extend_doctype_class = {
+    "Purchase Receipt": ["tongjianyun.asset_history.PreserveAssetHistory"],
+    "Purchase Invoice": ["tongjianyun.asset_history.PreserveAssetHistory"],
+}
+
 doctype_js = {
     "Tongjianyun Daily Meal Confirmation": "public/js/student_meals.js",
     "Student": "public/js/student.js",
