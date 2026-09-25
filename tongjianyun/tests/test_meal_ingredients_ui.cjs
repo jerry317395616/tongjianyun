@@ -32,6 +32,7 @@ function setup(){
   const run=source=>vm.runInContext(source,context);
   run(read('../public/meal_scene/state.js').replace(/export /g,''));run('const h=esc,n=number;');
   run(read('../public/meal_scene/app.js').replace(/^import .*;\r?\n/gm,'').replace(/load\(\);\s*$/,''));
+  run('sceneBootstrap={recipe_calendar:true};'); // Recipe fixtures represent an authorized scene bootstrap.
   context.apiHandler=async(method,args)=>method==='get_recipe'?{payload:payload(args.recipe?.slice(0,10)==='2026-09-22'?'2026-09-22':DAY)}:overview(args.day||DAY,args.meal);
   run('api=async(method,args={},write=false)=>{requests.push({method,...args,write});return apiHandler(method,args,write);};');
   function seed(day=DAY,meal='lunch',recipePayload=payload(day)){

@@ -67,7 +67,7 @@ class FirewallTests(unittest.TestCase):
     def test_only_explicit_writes_reach_real_business_application_and_body_is_rewound(self):
         for method in web.WRITE_METHODS:
             with self.subTest(method=method):
-                body = b'{"student_group":"QA","students":[]}'
+                body = b'{}' if method == "logout" else b'{"student_group":"QA","students":[]}'
                 app, _, _, environ = self.call("/api/method/" + method, "POST", body=body)
                 app.assert_called_once()
                 self.assertEqual(environ["wsgi.input"].read(), body)
@@ -89,6 +89,222 @@ class FirewallTests(unittest.TestCase):
         app.assert_not_called()
         self.assertEqual(response.call_args.args[0], "200 OK")
         self.assertEqual(set(json.loads(result[0])), {"site", "port", "loopback_only", "codex_execution_blocked"})
+
+
+class BlueprintBoundaryTests(unittest.TestCase):
+    call = FirewallTests.call
+    def setUp(self):
+        self.fixture = {"manager": "browser-manager-02e16a31d7@example.invalid", "doctype": "Tongjianyun Advanced browser_estimate_a123456789",
+                        "proposal_id": "qa-private-proposal", "revision": "a" * 64,
+                        "children": {"estimate_lines": "TGY Extension Row qaexact"}}
+        patcher = patch.object(web, "blueprint_fixture", return_value=self.fixture)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def document(self):
+        return {"doctype": self.fixture["doctype"], "name": "new-qa-1", "__islocal": 1,
+                "owner": self.fixture["manager"], "title": "Synthetic only", "docstatus": 0,
+                "estimate_lines": [{"doctype": self.fixture["children"]["estimate_lines"],
+                    "parent": "new-qa-1", "parenttype": self.fixture["doctype"], "parentfield": "estimate_lines",
+                    "item_label": "Synthetic item", "quantity": 2.5, "unit_price": 3.8}]}
+
+    def rpc(self, command, values, **kwargs):
+        return self.call("/api/method/" + command, "POST", body=json.dumps(values).encode(), **kwargs)
+
+    def test_exact_activation_and_native_draft_save_reach_application(self):
+        cases = [("tongjianyun.business_blueprints.activate", {"proposal_id": self.fixture["proposal_id"], "revision": self.fixture["revision"]}),
+                 ("frappe.desk.form.save.savedocs", {"doc": json.dumps(self.document()), "action": "Save"})]
+        for command, values in cases:
+            app, _, _, _ = self.rpc(command, values)
+            app.assert_called_once()
+
+    def test_activation_cannot_change_proposal_revision_or_http_verb(self):
+        base = {"proposal_id": self.fixture["proposal_id"], "revision": self.fixture["revision"]}
+        for extra in ({"proposal_id": "another-proposal"}, {"revision": "b" * 64}, {"doctype": "User"}):
+            app, _, _, _ = self.rpc("tongjianyun.business_blueprints.activate", {**base, **extra})
+            app.assert_not_called()
+        app, _, _, _ = self.call("/api/method/tongjianyun.business_blueprints.activate", "GET", body=json.dumps(base).encode())
+        app.assert_not_called()
+
+    def test_scoped_reads_only_accept_exact_extension_and_no_injected_document(self):
+        for command, values in (
+            ("frappe.desk.form.load.getdoctype", {"doctype": self.fixture["doctype"], "with_parent": "1"}),
+            ("frappe.desk.form.load.getdoctype", {"doctype": self.fixture["children"]["estimate_lines"]}),
+            ("frappe.desk.form.load.getdoc", {"doctype": self.fixture["doctype"], "name": "qa-record"}),
+            ("frappe.desk.form.load.get_docinfo", {"doctype": self.fixture["doctype"], "name": "qa-record"}),
+            ("frappe.model.workflow.get_transitions", {"doc": json.dumps(self.document())}),
+            ("frappe.model.utils.user_settings.get", {"doctype": self.fixture["doctype"]}),
+            ("frappe.model.utils.user_settings.save", {"doctype": self.fixture["doctype"], "user_settings": {"Form": {}}}),
+        ):
+            app, _, _, _ = self.rpc(command, values)
+            app.assert_called_once()
+            changed = {**values, "doctype": "User"}
+            app, _, _, _ = self.rpc(command, changed)
+            app.assert_not_called()
+        app, _, _, _ = self.rpc("frappe.desk.form.load.get_docinfo", {"doc": json.dumps(self.document())})
+        app.assert_not_called()
+
+    def test_foreign_parent_child_flags_and_submitted_states_are_rejected(self):
+        changes = [lambda d: d.update(doctype="User"), lambda d: d.update(flags={"ignore_permissions": True}),
+                   lambda d: d.update(owner="Administrator"), lambda d: d.update(docstatus=1),
+                   lambda d: d.update(workflow_state="扩展·通过"), lambda d: d.update(amended_from="another-record"),
+                   lambda d: d["estimate_lines"][0].update(doctype="Has Role"),
+                   lambda d: d["estimate_lines"][0].update(parenttype="User"),
+                   lambda d: d["estimate_lines"][0].update(parent="foreign-record"),
+                   lambda d: d["estimate_lines"][0].update(parentfield="roles"),
+                   lambda d: d["estimate_lines"][0].update(flags={"ignore_permissions": True}),
+                   lambda d: d["estimate_lines"][0].update(extra_nested=[{"doctype": "User"}])]
+        for change in changes:
+            doc = self.document()
+            change(doc)
+            app, _, _, _ = self.rpc("frappe.desk.form.save.savedocs", {"doc": doc, "action": "Save"})
+            app.assert_not_called()
+
+    def test_native_grid_display_flags_do_not_allow_arbitrary_flags(self):
+        doc = self.document()
+        doc["estimate_lines"][0].update(__unedited=False, __checked=0)
+        app, _, _, _ = self.rpc("frappe.desk.form.save.savedocs", {"doc": doc, "action": "Save"})
+        app.assert_called_once()
+        doc["estimate_lines"][0]["__unedited"] = {"ignore_permissions": True}
+        app, _, _, _ = self.rpc("frappe.desk.form.save.savedocs", {"doc": doc, "action": "Save"})
+        app.assert_not_called()
+        for action in ("Submit", "Cancel", "Update"):
+            app, _, _, _ = self.rpc("frappe.desk.form.save.savedocs", {"doc": self.document(), "action": action})
+            app.assert_not_called()
+
+    def test_transition_read_reloads_identity_but_does_not_allow_save_with_stale_parent(self):
+        doc = self.document()
+        doc["name"] = "saved-record"
+        read, _, _, _ = self.rpc("frappe.model.workflow.get_transitions", {"doc": doc})
+        read.assert_called_once()
+        write, _, _, _ = self.rpc("frappe.desk.form.save.savedocs", {"doc": doc, "action": "Save"})
+        write.assert_not_called()
+        for values in ({"doc": doc, "workflow": {"is_active": 1}},
+                       {"doc": {**doc, "flags": {"ignore_permissions": True}}},
+                       {"doc": {**doc, "doctype": "User"}}):
+            app, _, _, _ = self.rpc("frappe.model.workflow.get_transitions", values)
+            app.assert_not_called()
+
+    def test_all_path_cmd_aliases_receive_the_same_payload_checks(self):
+        from urllib.parse import urlencode
+        command = "frappe.desk.form.save.savedocs"
+        body = {"doc": json.dumps(self.document()), "action": "Save"}
+        for path in ("/api/method/", "/api/v1/method/", "/api/v2/method/"):
+            app, _, _, _ = self.call(path + command, "POST", body=json.dumps(body).encode())
+            app.assert_called_once()
+        for content_type, raw in (("application/json", json.dumps({"cmd": command, **body}).encode()),
+                                  ("application/x-www-form-urlencoded", urlencode({"cmd": command, **body}).encode())):
+            app, _, _, _ = self.call("/", "POST", body=raw, content_type=content_type)
+            app.assert_called_once()
+        app, _, _, _ = self.call("/api/method/login", "POST", body=json.dumps({"cmd": command, **body}).encode())
+        app.assert_not_called()
+        app, _, _, _ = self.call("/api/method/" + command, "POST", query=urlencode({"doc": '{"doctype":"User"}'}), body=json.dumps(body).encode())
+        app.assert_not_called()
+
+    def test_duplicate_json_form_query_and_nested_doc_keys_fail_closed(self):
+        cases = [("", b'{"action":"Save","action":"Cancel"}', "application/json"),
+                 ("", b'action=Save&action=Cancel', "application/x-www-form-urlencoded"),
+                 ("action=Save&action=Save", b'{}', "application/json"),
+                 ("", json.dumps({"action": "Save", "doc": '{"doctype":"User","doctype":"' + self.fixture["doctype"] + '"}'}).encode(), "application/json")]
+        for query, body, content_type in cases:
+            app, _, _, _ = self.call("/api/method/frappe.desk.form.save.savedocs", "POST", query=query, body=body, content_type=content_type)
+            app.assert_not_called()
+
+    def test_preview_is_bound_to_the_seeded_private_proposal(self):
+        from urllib.parse import urlencode
+        for proposal, expected in ((self.fixture["proposal_id"], True), ("foreign", False)):
+            query = urlencode({"selection_json": json.dumps({"view": "business_blueprint", "proposal_id": proposal})})
+            app, _, _, _ = self.call("/api/method/tongjianyun.meal_views.get_view", query=query)
+            self.assertEqual(app.called, expected)
+
+    def test_native_auth_and_csrf_are_not_invented_or_removed(self):
+        body = json.dumps({"proposal_id": self.fixture["proposal_id"], "revision": self.fixture["revision"]}).encode()
+        for headers in ({}, {"HTTP_COOKIE": "sid=synthetic", "HTTP_X_FRAPPE_CSRF_TOKEN": "synthetic-token"}):
+            environ = {"HTTP_HOST": f"{web.SITE}:{web.PORT}", "PATH_INFO": "/api/method/tongjianyun.business_blueprints.activate",
+                       "REQUEST_METHOD": "POST", "CONTENT_TYPE": "application/json", "CONTENT_LENGTH": str(len(body)),
+                       "wsgi.input": io.BytesIO(body), **headers}
+            seen = []
+            def application(env, start):
+                seen.append(dict(env))
+                start("403 Forbidden", [])  # Stand-in for native auth/CSRF rejection.
+                return [b"native CSRF rejection"]
+            with patch.object(web, "config_guard", return_value={"unified_browser_acceptance": 1, "maintenance_mode": 0}):
+                result = web.QAFirewall(application)(environ, Mock())
+            self.assertEqual(result, [b"native CSRF rejection"])
+            self.assertEqual({key: seen[0][key] for key in headers}, headers)
+            self.assertEqual("HTTP_X_FRAPPE_CSRF_TOKEN" in seen[0], "HTTP_X_FRAPPE_CSRF_TOKEN" in headers)
+            self.assertNotIn("ignore_csrf", seen[0])
+
+    def test_missing_seed_fails_closed_for_new_capabilities(self):
+        with patch.object(web, "blueprint_fixture", side_effect=FileNotFoundError):
+            app, _, _, _ = self.rpc("frappe.desk.form.save.savedocs", {"doc": self.document(), "action": "Save"})
+        app.assert_not_called()
+
+
+class DeskDiagnosticsTests(unittest.TestCase):
+    call = FirewallTests.call
+
+    def test_only_exact_readonly_boot_methods_and_parameters_are_allowed(self):
+        translations = "frappe.translate.get_boot_translations"
+        defaults = "frappe.core.doctype.session_default_settings.session_default_settings.get_session_default_values"
+        app, _, _, _ = self.call("/api/method/" + translations, query="lang=zh&v=build")
+        app.assert_called_once()
+        app, _, _, _ = self.call("/api/method/" + defaults, "POST", body=b"{}")
+        app.assert_called_once()
+        for command, method, body in ((translations, "POST", b'{}'), (defaults, "POST", b'{"default_values":{"company":"OTHER"}}'),
+             ("frappe.desk.page.setup_wizard.setup_wizard.setup_complete", "POST", b'{}'),
+             ("frappe.desk.page.setup_wizard.setup_wizard.load_languages", "POST", b'{}'),
+             (defaults.replace("get_session", "set_session"), "POST", b'{}')):
+            app, _, _, _ = self.call("/api/method/" + command, method, body=body)
+            app.assert_not_called()
+
+    def test_teacher_bootstrap_is_get_only_without_actor_or_role_overrides(self):
+        command = "tongjianyun.scene_access.get_bootstrap"
+        app, _, _, _ = self.call("/api/method/" + command)
+        app.assert_called_once()
+        app, _, _, _ = self.call("/api/method/" + command, query="day=2026-09-17&meal=lunch&group=QA%20Teacher")
+        app.assert_called_once()
+        for method, query, body in (("POST", "", b'{}'), ("GET", "user=Administrator", b""),
+                                   ("GET", "", b'{"role":"System Manager"}'),
+                                   ("GET", "day=invalid&meal=lunch", b""), ("GET", "meal=invalid", b"")):
+            app, _, _, _ = self.call("/api/method/" + command, method, query=query, body=body)
+            app.assert_not_called()
+
+    def test_native_empty_body_logout_does_not_allow_targeting_another_session(self):
+        app, _, _, _ = self.call("/api/method/logout", "POST", content_type="", body=b"")
+        app.assert_called_once()
+        for query in ("user=Administrator", "sid=another-session", "session=another-session"):
+            app, _, _, _ = self.call("/api/method/logout", "POST", query=query, content_type="", body=b"")
+            app.assert_not_called()
+        for command in ("login", "tongjianyun.classroom.save_meals", "tongjianyun.business_blueprints.activate"):
+            app, _, _, _ = self.call("/api/method/" + command, "POST", content_type="", body=b"")
+            app.assert_not_called()
+        app, _, _, _ = self.call("/api/method/logout", "POST", body=b'{"user":"Administrator"}')
+        app.assert_not_called()
+
+    def test_diagnostics_never_print_parameter_values_or_unknown_keys_and_commands(self):
+        secret = "aSyntheticSecretNotForLogs"
+        with patch("builtins.print") as printed:
+            self.call("/api/method/" + secret, "POST", body=json.dumps({secret: secret, "csrf_token": secret}).encode())
+        text = " ".join(str(call) for call in printed.call_args_list)
+        self.assertNotIn(secret, text)
+        self.assertIn("unlisted-command", text)
+        self.assertIn("unlisted-key", text)
+
+    def test_deferred_responses_retain_request_local_diagnostics(self):
+        callbacks = []
+        app = web.QAFirewall(lambda env, response: callbacks.append(response) or [])
+        with patch.object(web, "config_guard", return_value={"unified_browser_acceptance": 1, "maintenance_mode": 0}):
+            for command in ("frappe.auth.get_logged_user", "tongjianyun.meal_chat.get_chat_access"):
+                app({"HTTP_HOST": f"{web.SITE}:{web.PORT}", "PATH_INFO": "/api/method/" + command,
+                     "REQUEST_METHOD": "GET", "QUERY_STRING": "", "CONTENT_LENGTH": "0", "wsgi.input": io.BytesIO()}, Mock())
+        with patch("builtins.print") as printed:
+            callbacks[1]("200 OK", [])
+            callbacks[0]("403 Forbidden", [])
+        logs = [json.loads(call.args[0]) for call in printed.call_args_list]
+        self.assertEqual(logs[0]["qa_rpc"]["commands"], ["tongjianyun.meal_chat.get_chat_access"])
+        self.assertEqual(logs[1]["qa_rpc"]["commands"], ["frappe.auth.get_logged_user"])
+        self.assertFalse(hasattr(app, "audit_context"))
 
 
 class AssetEvidenceTests(unittest.TestCase):

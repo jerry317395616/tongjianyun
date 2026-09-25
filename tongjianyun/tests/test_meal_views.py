@@ -7,6 +7,11 @@ from tongjianyun import meal_views as views
 
 
 class MealViewsTests(unittest.TestCase):
+    def setUp(self):
+        account = patch('tongjianyun.scene_access.require_scene_account')
+        account.start()
+        self.addCleanup(account.stop)
+
     def test_selection_rejects_unregistered_code_or_fields(self):
         with patch.object(frappe, 'throw', side_effect=ValueError):
             for value in ({'view': 'html'}, {'view': 'students', 'sql': 'select *'},
@@ -56,7 +61,7 @@ class MealViewsTests(unittest.TestCase):
     def test_component_order_follows_selection_but_warnings_remain(self):
         data = {'components': [{'type': 'stats'}, {'type': 'notice', 'warning': True},
                                {'type': 'table'}, {'type': 'bars'}]}
-        with patch('tongjianyun.meal_chat.require_chat_access'), \
+        with patch('tongjianyun.scene_access.require_view_access'), \
              patch.object(views, 'now_datetime', return_value='2026-09-25 02:30:00'), \
              patch.object(views, 'students_view', return_value=data):
             result = views.get_view({'view': 'students', 'components': ['bars', 'table', 'stats']})
@@ -71,7 +76,7 @@ class MealViewsTests(unittest.TestCase):
         self.assertEqual(facts['overlap'], 1)
 
     def test_get_view_checks_web_actor_before_reading(self):
-        with patch('tongjianyun.meal_chat.require_chat_access', side_effect=frappe.PermissionError), \
+        with patch('tongjianyun.scene_access.require_view_access', side_effect=frappe.PermissionError), \
              patch.object(views, 'students_view') as query:
             with self.assertRaises(frappe.PermissionError):
                 views.get_view({'view': 'students'})
@@ -141,7 +146,7 @@ class MealViewsTests(unittest.TestCase):
                                    'meal': 'lunch', 'cancel_requested': '0'}
         payload = {'title': '学生', 'selection': {'view': 'students'}, 'summary': {'student_count': 3},
                    'components': [{'rows': ['private data']} ]}
-        with patch.object(meal_chat, 'TaskStore', return_value=store), \
+        with patch.object(meal_chat, 'TaskStore', return_value=store), patch.object(meal_chat, 'require_chat_access'), \
              patch.object(frappe, 'session', SimpleNamespace(user='Administrator')), \
              patch.object(frappe, 'set_user') as set_user, patch.object(views, 'get_view', return_value=payload):
             result = views.publish_for_task('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', {'view': 'students'})
@@ -150,6 +155,19 @@ class MealViewsTests(unittest.TestCase):
         self.assertNotIn('private', str(store.emit.call_args))
         self.assertTrue(result['display_requested'])
         self.assertNotIn('displayed', result)
+
+    def test_opening_views_does_not_allow_teacher_to_publish_admin_task(self):
+        from tongjianyun import meal_chat
+        store = MagicMock()
+        store.read.return_value = {'owner': 'teacher', 'status': 'running', 'day': '2026-09-22', 'meal': 'lunch'}
+        with patch.object(meal_chat, 'TaskStore', return_value=store), \
+             patch.object(meal_chat, 'require_chat_access', side_effect=frappe.PermissionError), \
+             patch.object(frappe, 'set_user') as set_user, patch.object(views, 'get_view') as read:
+            with self.assertRaises(frappe.PermissionError):
+                views.publish_for_task('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', {'view': 'students'})
+        read.assert_not_called()
+        store.emit.assert_not_called()
+        self.assertEqual(set_user.call_args_list[0].args, ('teacher',))
 
     def test_cancelled_task_cannot_publish(self):
         from tongjianyun import meal_chat

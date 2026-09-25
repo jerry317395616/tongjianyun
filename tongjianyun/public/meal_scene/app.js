@@ -1,8 +1,10 @@
 import {STEPS,MEALS,SLOTS,stepFor,professionalRoute,mealDraft,draftTotals,mealContext,setMealContext,esc as h,number as n} from './state.js?v=meal-header-20260925-1';
+import {getSceneBootstrap} from './scene_bootstrap.js?v=teacher-scene-20260925-1';
 
 const $=id=>document.getElementById(id),panel=$('panel'),chatMode=!!$('meal-chat');
 let data=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
 let ingredientSelection=null,weekReadError='';
+let sceneBootstrap=null,sceneTimer=null;
 const notify=(text,error=false)=>{clearTimeout(toastTimer);$('toast').textContent=text;$('toast').hidden=false;$('toast').style.background=error?'#a56554':'';toastTimer=setTimeout(()=>$('toast').hidden=true,error?10000:5000);};
 const note=(text,kind='')=>`<div class="note ${kind}">${h(text)}</div>`;
 const empty=text=>`<div class="empty">${h(text)}</div>`;
@@ -33,6 +35,17 @@ function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panel
 function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').scrollTop=0;}
 function revealPanel(){if(window.matchMedia('(max-width:950px)').matches)panel.scrollIntoView({behavior:'smooth',block:'start'});}
 async function load(automatic=false){
+  if(!sceneBootstrap){
+    try{
+      sceneBootstrap=await getSceneBootstrap();
+      setMealContext({day:sceneBootstrap.day,meal:sceneBootstrap.meal});
+      $('user-label').textContent=sceneBootstrap.user_label;
+      document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{...mealContext(),group:sceneBootstrap.scope?.selected_group}}));
+      if(!sceneBootstrap.recipe_calendar){$('recipe-workspace').hidden=true;return;}
+      if(sceneTimer===null)sceneTimer=setInterval(()=>load(true),60000);
+    }catch(error){$('recipe-workspace').hidden=true;message(failure(error),true);return;}
+  }
+  if(!sceneBootstrap.recipe_calendar)return;
   if(writing||(automatic&&((panel.open&&!chatMode)||document.hidden)))return;
   const ticket=++loadSequence;ready=false;weekReadError='';
   if(ingredientSelection&&(ingredientSelection.day!==mealContext().day||ingredientSelection.meal!==mealContext().meal))closeMealIngredients(false);
@@ -473,13 +486,20 @@ function contextChange(requestedDay,requestedMeal){
   else if(recipeCalendarState){recipeCalendarState.day=requestedDay;recipeCalendarState.slot=SLOTS[requestedMeal];}
   load();
 }
-document.addEventListener('meal-scene:refresh',()=>{if(chatMode){load();return;}if(!leaveDraft())return;if(panel.open)closePanel();load();});
+document.addEventListener('meal-scene:refresh',()=>{if(sceneBootstrap&&!sceneBootstrap.recipe_calendar)return;if(chatMode){load();return;}if(!leaveDraft())return;if(panel.open)closePanel();load();});
+document.addEventListener('meal-scene:context',event=>{
+  if(sceneBootstrap&&!sceneBootstrap.recipe_calendar){
+    const selected={...mealContext()},group=event.detail?.group||sceneBootstrap.scope?.selected_group;
+    if(group)selected.group=group;
+    history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(selected));
+  }
+});
 $('week-mobile-day').onchange=()=>{closeMealIngredients(false);mobileWeekDay=$('week-mobile-day').value;renderWeekOverview();};
 $('meal-ingredients-close')?.addEventListener('click',()=>closeMealIngredients());
 $('meal-ingredients-ask')?.addEventListener('click',askToEditMeal);
 document.addEventListener('meal-scene:view-change',()=>closeMealIngredients(false));
 document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'&&ingredientSelection){e.preventDefault();closeMealIngredients();return;}if(e.key==='Escape'&&panel.open){e.preventDefault();closePanel();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
 window.addEventListener('beforeunload',e=>{if(dirty||writing||embedded){e.preventDefault();e.returnValue='';}});
-const timer=setInterval(()=>load(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(true);});
-window.addEventListener('pagehide',()=>clearInterval(timer));window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sceneBootstrap?.recipe_calendar)load(true);});
+window.addEventListener('pagehide',()=>clearInterval(sceneTimer));window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
 load();

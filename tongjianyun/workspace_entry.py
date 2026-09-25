@@ -11,6 +11,7 @@ import frappe
 
 ENTRY = "/tongjianyun-entry"
 CLASSROOM = "/tongjianyun-classroom"
+SCENE = "/tongjianyun-meal-scene"
 WORKBENCH = "/desk/tongjianyun-workbench"
 MULTI_WORK_ROLES = {"System Manager", "Education Manager", "Tongjianyun Health Manager"}
 
@@ -69,7 +70,7 @@ def choose_profiles(user, roles, assignment, workbench_available):
         elif not assignment["groups"]:
             detail = "尚无可见的启用任教班级，请核对班级教师关联与班级读取范围。"
         else:
-            detail = "进入本人任教班级，在 3D 教室中点名、核餐和记录成长。"
+            detail = "进入统一业务场景，按本人任教范围点名、核对用餐和查看已有业务。"
         profiles.append({"id": "teacher", "label": "班级教师", "description": detail,
                          "enabled": bool(assignment["groups"]), "class_count": len(assignment["groups"])})
     # The school's broad Business Operator role is a base grant, not evidence of
@@ -112,7 +113,7 @@ def resolve_entry(model, profile=None, group=None, choose=False):
             return {"destination": None, "view": "setup", "profile": "teacher"}
         selected = group or (model["groups"][0]["name"] if len(valid) == 1 and not choose else None)
         if selected:
-            return {"destination": CLASSROOM + "?" + urlencode({"workspace": "teacher", "class": selected}),
+            return {"destination": SCENE + "?" + urlencode({"group": selected}),
                     "view": "redirect", "profile": "teacher"}
         return {"destination": None, "view": "classes", "profile": "teacher"}
     if profile == "meals" and available["meals"]["enabled"] and not choose:

@@ -12,6 +12,7 @@ function setup(search=''){
   run(read('../public/meal_scene/state.js').replace(/export /g,''));
   run('const h=esc,n=number;');
   run(read('../public/meal_scene/app.js').replace(/^import .*;\r?\n/gm,'').replace(/load\(\);\s*$/,''));
+  run('sceneBootstrap={recipe_calendar:true};'); // Existing calendar tests run after authorized bootstrap.
   run("api=async(method,args)=>{requests.push({method,...args});return {day:args.day||'2026-09-25',meal:args.meal,user_label:'老师',recipes:{rows:[]}}};renderWeekOverview=()=>{};");
   return {run,requests,document};
 }

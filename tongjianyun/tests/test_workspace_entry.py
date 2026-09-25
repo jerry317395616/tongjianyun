@@ -64,8 +64,8 @@ class EntryRoutingTests(unittest.TestCase):
     def test_single_class_direct_route(self):
         result = entry.resolve_entry(model())
         url = urlparse(result["destination"])
-        self.assertEqual(url.path, "/tongjianyun-classroom")
-        self.assertEqual(parse_qs(url.query), {"workspace": ["teacher"], "class": ["C1"]})
+        self.assertEqual(url.path, "/tongjianyun-meal-scene")
+        self.assertEqual(parse_qs(url.query), {"group": ["C1"]})
 
     def test_multiple_classes_require_choice(self):
         result = entry.resolve_entry(model(2))
@@ -100,8 +100,8 @@ class EntryRoutingTests(unittest.TestCase):
         m["groups"][0]["name"] = "班一/?next=https://evil.example#x&role=admin"
         result = entry.resolve_entry(m)
         url = urlparse(result["destination"])
-        self.assertEqual(url.path, "/tongjianyun-classroom")
-        self.assertEqual(set(parse_qs(url.query)), {"class", "workspace"})
+        self.assertEqual(url.path, "/tongjianyun-meal-scene")
+        self.assertEqual(set(parse_qs(url.query)), {"group"})
 
     def test_business_keeps_old_route_without_loop(self):
         m = {"profiles": [{"id":"business","enabled":True}], "groups": []}
@@ -231,7 +231,7 @@ class EntryPageTests(unittest.TestCase):
         m = {**model(), "checks":{}, "business_available":False, "user_label":"老师"}
         with patch.object(page.frappe, "session", _dict(user="teacher")), patch.object(entry,"mark_private_response"), patch.object(entry,"entry_model", return_value=m), patch.object(page.frappe,"form_dict", _dict(role="Administrator",user="other",next="https://evil.example")), patch.object(page.frappe.local,"flags",_dict()):
             with self.assertRaises(frappe.Redirect): page.get_context(_dict())
-            self.assertTrue(frappe.local.flags.redirect_location.startswith(entry.CLASSROOM+"?"))
+            self.assertTrue(frappe.local.flags.redirect_location.startswith(entry.SCENE+"?"))
             self.assertNotIn("evil",frappe.local.flags.redirect_location)
 
     def test_picker_rechecks_current_permissions_each_request(self):

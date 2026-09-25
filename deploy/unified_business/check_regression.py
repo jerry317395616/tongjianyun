@@ -15,7 +15,7 @@ try:
     modules = ['test_extension_policy', 'test_business_blueprints', 'test_business_blueprints_v2', 'test_business_blueprint_workflow', 'test_meal_view_tool', 'test_frappe_project_views',
                'test_business_views', 'test_meal_views', 'test_meal_nutrition_view', 'test_meal_chat',
                'test_recipe_week', 'test_recipe_revision', 'test_recipe_deletion_links', 'test_student_meals',
-               'test_classroom', 'test_attendance_scope', 'test_meal_scene',
+               'test_classroom', 'test_attendance_scope', 'test_meal_scene', 'test_scene_access', 'test_workspace_entry',
                'test_stock_operations', 'test_stock_reconciliation', 'test_payables_acceptance_runner']
     result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(
         ['tongjianyun.tests.' + name for name in modules]))

@@ -5,9 +5,10 @@ const validViews=new Set(['students','class_students','meal_counts','recipe_week
   'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
   'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint','stock_reconciliation']);
 let request,current=null,ticket=0,nativeSession=null,registerSession=null,loadingTicket=0;
+let sceneHome={view:'recipe_week'},sceneRecipeAllowed=true,sceneGroup=null,sceneNavigation=null;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
-export function currentViewContext(){if(nativeSession)syncNativeContext(nativeSession);return current||{view:'recipe_week',...mealContext()};}
+export function currentViewContext(){if(nativeSession)syncNativeContext(nativeSession);return current||sceneChoice(sceneHome);}
 function outcome(status,selection,message=''){
   const result={status,...(selection?{selection}:{}),...(message?{message}:{})};
   document.dispatchEvent(new CustomEvent('meal-scene:view-status',{detail:result}));return result;
@@ -33,20 +34,82 @@ function disposeNative(){
 }
 export function initializeViews(options){
   request=options.request;
-  // Each page load starts on the weekly recipe, independently of chat history.
-  showCalendar();
-  $('view-back').addEventListener('click',()=>showCalendar());
+  const bootstrap=options.bootstrap;
+  sceneRecipeAllowed=bootstrap?bootstrap.recipe_calendar===true:true;
+  sceneHome=bootstrap?.default_view||{view:'recipe_week'};sceneGroup=bootstrap?.scope?.selected_group||null;
+  if(bootstrap){setMealContext(bootstrap);document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{...mealContext(),group:sceneGroup}}));}
+  $('view-back').textContent=sceneRecipeAllowed?'← 回到食谱':'← 场景首页';
+  $('view-back').addEventListener('click',showSceneHome);
+  if(bootstrap&&!bootstrap.chat?.allowed)buildSceneNavigation(bootstrap.navigation||[]);
   document.addEventListener('meal-scene:refresh',event=>{if(!event.detail?.calendarOnly&&current&&current.view!=='recipe_week')showBusinessView(current,{origin:'refresh'});});
+  document.addEventListener('meal-scene:view-change',syncSceneNavigation);
   if(typeof window!=='undefined'){
     window.addEventListener('beforeunload',event=>{if(viewDirty()){event.preventDefault();event.returnValue='';}});
     window.addEventListener('pagehide',disposeNative);
   }
+  // Chat history never chooses the homepage. Administrators retain weekly recipes;
+  // other accounts start from their permission-checked bootstrap selection.
+  return showSceneHome();
+}
+function sceneChoice(choice){
+  const selected={...choice,...mealContext()};
+  if(sceneGroup&&['classroom_day','meal_counts','class_students'].includes(selected.view))selected.group=sceneGroup;
+  return selected;
+}
+function showSceneHome(){
+  const choice=sceneChoice(sceneHome);
+  return choice.view==='recipe_week'?showCalendar(choice):showBusinessView(choice);
+}
+function syncSceneNavigation(){
+  if(!sceneNavigation)return;
+  const selected=currentViewContext();
+  const changedGroup=!!selected.group&&selected.group!==sceneGroup;
+  if(selected.group)sceneGroup=selected.group;
+  if(selected.day&&selected.meal){
+    const changed=setMealContext(selected);
+    if(changed||changedGroup)document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{...mealContext(),group:sceneGroup}}));
+  }
+  sceneNavigation.day.value=selected.day||mealContext().day;
+  sceneNavigation.meal.value=selected.meal||mealContext().meal;
+  for(const item of sceneNavigation.buttons)item.button.setAttribute('aria-pressed',String(item.selection.view===selected.view));
+}
+function buildSceneNavigation(actions){
+  const bar=node('nav',undefined,'view-actions'),dateLabel=node('label','日期 '),date=node('input'),mealLabel=node('label','餐次 '),meal=node('select');
+  bar.setAttribute('aria-label','场景业务导航');bar.classList.toggle('view-register',true);date.type='date';date.setAttribute('aria-label','业务视图日期');meal.setAttribute('aria-label','业务视图餐次');
+  for(const [value,label] of [['breakfast','早餐'],['morning_snack','早点'],['lunch','午餐'],['afternoon_snack','午点'],['dinner','晚餐']]){const option=node('option',label);option.value=value;meal.append(option);}
+  dateLabel.append(date);mealLabel.append(meal);bar.append(dateLabel,mealLabel);
+  sceneNavigation={day:date,meal,buttons:[]};
+  for(const action of actions){
+    if(!action||!validViews.has(action.selection?.view))continue;
+    const button=node('button',action.label,'view-back');button.type='button';
+    button.addEventListener('click',()=>showBusinessView(sceneChoice(action.selection)));
+    sceneNavigation.buttons.push({button,selection:action.selection});bar.append(button);
+  }
+  const change=async()=>{
+    const previous=mealContext();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date.value)){date.value=previous.day;return;}
+    const desired={day:date.value,meal:meal.value};
+    const result=await showBusinessView({...sceneChoice(current||sceneHome),...desired});
+    if(result.status==='rendered'){
+      // Students are all-date master data and their canonical server selection
+      // intentionally drops day/meal. Keep the user's chosen scene context for
+      // the next attendance/meal view, without claiming students were date-filtered.
+      const selected={day:result.selection?.day||desired.day,meal:result.selection?.meal||desired.meal};
+      if(setMealContext(selected))document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{...mealContext(),group:sceneGroup}}));
+    }
+    syncSceneNavigation();
+  };
+  date.addEventListener('change',change);meal.addEventListener('change',change);
+  $('business-canvas').insertBefore(bar,$('view-status'));syncSceneNavigation();
 }
 function calendarContext(choice){
   if(!choice?.day||!choice?.meal)return;
-  if(setMealContext(choice))refreshMealData({calendarOnly:true});
+  const changed=setMealContext(choice);if(choice.group)sceneGroup=choice.group;
+  document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{...mealContext(),group:sceneGroup}}));
+  syncSceneNavigation();if(changed&&sceneRecipeAllowed)refreshMealData({calendarOnly:true});
 }
 function showCalendar(choice,options={}){
+  if(!sceneRecipeAllowed)return outcome('blocked',currentViewContext(),'当前账号没有食谱读取权限，请使用场景首页中的可用业务。');
   if(!options.checked&&!mayLeaveNative(options.origin))return outcome('blocked',currentViewContext(),'当前业务有未保存的修改，已保留原页面。');
   ++ticket;loadingTicket=0;disposeNative();registerSession=null;current=null;notice('');$('business-view').hidden=true;$('recipe-workspace').hidden=false;
   $('business-view').classList.toggle('has-native',false);
@@ -205,17 +268,33 @@ function renderBlueprint(block){
   section.append(node('p',impact,'view-note'));
   const status=node('p',block.state==='active'?'这项业务已经启用。':block.state==='conflict'?'方案存在冲突，当前不能启用。':'当前仅为方案预览，尚未新增业务数据表。','view-blueprint-status');status.setAttribute('role','status');section.append(status);
   if(block.state==='proposed'&&block.can_activate===true){
-    if(typeof block.proposal_id!=='string'||!/^[a-f0-9]{64}$/i.test(block.revision||''))throw Error('业务方案版本无效，请重新预览。');
-    const button=node('button','确认启用这项业务','view-blueprint-activate');button.type='button';section.append(button);
-    button.addEventListener('click',async()=>{
-      if(button.disabled||!window.confirm(`确认启用这项业务？\n${impact}`))return;
-      const startingTicket=ticket;button.disabled=true;status.textContent='正在启用，请勿重复提交…';
+    if(typeof block.proposal_id!=='string'||!block.proposal_id||block.proposal_id.length>140||!/^[a-f0-9]{64}$/i.test(block.revision||'')||typeof block.doctype!=='string'||!/^Tongjianyun (Extension|Advanced) .+/.test(block.doctype)||block.doctype.length>140)throw Error('业务方案版本或目标无效，请重新预览。');
+    const session={dirty:false,state:'ready',editRevision:0,kind:'blueprint',confirming:false};section.registerSession=session;
+    const button=node('button','确认启用这项业务','view-blueprint-activate'),confirmation=node('div',undefined,'view-blueprint-confirm'),confirm=node('button','确认创建以上业务结构','view-blueprint-activate'),cancel=node('button','暂不启用','view-back'),verify=node('button','重新读取方案核对','view-action');
+    button.type=confirm.type=cancel.type=verify.type='button';confirmation.hidden=verify.hidden=true;confirmation.setAttribute('role','group');confirmation.setAttribute('aria-label','确认新业务结构');
+    confirmation.append(node('h3','确认启用：'+block.title),node('p',impact),cancel,confirm);section.append(button,confirmation,verify);
+    Object.assign(session,{button,confirmation,confirm,cancel,verify,status});
+    const target={view:'business_blueprint',proposal_id:block.proposal_id};
+    const resetConfirmation=()=>{if(registerSession!==session||session.state!=='ready')return;session.confirming=false;confirmation.hidden=true;button.hidden=false;button.focus?.();};
+    cancel.addEventListener('click',resetConfirmation);
+    confirmation.addEventListener('keydown',event=>{if(event.key==='Escape'&&session.state==='ready'){event.preventDefault();resetConfirmation();}});
+    button.addEventListener('click',()=>{if(registerSession!==session||button.disabled||session.state!=='ready')return;session.confirming=true;confirmation.hidden=false;button.hidden=true;cancel.focus?.();});
+    async function readBack(origin){
+      verify.disabled=true;
+      const result=await showBusinessView(target,{origin});
+      if(result.status!=='rendered'&&registerSession===session){status.textContent='启用结果尚未完成回读核对，请重新读取方案，不要直接重复提交。';verify.hidden=false;verify.disabled=false;}
+    }
+    verify.addEventListener('click',()=>{if(registerSession===session&&!verify.disabled&&['saved','uncertain'].includes(session.state))return readBack('verify');});
+    confirm.addEventListener('click',async()=>{
+      if(registerSession!==session||!session.confirming||confirm.disabled||session.state!=='ready')return;
+      session.state='saving';button.disabled=confirm.disabled=cancel.disabled=true;verify.disabled=true;status.textContent='正在启用，请勿重复提交…';
       try{
         const result=await request('/api/method/tongjianyun.business_blueprints.activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proposal_id:block.proposal_id,revision:block.revision})});
-        if(typeof result?.doctype!=='string'||!result.doctype)throw Error('启用结果需要核对，请重新打开方案，不要重复提交。');
-        status.textContent='业务已经启用；尚未建立真实业务记录。';
-        if(startingTicket===ticket)await showBusinessView({view:'frappe_doctype',doctype:result.doctype});
-      }catch(error){status.textContent=`${error.message||'启用结果未知。'} 请重新读取方案核对，不要直接重复提交。`;}
+        if(result?.state!=='active'||result.doctype!==block.doctype||result.proposal_id!==block.proposal_id||result.revision!==block.revision)throw Error('启用回执与当前方案不一致。');
+        if(registerSession!==session)return;
+        session.state='saved';status.textContent='已收到启用回执，正在重新核对实际业务结构…';verify.hidden=false;
+        await readBack('saved');
+      }catch(error){if(registerSession!==session)return;session.state='uncertain';status.textContent=`${error.message||'启用结果未知。'} 请重新读取方案核对，不要直接重复提交。`;verify.hidden=false;verify.disabled=false;}
     });
   }
   return section;

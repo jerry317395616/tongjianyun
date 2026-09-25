@@ -217,10 +217,16 @@ def preview(proposal_id):
     if spec.get('version') == 2:
         from tongjianyun.business_blueprints_v2 import preview_extra
         component.update(preview_extra(spec))
-    return {'title': '新业务方案：' + spec['title'], 'subtitle': '先核对字段，再决定是否启用',
+    actions = []
+    if state == 'active':
+        if frappe.has_permission(doctype_name(spec), 'create'):
+            actions.append({'label': '开始录入', 'selection': {'view': 'frappe_new', 'doctype': doctype_name(spec)}})
+        if frappe.has_permission(doctype_name(spec), 'read'):
+            actions.append({'label': '查看记录', 'selection': {'view': 'frappe_doctype', 'doctype': doctype_name(spec)}})
+    return {'title': '新业务方案：' + spec['title'],
+            'subtitle': '业务结构已启用；可按原权限录入，不代表已有业务记录' if state == 'active' else '先核对字段，再决定是否启用',
             'components': [component], 'source': '当前用户私有方案；未启用不改变数据库结构',
-            'actions': ([{'label': '打开业务', 'selection': {'view': 'frappe_doctype', 'doctype': doctype_name(spec)}}]
-                        if state == 'active' else []),
+            'actions': actions,
             'summary': {'proposal_id': proposal_id, 'revision': revision(spec), 'state': state,
                         'title': spec['title'], 'doctype': doctype_name(spec), 'can_activate': can_activate}}
 
@@ -268,7 +274,7 @@ def activate(proposal_id, revision):
             if _state(spec) != 'active':
                 frappe.throw('结构核验未通过，不能宣布启用成功。请管理员检查，不要重复创建。')
         frappe.db.commit()
-    return {'state': 'active', 'doctype': doctype_name(spec), 'proposal_id': proposal_id,
+    return {'state': 'active', 'doctype': doctype_name(spec), 'proposal_id': proposal_id, 'revision': expected,
             'selection': {'view': 'frappe_doctype', 'doctype': doctype_name(spec)}}
 
 

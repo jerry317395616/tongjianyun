@@ -37,6 +37,10 @@
 .view-blueprint-activate{margin-top:12px;background:#458469;color:#fff;border:0;border-radius:9px;padding:11px 15px;font-size:13px;cursor:pointer}
 .view-blueprint-activate:disabled{opacity:.55;cursor:wait}
 .view-blueprint td:last-child{white-space:pre-line}
+.view-blueprint-confirm{margin-top:16px;padding:16px;border:1px solid #c8dcca;border-radius:10px;background:#f3f8f0;font-size:13px;line-height:1.8;color:#284739}
+.view-blueprint-confirm h3{font-size:15px;margin:0 0 8px}.view-blueprint-confirm p{margin:0 0 12px}
+.view-blueprint-confirm button{margin:0 12px 0 0;min-height:44px}.view-blueprint-confirm button:disabled{cursor:not-allowed;opacity:.55}
+.view-blueprint>.view-action{display:block;margin-top:12px}
 .view-register-context{font-size:14px;font-weight:600;color:#284739;margin:0 0 8px}
 .view-register-row-hint{display:block;font-size:11px;line-height:1.6;color:#826221;margin-top:5px;max-width:240px}
 .view-register .view-table-wrap{max-height:58dvh;overflow:auto;border:1px solid #e3ebe0;border-radius:9px}

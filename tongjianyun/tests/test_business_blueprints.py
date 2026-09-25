@@ -113,6 +113,8 @@ class BlueprintTests(unittest.TestCase):
             first = blueprint.activate('P1', blueprint.revision(spec))
             second = blueprint.activate('P1', blueprint.revision(spec))
         self.assertEqual(first, second)
+        self.assertEqual(first['revision'], blueprint.revision(spec))
+        self.assertEqual(first['proposal_id'], 'P1')
         get_doc.assert_called_once()
         doc.insert.assert_called_once_with()
         self.assertEqual(db.commit.call_count, 2)
@@ -137,6 +139,20 @@ class BlueprintTests(unittest.TestCase):
         self.assertTrue(result['components'][0]['can_activate'])
         self.assertEqual(result['summary']['state'], 'proposed')
         get_doc.assert_not_called()
+
+    def test_active_preview_offers_only_permitted_native_actions(self):
+        spec = blueprint.validate_spec(SPEC)
+        for permissions, expected in [({'create', 'read'}, ['frappe_new', 'frappe_doctype']),
+                                      ({'read'}, ['frappe_doctype']), (set(), [])]:
+            with self.subTest(permissions=permissions), patch.object(blueprint, '_load', return_value=spec), \
+                 patch.object(blueprint, '_validate_links'), patch.object(blueprint, '_state', return_value='active'), \
+                 patch.object(frappe, 'has_permission', side_effect=lambda dt, perm: perm in permissions):
+                result = blueprint.preview('P1')
+            self.assertEqual([action['selection']['view'] for action in result['actions']], expected)
+            self.assertTrue(all(action['selection']['doctype'] == blueprint.doctype_name(spec)
+                                for action in result['actions']))
+            self.assertFalse(result['components'][0]['can_activate'])
+            self.assertIn('不代表已有业务记录', result['subtitle'])
 
     def test_schema_exact_match_required_for_active_state(self):
         spec = blueprint.validate_spec(SPEC)

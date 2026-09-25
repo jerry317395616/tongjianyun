@@ -226,7 +226,11 @@ def columns_for(entry, fields):
 
 def pager(choice, has_more, step=PAGE_SIZE):
     offset = choice.get('offset', 0)
-    actions = [action('常用业务', {'view': 'business_catalog', 'day': choice['day'], 'meal': choice['meal']})]
+    from tongjianyun.scene_access import can_use_admin_chat
+    ordinary_classroom = choice.get('view') == 'classroom_day' and not can_use_admin_chat()
+    actions = [action('可用业务' if ordinary_classroom else '常用业务',
+                      {'view': 'frappe_catalog' if ordinary_classroom else 'business_catalog',
+                       'day': choice['day'], 'meal': choice['meal']})]
     if offset:
         actions.append(action('上一页', {**choice, 'offset': max(0, offset - step)}))
     if has_more:

@@ -1,5 +1,6 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=unified-business-20260925-4';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=unified-business-20260925-6';
 import {mealContext as context,refreshMealData} from './state.js?v=meal-header-20260925-1';
+import {getSceneBootstrap} from './scene_bootstrap.js?v=teacher-scene-20260925-1';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
 const messages=$('chat-messages'),chip=$('chat-file-chip'),fileName=$('chat-file-name');
@@ -174,8 +175,21 @@ form.addEventListener('submit',async event=>{
 });
 
 showContext();controls();
-request(api+'get_chat_access').then(async result=>{
-  allowed=!!result?.allowed;controls();
-  if(allowed){initializeViews({request});await loadConversation();}
-  else addMessage('assistant error','当前账号暂不能使用对话，请联系管理员。');
-}).catch(showFailure);
+getSceneBootstrap().then(async bootstrap=>{
+  allowed=bootstrap.chat.allowed;controls();
+  // Left-side business access is independent from the privileged Codex runner.
+  // A teacher's view request always reaches the normal server permission gate.
+  const initialView=initializeViews({request,bootstrap});
+  if(allowed){await loadConversation();}
+  else{
+    messages.replaceChildren();$('chat-title').textContent='业务助手';
+    addMessage('assistant',bootstrap.chat.reason||'业务对话尚未开通，可先在左侧办理有权访问的业务。');
+    input.placeholder='业务对话尚未开通';form.hidden=true;
+  }
+  await initialView;
+}).catch(error=>{
+  allowed=false;controls();form.hidden=true;messages.replaceChildren();
+  showFailure(error);
+  const retry=document.createElement('button');retry.type='button';retry.className='chat-view-result';retry.textContent='重新加载场景';
+  retry.addEventListener('click',()=>window.location.reload());messages.append(retry);
+});

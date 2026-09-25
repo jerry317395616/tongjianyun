@@ -1,5 +1,48 @@
 # 隔离浏览器验收工具与边界
 
+## v2 新业务浏览器验收准备（本批追加）
+
+新增 `seed-blueprint` 模式使用同一精确隔离 DB/Redis 守卫、既有合成管理者和真实 `propose_for_task`：私有方案属于任务 owner，经 `publish_for_task` 发出真实 business_blueprint 视图事件，再将合成导航任务置 completed。没有调用智能体、预激活结构或后台代填业务记录。
+
+- 独立私有清单 `browser-blueprint-fixture.json` 将本轮边界绑定为方案 `888d4f4ca2`，任务 `f5e5899a-e1ef-40a0-b04d-16de118e7282`，主类型 `Tongjianyun Advanced browser_estimate_ab6539df86`，唯一子类型 `TGY Extension Row 00b8ba86082a1c798f73099e`。口令及既有课堂 fixture 的文件摘要保持不变；重复 seed 验证并复用方案，不自动重新创建。此处状态是准备时的 proposed，不替代后续实时核验。
+- 测试方案为活动估算：明细项目、数量、单价、小计，服务端数量×单价后汇总主表金额，固定 review 复核流程。它不是采购、付款或库存的替代业务。
+- 防火墙新增精确方案 activate POST 和本轮主/子类型的元数据读取；新建/修改只允许 `frappe.desk.form.save.savedocs` + `action=Save` + 该主类型的草稿，以及该子类型的正确 parent/parenttype/parentfield。拒绝任意 flags、外来子类型、跨表父对象、不同 owner、直接 Submit/Cancel/Update 和 workflow 跳转。
+- 原生必要 RPC 依据已安装源码定位：`frappe/public/js/frappe/model/model.js` 的 getdoctype/getdoc，`form/sidebar/form_sidebar.js` 的 get_docinfo，`form/save.py` 的 savedocs，`model/workflow.js` 的 get_transitions，`model/user_settings.js` 的 get/save。只读及个人显示设置也须精确本轮类型，工作流查询不允许注入 workflow 参数；尚未允许工作流动作、其他原生写入、通用 resource 路由或 Codex 执行。
+- 校验 `/api/method`、`/api/v1/method`、`/api/v2/method` 以及 query/form/JSON cmd；冲突命令、冲突参数、重复 JSON/form/query 键（包括嵌套 doc）均拒绝。蓝图预览同样只接受清单中的 proposal。认证 cookie、CSRF header/body 均原样交给 Frappe；没有登录捷径、CSRF 豁免或业务权限猴子补丁。
+- 23 项独立无密钥测试通过：原有 9 项边界 + 5 项资产契约 + 9 项蓝图边界。原生 CSRF 测试在这里证明“中间件不注入凭据、不吞掉原生拒绝”，不是已完成真实 HTTP CSRF 验收；真实浏览器激活、保存、刷新和独立后端回读仍须另附结果。
+
+根任务同步 v5 后，已刷新并核验 1,295 个独立公共文件与 HTTP 摘要一致。旧 PID `2619194` 已确认不存在后启动 PID `3068750`；根任务随后同步最新后端，精确核对该 PID 命令及监听，停止并确认旧 exec session `60776` 终止，再以 exec session `59349` / PID `3102260` 重启。监听仅 `127.0.0.1:23380`，无 worker/scheduler/debugger/reloader，重启后 verify 的 HTTP/资产核验仍通过。以上进程信息为准备时证据，后续须重新确认。
+
+另新增 `verify_browser_blueprint_readback.py`，待浏览器完成真实启用和保存后，以同一管理者的新连接开启 `START TRANSACTION READ ONLY`，检查精确主/子 schema 与 workflow、原权限、actor、草稿状态及两行金额计算。它不会激活方案、代填记录或调用保存；生成的结果证据与浏览器操作证据配套，不能替代浏览器本身。预期输入：名称“浏览器合成活动估算”，数量/单价为 `2.5 × 3.8` 与 `10 × 1.25`，应持久化小计 `9.50 / 12.50`、总额 `22.00`。
+
+原生表单首次打开未成功：并非发现生产角色缺陷，而是隔离站点一直未完成 Desk 安装导引标记。只读 `inspect-desk` 证实 `frappe/erpnext/education/tongjianyun` 的 Installed Application.is_setup_complete 均为 0；已有合成公司 `QA Meal 0afbba8af3` 及 CNY/China、COA、仓库。原生 `frappe.is_setup_complete()` 只检查 Frappe/ERPNext 两项，`router.js` 在 false 时强制跳 setup-wizard。不得通过放宽业务角色解决。
+
+经根任务确认，增加严格 QA `prepare-desk`：验证既有合成公司/科目/仓库后，仅用原生 `enable_setup_wizard_complete` 将 Frappe/ERPNext 两项设 1，并将 System Settings.setup_complete 设 1；其他两应用标记及 locale/settings 未动，不运行 setup_complete/disable_future_access、邮件、用户/角色变更或完整导引。旧值/新值保存于 QA `browser-desk-readiness.json`；重复调用只读核对该记录与现状，发现偏离即停止、不覆盖。总 prepare 也调用该幂等步骤。
+
+同时仅增加原生 Desk 启动的两个只读 RPC：get_boot_translations 限 GET/HEAD 与 lang/v，get_session_default_values 限空参数；所有 setup_wizard 和 set_session_default_values 仍拒绝。新增诊断仅记录预定义 RPC 名、HTTP 动词、预定义参数键、响应状态及 native/QA 拦截层，不记录参数值、cookie、CSRF 或口令；请求上下文局部保存，避免并发串线。未知命令/键统一替换为 unlisted。新增 3 项启动边界/日志隐私/延后响应独立性测试，全套 26 项通过。当前 QA 在精确终止旧 PID 后重启为 PID `3191733` / exec session `97093`；未刷新教师前端资产。
+
+### 已完成的真实蓝图浏览器办理与新连接回读
+
+根任务使用 CUA 操作既有合成管理者：实际打开左侧方案，先取消一次，再确认启用；页面以新 GET 回读展示 active 及“开始录入 / 查看记录”。随后进入同场景的原生新建表单，以键盘输入名称“浏览器合成活动估算”和两行材料 `2.5 × 3.8`、`10 × 1.25`，点击原生 Save。服务器脱敏日志确认 `frappe.desk.form.save.savedocs` POST 到原生应用并返回 `200 OK`，不是后台代填或 fake 响应。
+
+记录为 `pespg1lt48`，两行小计 `9.50 / 12.50`、总额 `22.00`，状态“扩展·草稿”。根任务随后通过原生 Menu → Reload 再见同一记录、同样明细与合计；服务日志亦记录 getdoc/get_transitions 原生 `200 OK`。没有点击送审或复核，因此此处不声称工作流审批已通过浏览器验收。
+
+独立脚本新连接执行 `START TRANSACTION READ ONLY` 后回读 19 / 19 通过，最终证据 `browser-blueprint-readback-4e38ef3652.json`（QA root，0600）核对：方案仍属于管理者、完整主/子 schema 与 fixed workflow active、原 System Manager 权限及禁止删除/分享、创建者/修改者均为浏览器管理者、恰好一条记录、真实子表父级绑定、服务端计算值及 manifest 不变。只读脚本没有激活、保存、提交或更改记录。先前报告 `browser-blueprint-readback-5df09fc541.json` 保留，最终报告另加币种限制说明。
+
+证据范围：QA 全局币种未配置，原生表单显示了默认 `₹` 符号；这里只证明数值计算及两位金额字段，**不能证明币种配置正确**。本方案是活动估算，不是财务记账。Frappe 原生 grid 为草稿附带的 `__unedited / __checked` 仅按布尔值放行，任意 flags 仍拒绝。保存后一次 get_transitions 读请求曾因 QA 使用写入级别校验误拦；已依据原生函数会按固定 type/name 重新 load_from_db，将只读身份检查与 Save 草稿检查分开，仍禁止 flags、外来类型、外来 workflow 注入和任何审批动作。
+
+在上述管理员浏览器验收之后，根任务统一同步教师候选。QA 新增 GET `tongjianyun.scene_access.get_bootstrap`，将 `scene_bootstrap.js` 加入关键资产；刷新后 1,296 个文件及 6 个关键 HTTP 资产均与候选一致，app 版本 `teacher-scene-20260925-1`、chat/views 为 v5。旧课堂、蓝图、readiness、口令文件摘要保持不变。该阶段 helper 单测 29 项通过（含 UI 标记、只读工作流/严格保存分离及 bootstrap 负例），运行 PID `3275771` / exec session `30084`。教师自己的 9 月 17 日办理证据由独立教师验收文档记录，不混入这份管理者验收。
+
+真实切换账号时另修复两项 **QA 屏障兼容性**：bootstrap 的前端原生参数实际为 day/meal/可选 group，故仅允许这三个参数及合法格式，不能传 user/role 等覆盖权限；后端仍自行验证本人的班级范围。Frappe desk.js 的正常 Logout 调用为无参 `logout` POST，浏览器可以省略 Content-Type/body，原 QA 解析器因此误拒。现只对该无参命令允许零长度无 Content-Type POST，拒绝 user/sid/session 等目标参数，其他空体写接口仍拒绝；`frappe.handler.logout()` 由 Frappe 正常注销当前会话，没有后台代注销或绕过 CSRF。补充测试后全套 30 项通过，精确重启至 PID `3309690` / exec session `53771`，verify 证实 HTTP 和 6 项关键资产一致。
+
+原生页另一附带拒绝的未知 POST，通过只记录 SHA256 并离线匹配公共前端源码，确定为 `frappe.core.doctype.background_task.background_task.get_recent_tasks`（固定 limit=15）。它不是 Save 或 Logout 失败。当前 QA 未开放后台任务查询/重试/取消，此弹窗是隔离屏障边界，不代表已证实的生产业务权限缺陷；不会为消除提示去运行后台任务。
+
+教师首次进入时还遇到浏览器缓存旧 `chat.js?v5`：服务器文件/HTTP 摘要已新，但浏览器先成功读取新 bootstrap 后仍调用旧管理聊天 get_chat_access，原生拒绝教师属于正确权限结果，并非要给教师管理员角色。根任务将模板 chat/viewsCSS 以及 chat→views import 统一升到 `unified-business-20260925-6`。随后只刷新 QA 公共资产并精确重启到 PID `3335176` / exec session `78349`，verify 确认 v6 URL 与 1,296 文件、6 项关键 HTTP 资产一致；账号、口令、配置及业务 fixture 摘要保持不变。需要真实浏览器 reload 新 URL 才能证明缓存问题已解决，不能仅以源/HTTP 一致代替浏览器实际加载证据。
+
+```sh
+/home/zyd/frappe/native-bench/env/bin/python /home/zyd/frappe/remote-workspace/serve_isolated_browser.py seed-blueprint
+```
+
 日期：2026-09-25。最初为只读建议，后经明确授权实现 `deploy/unified_business/serve_isolated_browser.py`，并已准备合成浏览器 fixture、独立静态资源和 loopback Web。没有启动对外代理、执行生产写入或由本子任务操作浏览器；本机 SSH 转发和 CUA 验收由根任务负责。
 
 ## 已实施工具
@@ -76,4 +119,4 @@
 4. 页面截图/操作录像仅含合成人名，不能录入一次性口令或控制台私密请求头。
 5. 独立后端回读报告及固定站点/数据库标记，且旧历史 fixture 摘要保持不变。
 
-现有 54 项 ORM/原生 resource handler 验收、127 项业务单元回归及 14 项 Web/资产边界单测不替代上述浏览器到真实后端证据。当前防火墙尚不允许蓝图激活、库存修复或通用原生单据写入；如需扩大 QA 验收范围，应在版本化白名单中明确增加所需接口并补测试，不关闭整个屏障。未增加一次性链接或 LoginManager 登录旁路；使用正常登录页与隔离强随机口令。
+现有 54 项 ORM/原生 resource handler 验收、127 项业务单元回归及初版 14 项 Web/资产边界单测不替代上述浏览器到真实后端证据。初版防火墙不允许蓝图激活、库存修复或通用原生单据写入；本批仅按文首的精确方案扩大到蓝图启用及该类型的草稿保存，没有关闭整个屏障，库存修复和其他单据写入仍不开放。未增加一次性链接或 LoginManager 登录旁路；使用正常登录页与隔离强随机口令。

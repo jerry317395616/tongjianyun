@@ -277,10 +277,11 @@ def meal_register_view(choice):
 
 @frappe.whitelist()
 def get_view(selection_json):
-    from tongjianyun.meal_chat import require_chat_access
+    from tongjianyun.scene_access import require_scene_account, require_view_access
     from tongjianyun.meal_nutrition_view import nutrition_view
-    require_chat_access()
+    require_scene_account()
     choice = selection(selection_json)
+    require_view_access(choice['view'])
     if choice['view'] == 'recipe_week':
         result = {'title': '本周食谱', 'subtitle': choice['day'],
                   'components': [{'type': 'recipe_week'}],
@@ -308,7 +309,7 @@ def get_view(selection_json):
 
 def publish_for_task(task_id, requested):
     """CLI-only capability: task owner is read from Redis, never from Codex args."""
-    from tongjianyun.meal_chat import TaskStore, SESSION_RE, ACTIVE
+    from tongjianyun.meal_chat import TaskStore, SESSION_RE, ACTIVE, require_chat_access
     if not SESSION_RE.fullmatch(str(task_id or '')):
         raise ValueError('Invalid task id')
     store = TaskStore()
@@ -318,6 +319,9 @@ def publish_for_task(task_id, requested):
     original_user = frappe.session.user
     try:
         frappe.set_user(task['owner'])
+        # This CLI belongs to the existing administrator runner. Opening views
+        # to ordinary accounts must not make a revoked/root task publishable.
+        require_chat_access()
         choice = selection(requested, task['day'], task['meal'])
         result = get_view(choice)
         # Cancellation while the query was running must not publish a late view.

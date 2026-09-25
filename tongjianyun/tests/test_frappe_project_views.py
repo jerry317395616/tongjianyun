@@ -10,6 +10,12 @@ from tongjianyun import meal_views, meal_chat
 
 
 class FrappeProjectTests(unittest.TestCase):
+    def setUp(self):
+        for target in ('can_manage_projects', 'can_use_admin_chat'):
+            manager = patch('tongjianyun.scene_access.' + target, return_value=True)
+            manager.start()
+            self.addCleanup(manager.stop)
+
     def select(self, **kwargs):
         return meal_views.selection({'view': 'frappe_catalog', **kwargs}, '2026-09-25', 'lunch')
 
@@ -55,6 +61,23 @@ class FrappeProjectTests(unittest.TestCase):
         self.assertEqual(result['components'][1]['route'], '/desk/sales-invoice/INV%2F0001')
         self.assertEqual(set(result['components'][1]), {'type', 'title', 'route'})
         self.assertNotIn('amount', str(result))
+
+    def test_ordinary_stock_document_does_not_offer_admin_reconciliation(self):
+        for doctype in ('Purchase Receipt', 'Stock Entry'):
+            meta = SimpleNamespace(name=doctype, module='Stock')
+            record = MagicMock()
+            record.name = 'EXACT-SOURCE'
+            choice = self.select(view='frappe_document', doctype=doctype, document=record.name)
+            with self.subTest(doctype=doctype), patch.object(project, 'module_apps', return_value={'Stock': 'erpnext'}), \
+                 patch.object(project, '_doctype', return_value=meta), patch.object(frappe, 'get_doc', return_value=record), \
+                 patch.object(project, 'operation_capabilities', return_value={'operations': []}), \
+                 patch.object(frappe, '_', side_effect=lambda value, **kw: value), \
+                 patch.object(frappe, 'local', SimpleNamespace(site='test')), \
+                 patch('tongjianyun.scene_access.can_use_admin_chat', return_value=False) as allowed:
+                result = project.native_view(choice)
+                self.assertNotIn('stock_reconciliation', str(result['actions']))
+                allowed.return_value = True
+                self.assertEqual(project.native_view(choice)['actions'][-1]['selection']['view'], 'stock_reconciliation')
 
     def test_new_route_checks_create_and_never_creates_a_record(self):
         meta = SimpleNamespace(name='Purchase Order', module='Buying', issingle=0, is_submittable=1)
@@ -189,6 +212,35 @@ class FrappeProjectTests(unittest.TestCase):
             rows = project.project_directories(root)
         self.assertTrue(any(r['name'] == 'erpnext' and r['kind'] == 'Frappe 应用源码' for r in rows))
         self.assertEqual(next(r for r in rows if r['name'] == 'app')['status'], 'Git 项目')
+
+    def test_project_listing_rechecks_management_before_reading_paths(self):
+        with patch('tongjianyun.scene_access.require_project_access', side_effect=frappe.PermissionError), \
+             patch.object(project, 'project_directories') as scan:
+            with self.assertRaises(frappe.PermissionError):
+                project.projects_view({'view': 'project_catalog'})
+        scan.assert_not_called()
+
+    def test_business_catalog_does_not_offer_project_paths_to_nonmanager(self):
+        with patch('tongjianyun.scene_access.can_manage_projects', return_value=False), \
+             patch('tongjianyun.scene_access.can_use_admin_chat', return_value=False), \
+             patch.object(project, 'module_apps', return_value={}), \
+             patch.object(project, 'catalog_entries', return_value=[]), \
+             patch.object(frappe, 'get_installed_apps', return_value=[]), \
+             patch.object(frappe, 'local', SimpleNamespace(site='test')):
+            result = project.catalog_view(self.select())
+        self.assertNotIn('project_catalog', str(result))
+        self.assertNotIn('/home/', str(result))
+
+    def test_ordinary_catalog_queries_only_audited_doctype_kind(self):
+        with patch('tongjianyun.scene_access.can_use_admin_chat', return_value=False), \
+             patch.object(frappe, 'get_all', return_value=[]) as query, \
+             patch.object(project, '_workspaces') as workspaces:
+            self.assertEqual(project.catalog_entries({}, {}), [])
+            self.assertEqual([call.args[0] for call in query.call_args_list], ['DocType'])
+            workspaces.assert_not_called()
+            for kind in ('report', 'page', 'workspace'):
+                with self.subTest(kind=kind), self.assertRaises(frappe.PermissionError):
+                    project.catalog_entries({'kind': kind}, {})
 
     def test_catalog_summary_describes_only_the_displayed_level(self):
         entry = {'kind': 'doctype', 'name': 'Asset', 'title': 'Asset', 'module': 'Assets', 'note': 'native'}

@@ -122,10 +122,17 @@ async function nativeSetup(){
   await fixture.run('showBusinessView(nativeData.selection)');
   return fixture;
 }
-const blueprint={type:'business_blueprint',proposal_id:'BP-1',revision:'a'.repeat(64),title:'新业务',description:'预览',fields:[{fieldname:'subject',label:'标题<script>',fieldtype:'Data',reqd:1},{fieldname:'status',label:'状态',fieldtype:'Select',reqd:0,options:'待处理\n已完成'}],state:'proposed',warnings:['尚未建立业务数据表'],can_activate:true};
+const blueprint={type:'business_blueprint',doctype:'Tongjianyun Extension QA Blueprint',proposal_id:'BP-1',revision:'a'.repeat(64),title:'新业务',description:'预览',fields:[{fieldname:'subject',label:'标题<script>',fieldtype:'Data',reqd:1},{fieldname:'status',label:'状态',fieldtype:'Select',reqd:0,options:'待处理\n已完成'}],state:'proposed',warnings:['尚未建立业务数据表'],can_activate:true};
 const blueprintV2={...blueprint,fields:[...blueprint.fields,{fieldname:'items',label:'活动明细',fieldtype:'Table',options:'Extension Test Item'},{fieldname:'total',label:'预算合计',fieldtype:'Currency',read_only:1},{fieldname:'workflow_state',label:'复核状态',fieldtype:'Link',options:'Workflow State',read_only:1}],tables:[{fieldname:'items',label:'活动明细',fields:[{fieldname:'item',label:'项目<img src=x onerror=alert(1)>',fieldtype:'Data',reqd:1},{fieldname:'quantity',label:'数量',fieldtype:'Float',reqd:1},{fieldname:'price',label:'单价',fieldtype:'Currency',reqd:1},{fieldname:'amount',label:'小计',fieldtype:'Currency',read_only:1}]}],calculations:[{table:'items',target:'amount',op:'multiply',sources:['quantity','price']},{table:'items',target:'total',op:'sum',source:'amount'}],workflow:{template:'review',states:[{state:'草稿',doc_status:0,allow_edit:'System Manager'},{state:'待复核',doc_status:'0',allow_edit:'System Manager'},{state:'已通过',doc_status:1,allow_edit:'System Manager'},{state:'已撤销',doc_status:2,allow_edit:'System Manager'}],transitions:[{state:'草稿',action:'提交复核',next_state:'待复核',allowed:'System Manager',allow_self_approval:1},{state:'待复核',action:'通过',next_state:'已通过',allowed:'System Manager',allow_self_approval:0},{state:'已通过',action:'撤销',next_state:'已撤销',allowed:'System Manager',allow_self_approval:false}]}};
 const elementTree=element=>[element,...element.children.flatMap(elementTree)];
 const elementText=element=>elementTree(element).map(child=>child.textContent).join('\n');
+const blueprintData=block=>({...data,selection:{view:'business_blueprint',proposal_id:block.proposal_id},components:[block]});
+async function blueprintSetup(block=blueprint){
+  const fixture=setup();fixture.context.responses=blueprintData(block);fixture.context.activeResponse=blueprintData({...block,state:'active',can_activate:false});
+  fixture.context.ack={state:'active',doctype:block.doctype,proposal_id:block.proposal_id,revision:block.revision};fixture.context.calls=[];
+  fixture.run('initializeViews({request:async(url,options)=>{calls.push({url,options});return options?.method==="POST"?ack:calls.some(call=>call.options?.method==="POST")?activeResponse:responses;}});window.confirm=()=>{throw Error("activation must use inline confirmation")};');
+  await fixture.run('showBusinessView(responses.selection)');return fixture;
+}
 
 test('view promise reports actual rendering and failures without replacing old content',async()=>{
   const {run,context,nodes,emitted}=setup();context.data=data;
@@ -217,24 +224,25 @@ test('blueprint is an escaped preview and activation is never automatic',()=>{
   for(const block of [{...blueprint,state:'conflict',can_activate:false},{...blueprint,can_activate:false},{...blueprint,state:'active',can_activate:false}]){
     context.block=block;assert(!run('renderBlueprint(block)').children.some(child=>child.tag==='button'));
   }
-  context.block={...blueprint,revision:'bad'};assert.throws(()=>run('renderBlueprint(block)'),/版本无效/);
+  context.block={...blueprint,revision:'bad'};assert.throws(()=>run('renderBlueprint(block)'),/版本或目标无效/);
 });
 
-test('blueprint activation requires explicit second confirmation and binds the preview revision',async()=>{
-  const {run,context}=setup();context.block=blueprint;context.calls=[];context.nativeData=nativeData;
-  run('request=async(...args)=>{calls.push(args);return args[1]?.method==="POST"?{doctype:"Sales Invoice"}:nativeData};window.confirm=()=>false;');
-  const section=run('renderBlueprint(block)'),button=section.children.at(-1);
-  await button.click();assert.equal(context.calls.length,0);
-  run('window.confirm=()=>true');await button.click();
-  assert.equal(context.calls.length,2);assert.match(context.calls[0][0],/business_blueprints.activate$/);
-  assert.equal(context.calls[0][1].method,'POST');assert.deepEqual(JSON.parse(context.calls[0][1].body),{proposal_id:'BP-1',revision:'a'.repeat(64)});
-  assert.equal(run('current.view'),'frappe_doctype');await button.click();assert.equal(context.calls.length,2);
+test('blueprint activation requires explicit inline confirmation and binds the preview revision',async()=>{
+  const {run,context}=await blueprintSetup(),session=run('registerSession');
+  await session.button.click();assert.equal(context.calls.length,1);assert.equal(session.confirmation.hidden,false);
+  await session.cancel.click();await session.confirm.click();assert.equal(context.calls.length,1);assert.equal(session.confirmation.hidden,true);
+  await session.button.click();await session.confirm.click();
+  assert.equal(context.calls.length,3);assert.match(context.calls[1].url,/business_blueprints.activate$/);
+  assert.equal(context.calls[1].options.method,'POST');assert.deepEqual(JSON.parse(context.calls[1].options.body),{proposal_id:'BP-1',revision:'a'.repeat(64)});
+  assert.deepEqual(JSON.parse(new URL(context.calls[2].url,'https://test.local').searchParams.get('selection_json')),{view:'business_blueprint',proposal_id:'BP-1'});
+  assert.equal(run('current.view'),'business_blueprint');assert.equal(run('registerSession'),null);
+  await session.confirm.click();assert.equal(context.calls.length,3);
 });
 
 test('complex blueprint previews every child field and fixed server calculation as escaped text',()=>{
   const {run,context}=setup();context.block=blueprintV2;context.calls=[];run('request=(...args)=>calls.push(args)');
   const section=run('renderBlueprint(block)'),all=elementTree(section),text=elementText(section);
-  assert.equal(context.calls.length,0);assert.equal(all.filter(child=>child.tag==='button').length,1);
+  assert.equal(context.calls.length,0);assert.equal(section.registerSession.confirmation.hidden,true);assert.equal(section.registerSession.verify.hidden,true);
   assert.match(text,/明细表：活动明细/);assert.match(text,/项目<img src=x onerror=alert\(1\)>/);
   assert.match(text,/小计 = 数量 × 单价/);assert.match(text,/预算合计 = 活动明细 · 小计 的合计/);
   assert.match(text,/服务端重新计算，不能手工覆盖/);assert.match(text,/只读 \/ 系统维护/);
@@ -250,12 +258,12 @@ test('complex blueprint previews native states, roles, transitions and the Admin
 });
 
 test('complex blueprint confirmation covers the whole structure and cannot run without a second confirmation',async()=>{
-  const {run,context}=setup();context.block=blueprintV2;context.calls=[];context.confirmations=[];
-  run('request=(...args)=>calls.push(args);window.confirm=message=>{confirmations.push(message);return false};');
-  const button=run('renderBlueprint(block)').children.at(-1);await button.click();
-  assert.equal(context.calls.length,0);assert.match(context.confirmations[0],/1 张主表 \+ 1 张明细表/);
-  assert.match(context.confirmations[0],/原生复核流程/);assert.match(context.confirmations[0],/不会执行库存或财务操作/);
-  assert.notEqual(button.disabled,true);
+  const {run,context}=await blueprintSetup(blueprintV2),session=run('registerSession');
+  await session.button.click();const text=elementText(session.confirmation);
+  assert.equal(context.calls.length,1);assert.match(text,/1 张主表 \+ 1 张明细表/);
+  assert.match(text,/原生复核流程/);assert.match(text,/不会执行库存或财务操作/);
+  session.confirmation.listeners.keydown({key:'Escape',preventDefault(){}});assert.equal(session.confirmation.hidden,true);
+  await session.confirm.click();assert.equal(context.calls.length,1);
 });
 
 test('complex blueprint supports two detail tables and parent-only multiplication without executing formulas',()=>{
@@ -294,22 +302,48 @@ test('invalid complex blueprint preserves the previously rendered business view'
 });
 
 test('complex activation with an uncertain response stays disabled and instructs re-reading rather than retrying',async()=>{
-  const {run,context}=setup();context.block=blueprintV2;context.calls=[];run('request=async(...args)=>{calls.push(args);return {}}');
-  const section=run('renderBlueprint(block)'),button=section.children.at(-1);await button.click();await button.click();
-  assert.equal(context.calls.length,1);assert.equal(button.disabled,true);
-  assert.match(section.children.at(-2).textContent,/重新读取方案核对，不要直接重复提交/);
+  const {run,context}=await blueprintSetup(blueprintV2),session=run('registerSession');context.ack={};
+  await session.button.click();await session.confirm.click();await session.confirm.click();
+  assert.equal(context.calls.length,2);assert.equal(session.button.disabled,true);assert.equal(session.verify.hidden,false);
+  assert.match(session.status.textContent,/重新读取方案核对，不要直接重复提交/);
 });
 
 test('uncertain activation does not offer a blind duplicate submission',async()=>{
-  const {run,context}=setup();context.block=blueprint;run('request=async()=>{throw Error("网络中断，结果需核对")};');
-  const section=run('renderBlueprint(block)'),button=section.children.at(-1);await button.click();
-  assert.equal(button.disabled,true);assert.match(section.children.at(-2).textContent,/结果需核对/);
+  const {run}=await blueprintSetup(),session=run('registerSession');run('request=async()=>{throw Error("网络中断，结果需核对")};');
+  await session.button.click();await session.confirm.click();assert.equal(session.button.disabled,true);assert.match(session.status.textContent,/结果需核对/);
+  assert.equal(session.state,'uncertain');assert.equal(session.verify.disabled,false);
 });
 
 test('activation completion does not steal a different business view',async()=>{
-  const {run,context}=setup();let resolve;context.block=blueprint;context.fetcher=()=>new Promise(r=>resolve=r);run('request=fetcher');
-  const button=run('renderBlueprint(block)').children.at(-1),pending=button.click();run('showCalendar()');resolve({doctype:'Sales Invoice'});await pending;
+  const {run,context}=await blueprintSetup();let resolve;context.fetcher=()=>new Promise(r=>resolve=r);run('request=fetcher');
+  const session=run('registerSession');await session.button.click();const pending=session.confirm.click();
+  run('showCalendar(undefined,{checked:true})');resolve(context.ack);await pending;
   assert.equal(run('current'),null);
+});
+
+test('activation in flight blocks duplicate confirmation navigation refresh and unload',async()=>{
+  const {run,context,windowEvents}=await blueprintSetup();let resolve;context.poster=()=>new Promise(r=>resolve=r);run('request=async(url,options)=>{calls.push({url,options});return options?.method==="POST"?poster():activeResponse}');
+  const session=run('registerSession');await session.button.click();const pending=session.confirm.click();await session.confirm.click();
+  assert.equal(context.calls.length,2);assert.equal(session.cancel.disabled,true);assert.equal(session.verify.disabled,true);
+  assert.equal((await run('showBusinessView({view:"students"})')).status,'blocked');assert.equal(run('showCalendar()').status,'blocked');
+  assert.equal((await run('showBusinessView(current,{origin:"refresh"})')).status,'blocked');
+  let prevented=false;windowEvents.get('beforeunload')({preventDefault(){prevented=true;}});assert.equal(prevented,true);
+  resolve(context.ack);await pending;assert.equal(context.calls.length,3);
+});
+
+test('activation acknowledgement must match state proposal revision and expected doctype',async()=>{
+  for(const patch of [{state:'proposed'},{doctype:'Sales Invoice'},{proposal_id:'other'},{revision:'b'.repeat(64)}]){
+    const {run,context}=await blueprintSetup();context.ack={...context.ack,...patch};const session=run('registerSession');
+    await session.button.click();await session.confirm.click();assert.equal(session.state,'uncertain');assert.equal(context.calls.length,2);assert.equal(run('current.view'),'business_blueprint');
+  }
+});
+
+test('activation readback failure offers only verification and later GET can show actual active structure',async()=>{
+  const {run,context}=await blueprintSetup(),session=run('registerSession');run('request=async(url,options)=>{calls.push({url,options});if(options?.method==="POST")return ack;throw Error("回读失败")};');
+  await session.button.click();await session.confirm.click();assert.equal(session.state,'saved');assert.match(session.status.textContent,/尚未完成回读/);
+  assert.equal(session.confirm.disabled,true);assert.equal(session.verify.disabled,false);
+  run('request=async(url,options)=>{calls.push({url,options});return activeResponse}');await session.verify.click();
+  assert.equal(context.calls.filter(call=>call.options?.method==='POST').length,1);assert.equal(run('registerSession'),null);
 });
 
 test('new-document and blueprint views are registered and native size uses remaining space',()=>{

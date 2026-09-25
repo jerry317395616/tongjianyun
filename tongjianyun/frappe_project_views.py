@@ -120,7 +120,11 @@ def entry_selection(kind, name, choice):
 def catalog_entries(choice, modules):
     """Metadata only. Re-check permissions per actor; no shared actor-result cache."""
     entries = []
-    kinds = [choice['kind']] if choice.get('kind') else list(KINDS)
+    from tongjianyun.scene_access import can_use_admin_chat
+    permitted_kinds = list(KINDS) if can_use_admin_chat() else ['doctype']
+    if choice.get('kind') and choice['kind'] not in permitted_kinds:
+        raise frappe.PermissionError('此类业务入口尚未完成普通账号范围验收，请使用已开放的单据与资料。')
+    kinds = [choice['kind']] if choice.get('kind') else permitted_kinds
     keyword = (choice.get('keyword') or '').casefold()
     def matches(name, module, title=''):
         return module in modules and (not keyword or keyword in ' '.join((name, title or '', label(name), module, label(module))).casefold())
@@ -172,7 +176,13 @@ def catalog_view(choice):
     entries = catalog_entries(choice, modules)
     ctx = _context(choice)
     components = [_notice('这里覆盖当前站点已安装应用的原生业务，不局限于童健云。打开业务后，原系统继续校验权限；目录数量是入口数，不是业务记录数。')]
-    actions = [_action('所有应用', {'view': 'frappe_catalog', **ctx}), _action('服务器项目', {'view': 'project_catalog', **ctx})]
+    from tongjianyun.scene_access import can_use_admin_chat
+    if not can_use_admin_chat():
+        components.append(_notice('当前账号在统一场景中暂开放经核验的单据与资料；报表、独立页面及工作区仍待逐项范围验收，原系统权限和原链接不变。'))
+    actions = [_action('所有应用', {'view': 'frappe_catalog', **ctx})]
+    from tongjianyun.scene_access import can_manage_projects
+    if can_manage_projects():
+        actions.append(_action('服务器项目', {'view': 'project_catalog', **ctx}))
     displayed = {}
     if not any(choice.get(k) for k in ('app', 'module', 'keyword', 'kind')):
         apps = sorted(frappe.get_installed_apps())
@@ -359,7 +369,8 @@ def native_view(choice):
         route = '/desk/' + ('' if doc.public else 'private/') + slug(doc.name)
         title, module = label(doc.name), doc.module
     actions = [_action('返回模块', {'view': 'frappe_catalog', 'app': modules[module], 'module': module, **_context(choice)})]
-    if view == 'frappe_document' and doc.name in {'Purchase Receipt', 'Stock Entry'}:
+    from tongjianyun.scene_access import can_use_admin_chat
+    if view == 'frappe_document' and doc.name in {'Purchase Receipt', 'Stock Entry'} and can_use_admin_chat():
         actions.append(_action('核对当前库存', {'view': 'stock_reconciliation',
                        'source_doctype': doc.name, 'source_name': choice['document']}))
     if view == 'frappe_doctype' and capabilities:
@@ -391,6 +402,8 @@ def project_directories(root=ROOT):
 
 
 def projects_view(choice):
+    from tongjianyun.scene_access import require_project_access
+    require_project_access()
     projects = project_directories()
     return {'title': 'Frappe 项目总览', 'subtitle': str(ROOT) + ' · Codex 项目根目录',
             'components': [_notice('Codex 可按你的需求处理此目录下各项目。先识别目标项目和站点，再读取对应规则及接口；备份、配置、日志目录只列索引，不扫描或公开内容。'),
