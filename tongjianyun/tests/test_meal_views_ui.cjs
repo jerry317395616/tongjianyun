@@ -95,3 +95,13 @@ test('catalog, stock, classroom and ingredient views accept registered safe comp
     assert.equal(run('buildComponents(data)').children.length,1);
   }
 });
+test('native Frappe frame accepts only internal Desk routes and uses text labels',()=>{
+  const {run,context}=setup();
+  context.data={version:1,selection:{view:'frappe_doctype'},components:[{type:'frappe_frame',route:'/desk/sales-invoice',title:'<script>'}]};
+  const block=run('buildComponents(data)').children[0];
+  assert.equal(block.children[1].tag,'iframe');assert.equal(block.children[1].src,'/desk/sales-invoice');
+  assert.equal(block.children[1].title,'<script>');assert.equal(block.children[0].rel,'noopener noreferrer');
+  for(const route of ['https://evil.test','//evil.test','javascript:alert(1)','/desk/../api','/desk/x?code=1','/desk/\\evil']){
+    context.data.components[0].route=route;assert.throws(()=>run('buildComponents(data)'),/地址无效/);
+  }
+});

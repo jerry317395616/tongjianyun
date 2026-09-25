@@ -7,7 +7,7 @@
   <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-workbench-20260924-4">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/chat.css?v=meal-chat-sse-20260925-2">
-  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/views.css?v=business-canvas-20260925-1">
+  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/views.css?v=frappe-wide-20260925-1">
 </head>
 <body>
   <a href="#business-canvas" class="skip">跳到业务内容</a>
@@ -34,13 +34,13 @@
       </section>
     </section>
     <aside id="meal-chat" class="meal-chat" aria-labelledby="chat-title">
-      <header class="meal-chat-header"><div><h2 id="chat-title">膳食助手</h2><p id="chat-context">正在读取业务日期…</p></div></header>
+      <header class="meal-chat-header"><div><h2 id="chat-title">项目与业务助手</h2><p id="chat-context">正在读取业务日期…</p></div></header>
       <div id="chat-messages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions">
-        <div class="chat-message assistant">你好，直接说需要处理什么，也可以上传食谱。</div>
+        <div class="chat-message assistant">你好，直接说要处理哪个项目或业务。可以查看全部业务，也可以上传文件。</div>
       </div>
       <form id="chat-form" class="chat-form">
         <div id="chat-file-chip" class="chat-file-chip" hidden><span id="chat-file-name"></span><button id="chat-remove-file" type="button" aria-label="移除所选文件">×</button></div>
-        <div class="chat-composer"><label class="chat-attach" for="chat-file" title="上传食谱" aria-label="上传食谱">＋</label><input id="chat-file" type="file" accept=".xlsx,.xls,.csv,.txt,.pdf,.png,.jpg,.jpeg" hidden><textarea id="chat-input" rows="1" maxlength="2000" placeholder="说出需求，或上传食谱…" aria-label="给膳食助手发送消息"></textarea><button id="chat-send" type="submit" aria-label="发送消息">↑</button></div>
+        <div class="chat-composer"><label class="chat-attach" for="chat-file" title="上传业务文件" aria-label="上传业务文件">＋</label><input id="chat-file" type="file" accept=".xlsx,.xls,.csv,.txt,.pdf,.png,.jpg,.jpeg" hidden><textarea id="chat-input" rows="1" maxlength="2000" placeholder="说出项目或业务需求…" aria-label="给项目与业务助手发送消息"></textarea><button id="chat-send" type="submit" aria-label="发送消息">↑</button></div>
       </form>
     </aside>
     <div hidden aria-hidden="true"><dialog id="panel" open aria-modal="false" aria-labelledby="panel-title">
@@ -53,5 +53,5 @@
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p>请启用 JavaScript，或进入<a href="/desk/tongjianyun-workbench">原业务工作台</a>。</p></noscript>
   <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-chat-20260924-1"></script>
-  <script type="module" src="/assets/tongjianyun/meal_scene/chat.js?v=business-canvas-20260925-1"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/chat.js?v=frappe-wide-20260925-1"></script>
 </body></html>

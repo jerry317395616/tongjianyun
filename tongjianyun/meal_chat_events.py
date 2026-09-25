@@ -35,7 +35,7 @@ def progress_event(event):
     if item_type == 'command_execution':
         command = str(item.get('command', '')).lower()
         if any(word in command for word in ('openpyxl', 'libreoffice', '.xlsx', '.csv', 'xlrd')):
-            label = '读取食谱文件'
+            label = '读取业务文件'
         elif any(word in command for word in ('rg ', 'grep ', 'sed ', 'cat ', 'ls ')):
             label = '核对相关资料'
     status = 'running' if kind == 'item.started' else 'completed'

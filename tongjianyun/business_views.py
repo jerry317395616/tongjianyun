@@ -9,7 +9,7 @@ from frappe.model import get_permitted_fields
 from tongjianyun.business_view_registry import REGISTRY, DOMAINS
 from tongjianyun.meal_scene import business_day, meal_key
 
-VIEWS = {'business_catalog': '全部业务', 'business_list': '业务记录',
+VIEWS = {'business_catalog': '童健云常用业务', 'business_list': '业务记录',
          'business_record': '业务明细', 'stock': '当前库存', 'ingredient_nutrition': '食材营养统计',
          'classroom_day': '班级当日出勤', 'weekly_orders': '一周食谱采购'}
 FIELDS = {'entity', 'record', 'keyword', 'period', 'start_date', 'end_date', 'status', 'company', 'warehouse', 'domain'}
@@ -224,7 +224,7 @@ def columns_for(entry, fields):
 
 def pager(choice, has_more, step=PAGE_SIZE):
     offset = choice.get('offset', 0)
-    actions = [action('全部业务', {'view': 'business_catalog', 'day': choice['day'], 'meal': choice['meal']})]
+    actions = [action('常用业务', {'view': 'business_catalog', 'day': choice['day'], 'meal': choice['meal']})]
     if offset:
         actions.append(action('上一页', {**choice, 'offset': max(0, offset - step)}))
     if has_more:
@@ -346,7 +346,7 @@ def catalog_view(choice):
     blocks = [notice('直接在右侧说要看什么，也可以点下面的业务名称。所有视图只读；没有数据与无权限会分别提示。')]
     blocks.extend(table(domain, ['业务', '当前权限', '说明'], rows, collapsed=domain == '基础资料') for domain, rows in groups.items())
     blocks.append(notice('尚未接入：独立的厨房加工执行、配送签收、食品留样、体格生长测量与过敏配餐流程。库存单或健康登记不能替代这些业务记录。', True))
-    return {'title': '全部业务', 'subtitle': '童健云及已使用的教育、采购、库存、人事模块', 'components': blocks,
+    return {'title': '童健云常用业务', 'subtitle': '童健云及已使用的教育、采购、库存、人事模块', 'components': blocks,
             'actions': [action('在园学生', {'view': 'students'}), action('用餐人数', {'view': 'meal_counts', 'day': choice['day'], 'meal': choice['meal']}),
                         action('班级当日出勤', {'view': 'classroom_day', 'day': choice['day'], 'meal': choice['meal']}),
                         action('一周食谱采购', {'view': 'weekly_orders', 'day': choice['day'], 'meal': choice['meal']}),

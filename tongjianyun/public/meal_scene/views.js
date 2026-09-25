@@ -1,7 +1,8 @@
 // Registered components only. Model messages, HTML and executable code are never rendered here.
 const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
-  'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders']);
+  'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
+  'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_report','frappe_page','frappe_workspace']);
 let request,current=null,ticket=0;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
@@ -76,7 +77,15 @@ function renderBars(block){
   }return section;
 }
 function renderNotice(block){return node('p',block.text,'view-note'+(block.warning?' warning':''));}
-const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice};
+function renderFrappeFrame(block){
+  // Routes come from permission-checked site metadata, never model supplied URLs.
+  if(typeof block.route!=='string'||!block.route.startsWith('/desk/')||/[\\?#\r\n]/.test(block.route)||block.route.includes('//')||block.route.includes('..'))throw Error('原生业务地址无效。');
+  const section=node('section',undefined,'view-native');
+  const link=node('a','在独立页面打开 ↗','view-action');link.href=block.route;link.target='_blank';link.rel='noopener noreferrer';
+  const frame=node('iframe');frame.src=block.route;frame.title=block.title||'Frappe 业务';frame.referrerPolicy='same-origin';
+  section.append(link,frame);return section;
+}
+const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame};
 export function buildComponents(data){
   if(data?.version!==1||!validViews.has(data.selection?.view)||!Array.isArray(data.components)||data.components.length>12)throw Error('展示结果格式不受支持，已保留当前页面。');
   const content=document.createDocumentFragment();

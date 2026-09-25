@@ -24,7 +24,7 @@ from tongjianyun.workspace_entry import mark_private_response
 
 
 CODEX = '/home/zyd/frappe/.codex-deepseek/bin/codex-deepseek'
-PROJECT = '/home/zyd/frappe/native-bench/apps/tongjianyun'
+PROJECT = '/home/zyd/frappe'
 MAX_FILE_SIZE = 10 * 1024 * 1024
 ALLOWED_SUFFIXES = {'.xlsx', '.xls', '.csv', '.txt', '.pdf', '.png', '.jpg', '.jpeg'}
 SESSION_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
@@ -103,7 +103,9 @@ def require_chat_access():
 
 
 def _cache_key():
-    return f'tongjianyun:meal-chat:{frappe.local.site}:{frappe.session.user}'
+    # New project context must not resume a legacy Tongjianyun-only working directory.
+    # Public chat history stays in TaskStore and is not deleted.
+    return f'tongjianyun:meal-chat:frappe-wide-v1:{frappe.local.site}:{frappe.session.user}'
 
 
 @frappe.whitelist()
@@ -125,9 +127,9 @@ def _attachment(file_name):
         frappe.throw('请上传私有文件。')
     name = str(file_doc.file_name or '')
     if Path(name).suffix.lower() not in ALLOWED_SUFFIXES:
-        frappe.throw('请上传 Excel、CSV、PDF、图片或文本食谱。')
+        frappe.throw('请上传 Excel、CSV、PDF、图片或文本业务文件。')
     if not 0 < int(file_doc.file_size or 0) <= MAX_FILE_SIZE:
-        frappe.throw('食谱文件不能超过 10 MB。')
+        frappe.throw('业务文件不能超过 10 MB。')
     path = Path(file_doc.get_full_path()).resolve(strict=True)
     if not path.is_file():
         frappe.throw('上传文件不存在。')
@@ -144,7 +146,7 @@ def send_message(message='', day=None, meal='lunch', file_name=None, request_id=
         frappe.throw('消息请控制在 2000 字以内。')
     attachment = _attachment(file_name)
     if not text and not attachment:
-        frappe.throw('请输入需求或上传食谱。')
+        frappe.throw('请输入需求或上传业务文件。')
     day = business_day(day)
     meal = meal_key(meal)
     if view_context:
@@ -153,7 +155,7 @@ def send_message(message='', day=None, meal='lunch', file_name=None, request_id=
     meal_label = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                           ('早餐', '早点', '午餐', '午点', '晚餐')))[meal]
     instruction = (
-        '你正在童健云膳食工作台中与已登录的系统管理员对话。'
+        '你正在童健云统一工作台中与已登录的系统管理员对话；工作范围是 /home/zyd/frappe 下全部项目和当前站点全部已安装应用。'
         f'当前页面选中 {day} {meal_label}。'
         '请简洁地用中文回答。需要操作食谱时，核对现有记录并使用应用已有的业务服务与校验，'
         '不要把草稿说成已发布、把计划人数说成实际人数。'
@@ -163,7 +165,7 @@ def send_message(message='', day=None, meal='lunch', file_name=None, request_id=
     )
     if attachment:
         instruction += f"上传的私有文件名为 {attachment['name']}，服务器路径为 {attachment['path']}。请先读取它。"
-    instruction += '\n用户需求：' + (text or '请识别上传的食谱，说明内容并处理可明确判断的食谱操作。')
+    instruction += '\n用户需求：' + (text or '请识别上传的业务文件并说明内容；目标业务或写入意图不明确时先询问，不自动当作食谱导入。')
 
     task_id = str(request_id or uuid.uuid4())
     if not SESSION_RE.fullmatch(task_id):
@@ -202,14 +204,14 @@ def _command(attachment):
     session_id = cached.decode() if isinstance(cached, bytes) else str(cached or '')
     if session_id and not SESSION_RE.fullmatch(session_id):
         session_id = ''
-    command = [CODEX]
+    command = [CODEX, '-C', PROJECT]
     if session_id:
-        command += ['exec', 'resume', '--json']
+        command += ['exec', 'resume', '--json', '--skip-git-repo-check']
         if attachment and attachment['image']:
             command += ['--image', attachment['path']]
         command += [session_id, '-']
     else:
-        command += ['-C', PROJECT, 'exec', '--json']
+        command += ['exec', '--json', '--skip-git-repo-check']
         if attachment and attachment['image']:
             command += ['--image', attachment['path']]
         command += ['-']

@@ -10,7 +10,8 @@ def main():
     parser.add_argument('--site', required=True)
     parser.add_argument('--task', required=True)
     parser.add_argument('--view', required=True, choices=['students', 'class_students', 'meal_counts', 'recipe_week', 'recipe_nutrition',
-                        'business_catalog', 'business_list', 'business_record', 'stock', 'ingredient_nutrition', 'classroom_day', 'weekly_orders'])
+                        'business_catalog', 'business_list', 'business_record', 'stock', 'ingredient_nutrition', 'classroom_day', 'weekly_orders',
+                        'project_catalog', 'frappe_catalog', 'frappe_doctype', 'frappe_document', 'frappe_report', 'frappe_page', 'frappe_workspace'])
     parser.add_argument('--presentation', choices=['table', 'bars'])
     parser.add_argument('--components', nargs='+', choices=['stats', 'table', 'bars', 'notice', 'recipe_week'])
     parser.add_argument('--group')
@@ -22,7 +23,8 @@ def main():
     parser.add_argument('--age-group', dest='age_group', choices=['4–6岁平均', '4岁', '5岁', '6岁'])
     parser.add_argument('--gender', choices=['男女平均', '男', '女'])
     parser.add_argument('--student-groups', dest='student_groups', nargs='+')
-    for name in ('entity', 'record', 'keyword', 'period', 'start-date', 'end-date', 'status', 'company', 'warehouse', 'domain'):
+    for name in ('entity', 'record', 'keyword', 'period', 'start-date', 'end-date', 'status', 'company', 'warehouse', 'domain',
+                 'app', 'module', 'doctype', 'document', 'report', 'page', 'workspace', 'kind'):
         parser.add_argument('--' + name)
     parser.add_argument('--offset', type=int)
     args = parser.parse_args()

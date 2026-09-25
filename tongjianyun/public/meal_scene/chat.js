@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=business-canvas-20260925-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=frappe-wide-20260925-1';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
 const messages=$('chat-messages'),chip=$('chat-file-chip'),fileName=$('chat-file-name');
@@ -149,7 +149,7 @@ form.addEventListener('submit',async event=>{
   const text=input.value.trim(),file=fileInput.files?.[0];if(!text&&!file)return input.focus();
   const {day,meal}=context();if(!day)return addMessage('assistant error','业务日期还没读取完成，请稍等。');
   submitting=true;controls();
-  const sending=addMessage('assistant',file?'正在上传食谱…':'正在发送…');scrollMessages();
+  const sending=addMessage('assistant',file?'正在上传业务文件…':'正在发送…');scrollMessages();
   try{
     const file_name=file?await upload(file):undefined;
     const result=await post('send_message',{message:text,day,meal,file_name,stream:1,request_id:crypto.randomUUID(),view_context:currentViewContext()});

@@ -27,7 +27,7 @@ class MealChatTests(unittest.TestCase):
         event = progress_event({'type': 'item.completed', 'item': {
             'id': 'tool1', 'type': 'command_execution', 'command': 'python read.xlsx',
             'aggregated_output': 'private contents', 'exit_code': 0}})
-        self.assertEqual(event, {'kind': 'progress', 'item_id': 'tool1', 'text': '读取食谱文件', 'status': 'completed'})
+        self.assertEqual(event, {'kind': 'progress', 'item_id': 'tool1', 'text': '读取业务文件', 'status': 'completed'})
         event = progress_event({'type': 'item.completed', 'item': {
             'id': 'answer', 'type': 'agent_message', 'text': 'secret sk-abcdefghijklmnop'}})
         self.assertNotIn('sk-', event['text'])
