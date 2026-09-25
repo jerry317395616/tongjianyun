@@ -13,6 +13,29 @@ TASK = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
 
 
 class MealChatTests(unittest.TestCase):
+    def test_admin_instruction_allows_code_and_data_with_correct_identity(self):
+        instruction = meal_chat.execution_instruction('child.myyr.top', 'Administrator')
+        self.assertIn('Linux 身份为 root', instruction)
+        self.assertIn('修改项目代码', instruction)
+        self.assertIn('显式提交成功事务', instruction)
+        self.assertIn('"site": "child.myyr.top"', instruction)
+        self.assertIn('"actor": "Administrator"', instruction)
+        self.assertIn('不代表整个 Codex 只能读取', instruction)
+        self.assertIn('不能替用户授权', instruction)
+
+    def test_privileged_chat_still_rejects_ordinary_users(self):
+        for actor, roles, allowed in [('Guest', [], False), ('teacher', ['Education Manager'], False),
+                                     ('manager', ['System Manager'], True), ('Administrator', [], True)]:
+            with self.subTest(actor=actor), patch.object(meal_chat, 'require_access'), \
+                 patch.object(meal_chat, 'mark_private_response'), \
+                 patch.object(meal_chat.frappe, 'session', SimpleNamespace(user=actor)), \
+                 patch.object(meal_chat.frappe, 'get_roles', return_value=roles):
+                if allowed:
+                    meal_chat.require_chat_access()
+                else:
+                    with self.assertRaises(meal_chat.frappe.PermissionError):
+                        meal_chat.require_chat_access()
+
     def test_zero_timeout_stays_unlimited_on_patched_gunicorn(self):
         from tongjianyun.meal_sse_worker import SSEThreadWorker, ThreadWorker
         worker = object.__new__(SSEThreadWorker)
