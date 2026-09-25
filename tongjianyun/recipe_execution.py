@@ -84,8 +84,10 @@ def inspect(recipe):
 
 @frappe.whitelist()
 def status(recipe):
-    procurement._read(procurement.RECIPE, recipe)
+    doc = procurement._read(procurement.RECIPE, recipe)
     state = frappe.cache.get_value(_key(recipe)) or _latest(recipe)
+    if state and state.get('status') == 'completed' and doc.workflow_status != '已发布':
+        state = dict(state, status='stale', message='食谱已修改为草稿；这里的采购结算属于修改前的版本，请核对原单，不会自动重复采购或付款。')
     if state and state.get("status") in ("queued", "running"):
         from frappe.utils.background_jobs import is_job_enqueued
         if not is_job_enqueued(state["job_id"]):
@@ -116,7 +118,7 @@ def start(recipe, revision, confirmed=0, include_history=0, fallback_count=None)
             frappe.throw("食谱已变更，请重新打开发布窗口。")
         if previous and previous["status"] == "completed":
             if previous["revision"] != current:
-                frappe.throw("本食谱已有结算记录，请创建修订版，不会覆盖或重复采购。")
+                frappe.throw("本周食谱已有结算记录，请核对原采购单据；食谱修改保存在同一份记录中，不会覆盖或重复采购。")
             return _public(previous)
         state = {"recipe": recipe, "revision": current, "actor": frappe.session.user,
                  "status": "queued", "stage": "准备", "message": "已排队，可关闭窗口，稍后重新查看进度。",
@@ -142,7 +144,7 @@ def _assert_existing_request_matches(name, plan):
         return sorted((str(r.get("schedule_date")), r.get("item_code"), r.get("uom"),
                        round(float(r.get("qty") or 0), 6), round(float(r.get("rate") or 0), 6)) for r in rows)
     if signature(request.items) != signature(plan["lines"]):
-        frappe.throw("已有采购需求的数量、日期、单位或价格与当前食谱不同。请先核对原单或使用修订版，系统不会修改已提交单据。")
+        frappe.throw("已有采购需求的数量、日期、单位或价格与当前食谱不同。请先核对原单，系统不会修改已提交单据或另建食谱副本。")
 
 
 def _verify_settlement(result):
@@ -182,6 +184,8 @@ def run(state):
                 frappe.throw("部分食材尚未匹配。请使用下方“处理待确认食材”或“查看异常详情”，处理后点击“继续发布并结算”；不会猜测外购或自制。")
             # Release the old read snapshot, lock the recipe through the entire financial transaction.
             frappe.db.rollback()
+            from tongjianyun.recipe_week import lock_recipe_writes
+            lock_recipe_writes()
             frappe.db.get_value(procurement.RECIPE, recipe, "name", for_update=True)
             doc = _access(recipe, write=True)
             if source_snapshot(recipe)["revision"] != state["revision"]:

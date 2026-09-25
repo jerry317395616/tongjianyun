@@ -6,6 +6,16 @@ from tongjianyun import recipe_procurement as p
 
 
 class ExecutionTests(unittest.TestCase):
+    def test_previous_settlement_does_not_mark_edited_draft_as_published(self):
+        previous={'status':'completed','stage':'完成','message':'旧版本已结算'}
+        cache=MagicMock();cache.get_value.return_value=previous
+        with patch.object(p,'_read',return_value=_dict(workflow_status='草稿')),patch.object(flow.frappe,'cache',cache):
+            result=flow.status('R')
+        self.assertEqual(result['status'],'stale')
+        self.assertIn('修改前的版本',result['message'])
+        self.assertEqual(previous['status'],'completed')
+        cache.set_value.assert_not_called()
+
     def test_stock_price_is_converted_not_inflated(self):
         for unit in ("g", ""):
             rows=[_dict(uom=unit, price_list_rate=0.003, valid_from=None, valid_upto=None)]

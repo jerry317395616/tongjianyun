@@ -139,7 +139,7 @@ def get_overview(day=None, meal='lunch'):
     require_access()
     day, meal = business_day(day), meal_key(meal)
     recipes = visible_rows(RECIPE, ['name', 'title', 'week_start', 'week_end', 'workflow_status', 'modified'],
-        {'is_deleted': 0, 'week_start': ['<=', str(day)], 'week_end': ['>=', str(day)]})
+        {'is_deleted': 0, 'workflow_status': ['!=', '已归档'], 'week_start': ['<=', str(day)], 'week_end': ['>=', str(day)]})
     return {'day': str(day), 'today': today(), 'meal': meal, 'generated_at': str(now_datetime()),
         'user_label': frappe.db.get_value('User', frappe.session.user, 'full_name') or '膳食工作空间',
         'recipes': recipes, 'plans': class_plans(day, meal),
@@ -158,7 +158,7 @@ def get_overview(day=None, meal='lunch'):
 @frappe.whitelist()
 def get_recipes(offset=0, keyword=''):
     require_access()
-    filters = {'is_deleted': 0}
+    filters = {'is_deleted': 0, 'workflow_status': ['!=', '已归档']}
     if keyword:
         filters['title'] = ['like', '%' + str(keyword)[:100] + '%']
     return visible_rows(RECIPE, ['name', 'title', 'week_start', 'week_end', 'workflow_status', 'modified'],
@@ -185,17 +185,12 @@ def get_recipe(recipe):
 
 
 def recipe_edit_policy(doc, payload):
-    """Never rewrite a published, linked, locked, or non-draft source."""
+    """Edit the same weekly identity; locked dates are checked during saving."""
     if not can(RECIPE, 'write'):
         return {'mode': 'none', 'reason': '当前账号没有修改食谱的权限。'}
-    from tongjianyun.recipe_storage import _recipe_business_links
-    linked = bool(_recipe_business_links(doc))
-    locked = any(day.get('locked') for day in payload.get('days') or [])
-    if (doc.workflow_status or '草稿') == '草稿' and not linked and not locked and doc.recipe_id:
-        return {'mode': 'update', 'reason': '未关联下游业务的普通草稿，可在周历内直接保存。'}
-    if can(RECIPE, 'create'):
-        return {'mode': 'copy', 'reason': '原食谱已发布、已关联业务或含锁定日期；保存时创建独立修订草稿，原记录保持不变。'}
-    return {'mode': 'none', 'reason': '原食谱不能直接覆盖，当前账号也没有创建修订草稿的权限。'}
+    if doc.get('is_deleted') or doc.workflow_status == '已归档' or not doc.recipe_id:
+        return {'mode': 'none', 'reason': '这份食谱仅供历史查阅，请编辑本周当前食谱。'}
+    return {'mode': 'update', 'reason': '保存到同一份周食谱，保留修改历史；已锁定日期不可改动，不覆盖采购或用餐记录。'}
 
 
 def editable_day_content(day):
@@ -310,8 +305,10 @@ def create_recipe_draft(payload, import_id=''):
 
 @frappe.whitelist(methods=['POST'])
 def save_recipe_edit(recipe, revision, payload):
-    """Update an unlinked draft, or branch a protected source into a new draft."""
+    """Update one weekly master, retaining a full prior-version snapshot."""
     require_access()
+    from tongjianyun.recipe_week import lock_recipe_writes
+    lock_recipe_writes()
     snapshot = get_recipe(recipe)
     if not revision or str(revision) != snapshot['revision']:
         frappe.throw('食谱已被其他人修改，请刷新后重新核对。')
@@ -334,6 +331,7 @@ def save_recipe_edit(recipe, revision, payload):
         if frappe.db.exists(RECIPE, {'recipe_id': doc.recipe_id}) != doc.name:
             frappe.throw('食谱标识不唯一，不能在此直接覆盖，请联系管理员核对。')
         clean['recipe']['recipeId'] = doc.recipe_id
+        clean['recipe']['revision'] = str(revision)
         for key, attr in (('sourceFileName', 'source_file_name'), ('parser', 'parser'),
                 ('relationSource', 'relation_source'), ('importedAt', 'imported_at')):
             clean['recipe'][key] = str(getattr(doc, attr, '') or '')
@@ -355,11 +353,6 @@ def save_recipe_edit(recipe, revision, payload):
                     day.update({'score': 0, 'risk': 'normal', 'updatedAt': str(now_datetime()),
                         'updatedBy': frappe.session.user, 'editReason': '',
                         'version': int(old.get('version') or 1) + 1})
-        result = save_recipe_payload(clean)
-    else:
-        if not can(RECIPE, 'create'):
-            raise frappe.PermissionError('当前账号没有创建修订草稿的权限')
-        clean['recipe']['relationSource'] = f'修订自 {doc.name}'[:140]
         result = save_recipe_payload(clean)
     return {'name': result['erp_sync']['recipe'], 'title': clean['recipe']['title'],
         'status': '草稿', 'mode': policy['mode'], 'source': doc.name, 'sync': result['erp_sync']}

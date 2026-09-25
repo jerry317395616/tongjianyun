@@ -141,6 +141,7 @@ def scope_filters(entry, fields):
     filters = []
     if entry.doctype == RECIPE:
         filters.append(['is_deleted', '=', 0])
+        filters.append(['workflow_status', '!=', '已归档'])
     if entry.doctype in {'Tongjianyun Recipe Dish', 'Tongjianyun Recipe Ingredient', 'Tongjianyun Recipe Day'}:
         frappe.has_permission(RECIPE, 'read', throw=True)
         names = frappe.get_list(RECIPE, filters={'is_deleted': 0}, pluck='name', limit_page_length=0)
@@ -378,7 +379,7 @@ def ingredient_view(choice):
     from tongjianyun.tongjianyun.report.ingredient_nutrition_statistics.ingredient_nutrition_statistics import execute
     if not choice.get('recipe'):
         candidates = visible_rows(RECIPE, ['name', 'title', 'week_start', 'week_end'],
-                                 {'is_deleted': 0, 'week_start': ['<=', choice['day']], 'week_end': ['>=', choice['day']]})
+                                 {'is_deleted': 0, 'workflow_status': ['!=', '已归档'], 'week_start': ['<=', choice['day']], 'week_end': ['>=', choice['day']]})
         if not candidates['available']:
             raise frappe.PermissionError('没有食谱查看权限。')
         rows = candidates['rows']

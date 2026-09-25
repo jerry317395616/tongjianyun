@@ -11,6 +11,15 @@ test('browse header has no secondary processing menu', () => {
     assert.ok(header.includes('execute-recipe'));
 });
 
+test('editing a published weekly recipe keeps its identity instead of making a copy',()=>{
+    const frappe={pages:{'tongjianyun-recipe-workbench':{}},utils:{escape_html:String},show_alert(){}};
+    const context=vm.createContext({frappe});vm.runInContext(source+'\nthis.Page=TongjianyunRecipePage;',context);
+    const page=Object.create(context.Page.prototype);let editing=false;page.enterEdit=()=>editing=true;
+    page.state={selectedRecipe:'R',payload:{recipe:{recipeId:'R',title:'本周食谱',workflowStatus:'已发布'}}};
+    page.editRecipe();assert.equal(editing,true);assert.equal(page.state.selectedRecipe,'R');
+    assert.equal(page.state.payload.recipe.recipeId,'R');assert.equal(page.state.payload.recipe.title,'本周食谱');
+});
+
 for (const [status, stage, expected] of [['failed','食材匹配',true], ['interrupted','食材匹配',true], ['running','食材匹配',false], ['completed','完成',false], ['failed','校验人数与价格',false]]) {
     test(`${status}/${stage}: contextual recovery ${expected}`, async () => {
         const appended = [], handlers = {};

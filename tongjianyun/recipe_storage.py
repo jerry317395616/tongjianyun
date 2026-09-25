@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from typing import Any
 
 import frappe
 from frappe import _
 from frappe.query_builder.functions import Count
-from frappe.utils import cint, flt, now_datetime, nowdate
+from frappe.utils import cint, flt, getdate, now_datetime, nowdate
 
 RECIPE_DOCTYPE = "Tongjianyun Recipe"
 DISH_DOCTYPE = "Tongjianyun Recipe Dish"
@@ -231,10 +232,14 @@ def _recipe_payload(doc) -> dict[str, Any]:
         "importedAt": str(doc.imported_at or ""),
         "workflowStatus": doc.workflow_status or "草稿",
         "isDeleted": bool(doc.is_deleted),
+        "revision": str(doc.modified or ""),
     }
 
 
 def _save_current_recipe(payload: Any, *, commit: bool) -> dict[str, Any]:
+    _require_recipe_write()
+    from tongjianyun.recipe_week import lock_recipe_writes, validate_weekly_recipe, week_bounds
+    lock_recipe_writes()
     root = _as_dict(payload)
     recipe_data = _as_dict(root.get("recipe"))
     days = [_as_dict(day) for day in _as_list(root.get("days"))]
@@ -244,6 +249,34 @@ def _save_current_recipe(payload: Any, *, commit: bool) -> dict[str, Any]:
     recipe = frappe.get_doc(RECIPE_DOCTYPE, existing) if existing else frappe.new_doc(RECIPE_DOCTYPE)
     if recipe.get("is_deleted"):
         frappe.throw("该食谱已在回收站中，请先恢复后再编辑。")
+    if recipe.get('workflow_status') == '已归档':
+        frappe.throw('这份食谱已归档，仅供查阅历史；请编辑本周当前食谱。')
+    recipe.check_permission('write' if existing else 'create')
+    week_bounds(recipe_data.get('weekStart'), recipe_data.get('weekEnd'))
+    dates = [getdate(day['date']) if day.get('date') else None for day in days]
+    if (len(set(dates)) != len(dates) or any(day is None or not
+            getdate(recipe_data['weekStart']) <= day <= getdate(recipe_data['weekEnd']) for day in dates)):
+        frappe.throw('食谱日期不能重复，且必须位于本周起止日期内。')
+    previous = None
+    if existing:
+        locked_revision = frappe.db.get_value(RECIPE_DOCTYPE, recipe.name, 'modified', for_update=True)
+        if (not recipe_data.get('revision') or str(recipe_data['revision']) != str(locked_revision)
+                or str(recipe.modified) != str(locked_revision)):
+            frappe.throw('食谱已更新或缺少版本号。请重新读取这份食谱后再保存，不要另建副本。')
+        if (str(recipe.week_start) != str(recipe_data.get('weekStart'))
+                or str(recipe.week_end) != str(recipe_data.get('weekEnd'))):
+            frappe.throw('编辑不能改变原食谱日期范围；编排另一周时请新建该周食谱。')
+        previous = _current_recipe_payload(recipe)
+        from tongjianyun.meal_scene import editable_day_content
+        current_days = {str(day.get('date')): day for day in days}
+        for old in previous['days']:
+            if old.get('locked'):
+                current = current_days.get(str(old['date']))
+                if current is None or editable_day_content(current) != editable_day_content(old):
+                    frappe.throw(f"{old['date']} 的食谱已锁定，不能修改或删除该日内容。")
+                # Client payloads cannot clear an existing execution lock.
+                current.clear()
+                current.update(deepcopy(old))
     recipe.recipe_id = recipe_id
     recipe.title = (_clean(recipe_data.get("title")) or "\u5f53\u524d\u5468\u98df\u8c31")[:140]
     recipe.week_start = recipe_data.get("weekStart") or None
@@ -252,7 +285,14 @@ def _save_current_recipe(payload: Any, *, commit: bool) -> dict[str, Any]:
     recipe.parser = _clean(recipe_data.get("parser"))[:140]
     recipe.relation_source = _clean(recipe_data.get("relationSource"))[:140]
     recipe.imported_at = recipe_data.get("importedAt") or now_datetime()
-    recipe.workflow_status = _clean(recipe_data.get("workflowStatus")) or "草稿"
+    # Content saving is never publishing or replaying downstream purchasing.
+    recipe.workflow_status = '草稿'
+    validate_weekly_recipe(recipe)
+    if previous:
+        frappe.get_doc({'doctype': 'Version', 'ref_doctype': RECIPE_DOCTYPE, 'docname': recipe.name,
+            'data': json.dumps({'recipe_snapshot': previous, 'recipe_revision': str(locked_revision),
+                                'changed': [], 'added': [], 'removed': [], 'row_changed': []},
+                               ensure_ascii=False, default=str)}).insert(ignore_permissions=True)
     _save_doc(recipe)
 
     _delete_recipe_rows(recipe.name)
@@ -467,18 +507,18 @@ def _current_recipe_payload(recipe) -> dict[str, Any]:
 @frappe.whitelist()
 def get_current_recipe() -> dict[str, Any] | None:
     _require_login()
-    name = frappe.db.get_value(RECIPE_DOCTYPE, {"recipe_id": "current", "is_deleted": 0}, "name")
+    name = frappe.db.get_value(RECIPE_DOCTYPE, {"recipe_id": "current", "is_deleted": 0, "workflow_status": ["!=", "已归档"]}, "name")
     if not name:
         name = frappe.db.get_value(
             RECIPE_DOCTYPE,
-            {"week_start": ["<=", nowdate()], "week_end": [">=", nowdate()], "is_deleted": 0},
+            {"week_start": ["<=", nowdate()], "week_end": [">=", nowdate()], "is_deleted": 0, "workflow_status": ["!=", "已归档"]},
             "name",
             order_by="modified desc",
         )
     if not name:
         name = frappe.db.get_value(
             RECIPE_DOCTYPE,
-            {"is_deleted": 0},
+            {"is_deleted": 0, "workflow_status": ["!=", "已归档"]},
             "name",
             order_by="week_start desc, modified desc",
         )
@@ -492,6 +532,30 @@ def get_recipe_detail(recipe: str) -> dict[str, Any]:
     _require_login()
     recipe_name = _get_recipe_name(recipe)
     return _current_recipe_payload(frappe.get_doc(RECIPE_DOCTYPE, recipe_name))
+
+
+@frappe.whitelist()
+def get_recipe_history(recipe: str, version: str | None = None) -> dict[str, Any]:
+    """Read prior complete versions without making a second weekly recipe."""
+    _require_login()
+    doc = frappe.get_doc(RECIPE_DOCTYPE, _get_recipe_name(recipe))
+    doc.check_permission('read')
+    if version:
+        row = frappe.get_doc('Version', version)
+        if row.ref_doctype != RECIPE_DOCTYPE or row.docname != doc.name:
+            frappe.throw('版本不属于当前食谱。', frappe.PermissionError)
+        # Require complete detail visibility, as for editing this recipe.
+        from tongjianyun.meal_scene import get_recipe
+        get_recipe(doc.name)
+        snapshot = json.loads(row.data or '{}').get('recipe_snapshot')
+        if not snapshot:
+            frappe.throw('该历史记录不是完整食谱快照。')
+        return {'name': row.name, 'created': str(row.creation), 'payload': snapshot}
+    rows = frappe.get_all('Version', filters={'ref_doctype': RECIPE_DOCTYPE, 'docname': doc.name},
+                         fields=['name', 'creation', 'owner', 'data'], order_by='creation desc', limit_page_length=100)
+    return {'recipe': doc.name, 'versions': [
+        {'name': row.name, 'created': str(row.creation), 'actor': row.owner}
+        for row in rows if 'recipe_snapshot' in json.loads(row.data or '{}')]}
 
 
 @frappe.whitelist()

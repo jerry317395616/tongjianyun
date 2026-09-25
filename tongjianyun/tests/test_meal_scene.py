@@ -1,7 +1,7 @@
 """Read-model, state semantics and write boundaries, no production facts written."""
 import unittest
 from unittest.mock import patch, MagicMock
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 import ast
 
@@ -11,6 +11,11 @@ from tongjianyun import meal_scene as service, workspace_entry as entry
 
 
 class MealSceneTests(unittest.TestCase):
+    def setUp(self):
+        # SQL-mocked tests must not query System Settings on a cold cache.
+        clock = patch.object(service, 'now_datetime', return_value=datetime(2026,9,25,12,0))
+        clock.start();self.addCleanup(clock.stop)
+
     def test_missing_plans_are_unknown_not_zero(self):
         result=service.meal_summary([{'has_plan':False,'confirmed':False,'expected':None,'actual':None}],1)
         self.assertIsNone(result['expected']); self.assertIsNone(result['actual']); self.assertEqual(result['missing_groups'],1)
@@ -127,18 +132,21 @@ class MealSceneTests(unittest.TestCase):
             self.assertEqual(save.call_args.args[0]['recipe']['sourceFileName'],'private-week.xlsx')
             self.assertEqual(save.call_args.args[0]['recipe']['parser'],'I-ONE Agent')
 
-    def test_scene_edit_policy_protects_published_linked_and_locked_recipes(self):
+    def test_scene_edit_policy_keeps_one_identity_even_with_date_based_links(self):
         doc=_dict(recipe_id='R-ID',workflow_status='草稿')
         payload={'days':[{'date':'2026-09-21','locked':False}]}
         with patch.object(service,'can',return_value=True),patch('tongjianyun.recipe_storage._recipe_business_links',return_value=[]):
             self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'update')
             doc.workflow_status='已发布'
-            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'copy')
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'update')
             doc.workflow_status='草稿';payload['days'][0]['locked']=True
-            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'copy')
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'update')
         payload['days'][0]['locked']=False
         with patch.object(service,'can',return_value=True),patch('tongjianyun.recipe_storage._recipe_business_links',return_value=[{'doctype':'Material Request'}]):
-            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'copy')
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'update')
+        doc.workflow_status='已归档'
+        with patch.object(service,'can',return_value=True):
+            self.assertEqual(service.recipe_edit_policy(doc,payload)['mode'],'none')
 
     def test_scene_edit_rejects_stale_revision_before_any_write(self):
         source={'recipe':{'title':'原食谱'},'days':[{'date':'2026-09-21','portions':[]}]}
@@ -162,18 +170,18 @@ class MealSceneTests(unittest.TestCase):
             self.assertEqual(sent['days'][0]['version'],4)
             self.assertEqual(sent['days'][0]['portions'][0]['dishes'],['米饭'])
 
-    def test_scene_published_edit_creates_independent_draft(self):
+    def test_scene_published_edit_preserves_identity_and_returns_to_draft(self):
         source={'recipe':{'recipeId':'EXISTING','title':'修订草稿','weekStart':'2026-09-21','weekEnd':'2026-09-25','workflowStatus':'已发布'},
             'days':[{'date':'2026-09-21','portions':[]}]}
-        doc=_dict(name='PUBLISHED',recipe_id='EXISTING',workflow_status='已发布')
+        doc=_dict(name='PUBLISHED',recipe_id='EXISTING',workflow_status='已发布',week_start='2026-09-21',week_end='2026-09-25')
         doc.check_permission=MagicMock()
-        with patch.object(service,'require_access'),patch.object(service,'get_recipe',return_value={'revision':'rev1','payload':source}),patch.object(service,'read_doc',return_value=doc),patch.object(service,'recipe_edit_policy',return_value={'mode':'copy'}),patch.object(service,'can',return_value=True),patch.object(service.frappe.db,'sql',return_value=[{'modified':'rev1'}]),patch('tongjianyun.recipe_storage.save_recipe_payload',return_value={'erp_sync':{'recipe':'NEW'}}) as save:
+        with patch.object(service,'require_access'),patch.object(service,'get_recipe',return_value={'revision':'rev1','payload':source}),patch.object(service,'read_doc',return_value=doc),patch.object(service,'recipe_edit_policy',return_value={'mode':'update'}),patch.object(service,'can',return_value=True),patch.object(service.frappe.db,'sql',return_value=[{'modified':'rev1'}]),patch.object(service.frappe.db,'exists',return_value='PUBLISHED'),patch('tongjianyun.recipe_storage.save_recipe_payload',return_value={'erp_sync':{'recipe':'PUBLISHED'}}) as save:
             result=service.save_recipe_edit('PUBLISHED','rev1',source)
             sent=save.call_args.args[0]
-            self.assertEqual(result['mode'],'copy');self.assertEqual(result['name'],'NEW')
-            self.assertNotEqual(sent['recipe']['recipeId'],'EXISTING')
+            self.assertEqual(result['mode'],'update');self.assertEqual(result['name'],'PUBLISHED')
+            self.assertEqual(sent['recipe']['recipeId'],'EXISTING')
+            self.assertEqual(sent['recipe']['revision'],'rev1')
             self.assertEqual(sent['recipe']['workflowStatus'],'草稿')
-            self.assertEqual(sent['recipe']['relationSource'],'修订自 PUBLISHED')
 
     def test_create_requires_explicit_confirmation(self):
         with patch.object(service,'require_access'),patch.object(service.frappe,'throw',side_effect=ValueError),patch('tongjianyun.recipe_procurement.create_request') as create:

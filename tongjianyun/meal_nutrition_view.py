@@ -80,7 +80,7 @@ def nutrition_view(choice):
     recipe = choice.get('recipe')
     if not recipe:
         candidates = visible_rows(RECIPE, ['name', 'title', 'week_start', 'week_end', 'workflow_status'],
-                                  {'is_deleted': 0, 'week_start': ['<=', choice['day']],
+                                  {'is_deleted': 0, 'workflow_status': ['!=', '已归档'], 'week_start': ['<=', choice['day']],
                                    'week_end': ['>=', choice['day']]})
         if not candidates['available']:
             raise frappe.PermissionError('没有食谱查看权限。')

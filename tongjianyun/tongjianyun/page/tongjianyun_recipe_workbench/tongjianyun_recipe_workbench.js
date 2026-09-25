@@ -166,7 +166,7 @@ class TongjianyunRecipePage {
                     </div>
                     <div class="tjy-hero-actions">
                         <button class="tjy-outline-button" data-action="import">${frappe.utils.icon("upload", "sm")}<span>导入食谱</span></button>
-                        <button class="tjy-outline-button" data-action="edit">${["已发布", "已归档"].includes(recipe.workflowStatus) ? "创建修订版" : "编辑食谱"}</button>
+                        ${recipe.workflowStatus !== "已归档" ? '<button class="tjy-outline-button" data-action="edit">编辑食谱</button>' : ''}
                         ${["草稿", "已发布"].includes(recipe.workflowStatus) ? '<button class="tjy-primary-button" data-action="execute-recipe">发布并完成采购结算</button>' : ''}
                     </div>
                 </header>
@@ -804,7 +804,7 @@ class TongjianyunRecipePage {
             if (state.status === "completed" && this.state.payload?.recipe) {
                 this.state.payload.recipe.workflowStatus = "已发布";
                 this.main.find('.tjy-status').text("已发布");
-                this.main.find('[data-action="edit"]').text("创建修订版");
+                this.main.find('[data-action="edit"]').text("编辑食谱");
             }
             const running = ["queued", "running"].includes(state.status);
             const label = state.status === "completed" ? "查看结算结果" : running ? "后台执行中…" : ["failed", "interrupted"].includes(state.status) ? "继续发布并结算" : "发布并完成采购结算";
@@ -1322,15 +1322,11 @@ class TongjianyunRecipePage {
     editRecipe() {
         const recipe = this.state.payload?.recipe;
         if (!recipe) return;
-        if (["已发布", "已归档"].includes(recipe.workflowStatus)) {
-            const payload = normalizePayload(this.state.payload);
-            payload.recipe.recipeId = `${recipe.recipeId || "RECIPE"}-REV-${Date.now().toString().slice(-6)}`;
-            payload.recipe.title = `${String(recipe.title || "周食谱").replace(/（修订版）$/, "")}（修订版）`;
-            payload.recipe.workflowStatus = "草稿";
-            this.state.payload = payload;
-            this.state.selectedRecipe = null;
-            frappe.show_alert({ message: "已根据发布版创建草稿修订版", indicator: "blue" });
+        if (recipe.workflowStatus === "已归档") {
+            frappe.msgprint("这份食谱已归档，请编辑本周当前食谱。");
+            return;
         }
+        frappe.show_alert({message: "修改保存到本周同一份食谱，保留历史版本；保存后为草稿，不改动采购或用餐记录。", indicator: "blue"});
         this.enterEdit();
     }
 
