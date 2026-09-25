@@ -1,14 +1,14 @@
 // Registered components only. Model messages, HTML and executable code are never rendered here.
 const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week']);
-let request,storageKey='',current=null,ticket=0;
+let request,current=null,ticket=0;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
-function stored(){try{return JSON.parse(sessionStorage.getItem(storageKey)||'null');}catch(_){return null;}}
-function remember(choice){try{sessionStorage.setItem(storageKey,JSON.stringify(choice));}catch(_){}}
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
 export function currentViewContext(){return current||{view:'recipe_week',day:$('day').value,meal:$('meal').value};}
 export function initializeViews(options){
-  request=options.request;storageKey='meal-business-view:'+encodeURIComponent(options.user);
+  request=options.request;
+  // Each page load starts on the weekly recipe, independently of chat history.
+  showCalendar();
   $('view-back').addEventListener('click',()=>showCalendar());
   $('refresh').addEventListener('click',()=>{if(current&&current.view!=='recipe_week')showBusinessView(current);});
   for(const id of ['day','meal'])$(id).addEventListener('change',()=>{
@@ -24,7 +24,7 @@ function calendarContext(choice){
 function showCalendar(choice){
   ++ticket;current=null;notice('');$('business-view').hidden=true;$('recipe-workspace').hidden=false;
   $('business-canvas').setAttribute('aria-label','本周膳食总览');
-  remember({view:'recipe_week'});calendarContext(choice);
+  calendarContext(choice);
 }
 function actionButton(action){
   const button=node('button',action.label,'view-action');button.type='button';
@@ -79,14 +79,8 @@ export async function showBusinessView(choice){
     $('view-title').textContent=result.title;$('view-subtitle').textContent=result.subtitle;
     $('view-content').replaceChildren(fragment);$('view-actions').replaceChildren(...(result.actions||[]).map(actionButton));
     $('view-source').textContent=`来源：${result.source} · 更新于 ${result.generated_at}`;
-    current=result.selection;remember(current);
+    current=result.selection;
     $('recipe-workspace').hidden=true;$('business-view').hidden=false;$('business-canvas').setAttribute('aria-label',result.title);
     notice('');if(current.view==='meal_counts')calendarContext(current);
   }catch(error){if(turn===ticket)notice(error.message||'数据读取失败，已保留上一次结果。',true);}
-}
-export async function restoreBusinessView(latest){
-  const saved=stored();
-  if(saved?.view==='recipe_week'){showCalendar();return;}
-  if(saved&&validViews.has(saved.view))await showBusinessView(saved);
-  else if(latest)await showBusinessView(latest);
 }

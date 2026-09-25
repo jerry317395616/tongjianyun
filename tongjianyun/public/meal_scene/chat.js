@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,restoreBusinessView,currentViewContext} from './views.js?v=meal-views-20260925-2';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-default-week-20260925-1';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
 const messages=$('chat-messages'),chip=$('chat-file-chip'),fileName=$('chat-file-name');
@@ -114,15 +114,15 @@ function showFailure(error){
 }
 async function loadConversation(){
   const result=await request(api+'get_conversation');
-  const initial=!historyLoaded;let running=null,latestView=null;
+  const initial=!historyLoaded;let running=null;
   for(const task of result.tasks||[]){
     const view=taskView(task);view.state=task.status;
-    for(const event of task.events||[]){applyEvent(view,event,event.id,initial);if(event.kind==='view'&&event.version===1)latestView=event.selection;}
+    for(const event of task.events||[])applyEvent(view,event,event.id,initial);
     if(['queued','running'].includes(view.state))running=view;
   }
   if(running)connect(running);
   else{activeTask=null;source?.close();source=null;clearTimeout(recoveryTimer);controls();}
-  historyLoaded=true;if(initial)await restoreBusinessView(latestView);
+  historyLoaded=true;
   scrollMessages();
 }
 
@@ -165,6 +165,6 @@ form.addEventListener('submit',async event=>{
 showContext();controls();
 request(api+'get_chat_access').then(async result=>{
   allowed=!!result?.allowed;controls();
-  if(allowed){initializeViews({request,user:result.user});await loadConversation();}
+  if(allowed){initializeViews({request});await loadConversation();}
   else addMessage('assistant error','当前账号暂不能使用对话，请联系管理员。');
 }).catch(showFailure);

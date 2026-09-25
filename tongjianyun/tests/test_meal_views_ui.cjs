@@ -13,7 +13,7 @@ function setup(){
   const context=vm.createContext({document,URLSearchParams,sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
   const source=fs.readFileSync(path.join(__dirname,'../public/meal_scene/views.js'),'utf8').replace(/export /g,'');
   vm.runInContext(source,context);
-  return {nodes,context,run:code=>vm.runInContext(code,context)};
+  return {nodes,context,storage,run:code=>vm.runInContext(code,context)};
 }
 const data={version:1,selection:{view:'students'},title:'在园学生',subtitle:'scope',source:'Student',generated_at:'now',components:[{type:'stats',items:[{label:'人数',value:12,unit:'人'}]}]};
 test('view uses text nodes instead of executing model or record HTML',()=>{
@@ -38,8 +38,22 @@ test('failed query leaves successful data visible and does not set zero',async()
   run("request=async()=>{throw Error('没有权限')}");await run("showBusinessView({view:'class_students',group:'secret'})");
   assert.equal(nodes.get('view-title').textContent,'在园学生');assert.equal(nodes.get('view-status').textContent,'没有权限');
 });
-test('returning to calendar beats pending requests and survives restore',async()=>{
+test('returning to calendar beats pending requests',async()=>{
   const {run,context,nodes}=setup();let resolve;context.fetcher=()=>new Promise(r=>resolve=r);
   run("initializeViews({request:fetcher,user:'user'})");const pending=run("showBusinessView({view:'students'})");run('showCalendar()');resolve(data);await pending;
-  await run("restoreBusinessView({view:'students'})");assert.equal(nodes.get('recipe-workspace').hidden,false);assert.equal(nodes.get('business-view').hidden,true);
+  assert.equal(nodes.get('recipe-workspace').hidden,false);assert.equal(nodes.get('business-view').hidden,true);
+});
+test('page initialization defaults to weekly recipe despite legacy saved view and preserves date and meal',()=>{
+  const {run,context,nodes,storage}=setup();let requests=0;context.fetcher=()=>{requests++;};
+  storage.set('meal-business-view:user',JSON.stringify({view:'students'}));
+  run("$('day').value='2026-09-24';$('meal').value='lunch';initializeViews({request:fetcher,user:'user'})");
+  assert.equal(requests,0);assert.equal(nodes.get('recipe-workspace').hidden,false);assert.equal(nodes.get('business-view').hidden,true);
+  assert.equal(nodes.get('business-canvas').attrs['aria-label'],'本周膳食总览');
+  assert.deepEqual(JSON.parse(run('JSON.stringify(currentViewContext())')),{view:'recipe_week',day:'2026-09-24',meal:'lunch'});
+});
+test('data refresh keeps an explicitly selected business view',async()=>{
+  const {run,context,nodes}=setup();let requests=0;context.fetcher=async()=>{requests++;return data;};
+  run('initializeViews({request:fetcher})');await run("showBusinessView({view:'students'})");
+  nodes.get('refresh').listeners.click();await Promise.resolve();
+  assert.equal(requests,2);assert.equal(nodes.get('recipe-workspace').hidden,true);assert.equal(nodes.get('business-view').hidden,false);
 });
