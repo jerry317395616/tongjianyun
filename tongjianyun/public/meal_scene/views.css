@@ -9,6 +9,14 @@
 .view-stat-label{color:#6c8073;font-size:12px;margin-bottom:7px}
 .view-stat-value{font-size:40px;color:#284739;font-variant-numeric:tabular-nums;line-height:1.2}
 .view-stat-value small{font-size:13px;margin-left:6px;color:#6c8073}
+.view-stat-note{font-size:12px;color:#6c8073;margin-top:7px}
+.view-details{border:1px solid #dce7da;border-radius:10px;padding:13px 15px}
+.view-details>summary{font-size:13px;font-weight:600;cursor:pointer;color:#48745b;line-height:1.6}
+.view-details[open]>summary{margin-bottom:12px}
+.view-evaluation{font-weight:600;white-space:nowrap}
+.view-evaluation.good{color:#347653;background:#f0f8f1}
+.view-evaluation.warn{color:#9b6228;background:#fff8e9}
+.view-evaluation.unknown{color:#718276}
 .view-section{margin-top:20px}
 .view-section h2{font-size:15px;font-weight:600;margin:0 0 12px}
 .view-table-wrap{overflow-x:auto}

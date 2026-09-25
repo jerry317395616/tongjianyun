@@ -16,13 +16,14 @@ from tongjianyun.classroom import _scope, _roster
 from tongjianyun.meal_scene import business_day, meal_key, class_plans
 
 VIEWS = {'students': '在园学生', 'class_students': '班级学生',
-         'meal_counts': '用餐人数', 'recipe_week': '本周食谱'}
+         'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析'}
 LABELS = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                   ('早餐', '早点', '午餐', '午点', '晚餐')))
 PAGE_SIZE = 50
 COMPONENTS = {'students': {'stats', 'table', 'bars', 'notice'},
               'class_students': {'stats', 'table', 'notice'},
-              'meal_counts': {'stats', 'table', 'notice'}, 'recipe_week': {'recipe_week'}}
+              'meal_counts': {'stats', 'table', 'notice'}, 'recipe_week': {'recipe_week'},
+              'recipe_nutrition': {'stats', 'table', 'notice'}}
 
 
 def selection(value, default_day=None, default_meal='lunch'):
@@ -31,12 +32,17 @@ def selection(value, default_day=None, default_meal='lunch'):
             value = json.loads(value)
         except (TypeError, ValueError):
             frappe.throw('展示指令格式无效。')
-    if not isinstance(value, dict) or set(value) - {'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components'}:
+    from tongjianyun.meal_nutrition_view import FIELDS, nutrition_selection
+    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components'} | FIELDS):
         frappe.throw('展示指令含不支持的内容。')
     view = value.get('view')
     if not isinstance(view, str) or view not in VIEWS:
         frappe.throw('暂不支持这种业务视图。')
     clean = {'view': view}
+    if view != 'recipe_nutrition' and set(value) & FIELDS:
+        frappe.throw('这些筛选仅用于周食谱营养分析。')
+    if view == 'recipe_nutrition':
+        clean.update(nutrition_selection(value))
     if 'components' in value:
         blocks = value['components']
         if (not isinstance(blocks, list) or not 1 <= len(blocks) <= 4
@@ -60,7 +66,7 @@ def selection(value, default_day=None, default_meal='lunch'):
         if not 0 <= offset <= 100000:
             frappe.throw('名单分页位置无效。')
         clean.update(group=group.strip(), offset=offset)
-    if view in {'meal_counts', 'recipe_week'}:
+    if view in {'meal_counts', 'recipe_week', 'recipe_nutrition'}:
         clean.update(day=str(business_day(value.get('day') or default_day)),
                      meal=meal_key(value.get('meal') or default_meal))
     return clean
@@ -205,6 +211,7 @@ def meal_counts_view(choice):
 @frappe.whitelist()
 def get_view(selection_json):
     from tongjianyun.meal_chat import require_chat_access
+    from tongjianyun.meal_nutrition_view import nutrition_view
     require_chat_access()
     choice = selection(selection_json)
     if choice['view'] == 'recipe_week':
@@ -214,7 +221,7 @@ def get_view(selection_json):
                   'summary': {'day': choice['day'], 'meal': LABELS[choice['meal']]}}
     else:
         result = {'students': students_view, 'class_students': class_students_view,
-                  'meal_counts': meal_counts_view}[choice['view']](choice)
+                  'meal_counts': meal_counts_view, 'recipe_nutrition': nutrition_view}[choice['view']](choice)
     if choice.get('components'):
         # Required warnings cannot be hidden by a model's presentation choice.
         blocks = result['components']
@@ -253,7 +260,7 @@ def tool_instruction(task_id, site, context=None):
     import shlex
     command = ('/home/zyd/frappe/native-bench/env/bin/python -m tongjianyun.meal_view_tool'
                f' --site {shlex.quote(site)} --task {shlex.quote(task_id)}')
-    return ('\n【左侧业务视图】询问学生人数、班级名单、用餐人数、周食谱时，必须调用下面的只读展示工具，'
+    return ('\n【左侧业务视图】询问学生人数、班级名单、用餐人数、周食谱、周食谱营养分析时，必须调用下面的只读展示工具，'
             '它按当前网页用户权限查真实数据并通过 SSE 切换左侧。不要临时改页面代码、不要只口头声称已切换。'
             '工具回传 displayed=true 才能说已展示；失败则说明原因，不能编造数字。'
             '给用户的答复只说简短结论、范围和是否已展示；不要输出 displayed=true、内部 view 名、'
@@ -262,7 +269,15 @@ def tool_instruction(task_id, site, context=None):
             '已确认班级为 0 个也不能说已确认人数为 0 人。只有真实已确认记录中的数字 0 才能说 0 人。'
             '查询学生人数不要自行 SQL 或以班级人数之和当去重总数。名单不需要重复在对话中输出。'
             '支持 --view students [--presentation table|bars]；--view class_students --group 班级编号或唯一名称；'
-            '--view meal_counts [--day YYYY-MM-DD --meal lunch]；--view recipe_week [--day YYYY-MM-DD --meal lunch]。'
+            '--view meal_counts [--day YYYY-MM-DD --meal lunch]；--view recipe_week [--day YYYY-MM-DD --meal lunch]；'
+            '--view recipe_nutrition [--day YYYY-MM-DD] [--recipe 食谱编号] [--garden-ratio 80]。'
+            '周营养分析自动选择覆盖业务日期的唯一可见食谱；有多份时展示可点击选择，不要猜编号。'
+            '分析全周日均每生估算，不是当前单餐或实测摄入；复用原周食谱营养分析，不自行计算或更改营养规则。'
+            '默认按学生档案计算标准。只有用户明确要求手动估算时传 --standard-mode 手动估算，'
+            '可选 --age-group 4岁|5岁|6岁|4–6岁平均 和 --gender 男|女|男女平均。'
+            '可用 --student-groups 班级编号1 班级编号2 指定班级。参数仅影响本次只读分析，不保存标准设置。'
+            '分析失败不得隐瞒错误或自动降级手动口径。展示结果 summary.available=false 时说明需选择/补充食谱。'
+            '营养视图的后续调整应沿用当前左侧选择里的食谱、供给目标和标准筛选，除非用户要求变更。'
             '未指定日期餐次则沿用本轮页面选择。当前是实际用餐请用 meal_counts，不要用学籍数替代。'
             '用户只问学生数量时使用 students；图表需求可选 bars。'
             '若用户要求组合或调整布局，可加 --components stats bars table（按顺序显示数字、图表、表格）；'

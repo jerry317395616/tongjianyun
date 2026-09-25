@@ -1,6 +1,6 @@
 // Registered components only. Model messages, HTML and executable code are never rendered here.
 const $=id=>document.getElementById(id);
-const validViews=new Set(['students','class_students','meal_counts','recipe_week']);
+const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition']);
 let request,current=null,ticket=0;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
@@ -13,6 +13,10 @@ export function initializeViews(options){
   $('refresh').addEventListener('click',()=>{if(current&&current.view!=='recipe_week')showBusinessView(current);});
   for(const id of ['day','meal'])$(id).addEventListener('change',()=>{
     if(current?.view==='meal_counts')showBusinessView({...current,day:$('day').value,meal:$('meal').value});
+    if(current?.view==='recipe_nutrition'){
+      if(id==='day'){const {recipe,...choice}=current;showBusinessView({...choice,day:$('day').value,meal:$('meal').value});}
+      else current={...current,meal:$('meal').value}; // A whole-week analysis is not a single meal.
+    }
   });
 }
 function calendarContext(choice){
@@ -33,18 +37,22 @@ function actionButton(action){
 function renderStats(block){
   const row=node('div',undefined,'view-stats');
   for(const item of block.items){const card=node('div');card.append(node('div',item.label,'view-stat-label'));
-    const value=node('div',undefined,'view-stat-value');value.append(node('span',item.value),node('small',item.unit||''));card.append(value);row.append(card);}
+    const value=node('div',undefined,'view-stat-value');value.append(node('span',item.value),node('small',item.unit||''));card.append(value);
+    if(item.note)card.append(node('div',item.note,'view-stat-note'));row.append(card);}
   return row;
 }
 function renderTable(block){
-  const section=node('section',undefined,'view-section');section.append(node('h2',block.title));
+  const section=node(block.collapsed?'details':'section',undefined,block.collapsed?'view-section view-details':'view-section');
+  section.append(node(block.collapsed?'summary':'h2',block.title));
   if(!block.rows.length){section.append(node('p','当前可见范围没有记录。','view-empty'));return section;}
   const wrapper=node('div',undefined,'view-table-wrap'),table=node('table'),head=node('thead'),header=node('tr');
   table.setAttribute('aria-label',block.title);block.columns.forEach(label=>header.append(node('th',label)));head.append(header);table.append(head);
   const body=node('tbody');
   for(const row of block.rows){const tr=node('tr');row.cells.forEach((value,index)=>{
     const cell=node('td');if(index===0&&row.action)cell.append(actionButton({...row.action,label:String(value??'—')}));else cell.textContent=String(value??'—');
-    if(typeof value==='number')cell.className='view-numeric';tr.append(cell);
+    if(typeof value==='number')cell.className='view-numeric';
+    if(index===row.cells.length-1&&['适宜','偏低','偏高','未评价'].includes(row.evaluation))cell.className='view-evaluation '+(row.evaluation==='适宜'?'good':row.evaluation==='未评价'?'unknown':'warn');
+    tr.append(cell);
   });body.append(tr);}
   table.append(body);wrapper.append(table);section.append(wrapper);return section;
 }

@@ -9,7 +9,7 @@ class Element{
 }
 function setup(){
   const nodes=new Map(),storage=new Map();
-  const document={getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement:()=>new Element(),createDocumentFragment:()=>new Element()};
+  const document={getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement:tag=>Object.assign(new Element(),{tag}),createDocumentFragment:()=>new Element()};
   const context=vm.createContext({document,URLSearchParams,sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
   const source=fs.readFileSync(path.join(__dirname,'../public/meal_scene/views.js'),'utf8').replace(/export /g,'');
   vm.runInContext(source,context);
@@ -56,4 +56,20 @@ test('data refresh keeps an explicitly selected business view',async()=>{
   run('initializeViews({request:fetcher})');await run("showBusinessView({view:'students'})");
   nodes.get('refresh').listeners.click();await Promise.resolve();
   assert.equal(requests,2);assert.equal(nodes.get('recipe-workspace').hidden,true);assert.equal(nodes.get('business-view').hidden,false);
+});
+test('nutrition tables support folded details and safe evaluation labels',()=>{
+  const {run,context}=setup();context.data={version:1,selection:{view:'recipe_nutrition'},components:[{type:'table',title:'食材明细',collapsed:true,columns:['食材','评价'],rows:[{cells:['<script>','偏高'],evaluation:'偏高'}]}]};
+  const block=run('buildComponents(data)').children[0];
+  assert.equal(block.tag,'details');assert.equal(block.children[0].tag,'summary');
+  const row=block.children[1].children[0].children[1].children[0];
+  assert.equal(row.children[0].textContent,'<script>');assert.equal(row.children[1].className,'view-evaluation warn');
+});
+test('nutrition date change resolves the new week instead of keeping old recipe',async()=>{
+  const {run,context,nodes}=setup();context.requests=[];
+  context.fetcher=async url=>{const choice=JSON.parse(new URL(url,'http://local').searchParams.get('selection_json'));context.requests.push(choice);return {...data,selection:choice};};
+  run('initializeViews({request:fetcher})');await run("showBusinessView({view:'recipe_nutrition',recipe:'R1',day:'2026-09-24',meal:'lunch',garden_ratio:80})");
+  nodes.get('day').value='2026-10-01';nodes.get('meal').value='lunch';nodes.get('day').listeners.change();await Promise.resolve();
+  assert.equal(context.requests[1].day,'2026-10-01');assert.equal(context.requests[1].recipe,undefined);
+  nodes.get('meal').value='dinner';nodes.get('meal').listeners.change();
+  assert.equal(context.requests.length,2);assert.equal(run('currentViewContext().meal'),'dinner');
 });

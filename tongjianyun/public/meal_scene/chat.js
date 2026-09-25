@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-default-week-20260925-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-nutrition-view-20260925-1';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
 const messages=$('chat-messages'),chip=$('chat-file-chip'),fileName=$('chat-file-name');

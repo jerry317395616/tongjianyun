@@ -16,6 +16,12 @@ Codex 不提供业务数字、SQL、HTML 或脚本给渲染器。当前可选视
 - `class_students`：有权限的班级名单，只显示姓名、学生编号和学籍状态，50 条分页。
 - `meal_counts`：按日期和餐次读取已有确认记录；预计、已确认小计、最终总数不混用。
 - `recipe_week`：恢复已有周历，不新建、发布、覆盖或改变食谱。
+- `recipe_nutrition`：复用 `nutrition_sheet.get_nutrition_sheet` 的整周营养分析；按业务日期
+  选择唯一可见食谱，多份时提供点选，无匹配时不退回最近食谱。食谱主单和全部明细读取
+  权限仍检查；班级筛选不允许静默丢弃无权限项。默认自动标准，档案错误不自动降级手动。
+  可在对话中指定食谱、园内供给目标、统计班级或明确要求手动年龄/性别口径。
+  这些筛选只影响本次查询，不写食谱、不冻结人口快照、不导出附件、不更改营养规则。
+  关键指标和营养素对照直接显示，供能结构、各餐热量、分类用量、食材和补充指标折叠显示。
 
 通用组件为 `stats/table/bars/notice`，周历复用已有实现。新增业务时注册受控数据查询
 与需要的组件，不允许聊天生成任意可执行前端代码。Codex 的既有系统权限和其他配置
@@ -46,6 +52,7 @@ SSE/历史只保存展示选择，不保存名单内容；再次打开会重新�
 ```sh
 python -m unittest tongjianyun.tests.test_meal_views tongjianyun.tests.test_meal_chat
 node --test tongjianyun/tests/test_meal_views_ui.cjs tongjianyun/tests/test_meal_chat_ui.cjs
+python -m unittest tongjianyun.tests.test_meal_nutrition_view
 ```
 
 `tongjianyun.tests.test_meal_views.verify_read_only_views` 是 Bench-only 集成检查，输出
@@ -55,3 +62,8 @@ node --test tongjianyun/tests/test_meal_views_ui.cjs tongjianyun/tests/test_meal
 
 仅调整默认视图的前端发布无需重启服务；同步 JS/HTML 及更新的资源版本号后，
 验证重新加载默认周食谱、历史结果可重开、再次重新加载仍回到周食谱。
+
+营养视图发布需在对话队列空闲时重启原 Web / SSE / meal_chat worker；不运行迁移。
+`tongjianyun.tests.test_meal_nutrition_view.verify_live_nutrition_view` 对照原服务各指标和评价，
+并检查食谱、菜品、食材、附件记录数不变。还须从真实对话验证 Codex → SSE → 营养视图，
+验证折叠明细、返回食谱及刷新默认周历。原 Desk 营养分析和 Excel 导出入口保持不变。
