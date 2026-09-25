@@ -1,6 +1,7 @@
 // Registered components only. Model messages, HTML and executable code are never rendered here.
 const $=id=>document.getElementById(id);
-const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition']);
+const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
+  'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders']);
 let request,current=null,ticket=0;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
@@ -16,6 +17,13 @@ export function initializeViews(options){
     if(current?.view==='recipe_nutrition'){
       if(id==='day'){const {recipe,...choice}=current;showBusinessView({...choice,day:$('day').value,meal:$('meal').value});}
       else current={...current,meal:$('meal').value}; // A whole-week analysis is not a single meal.
+    }
+    if(current&&['business_catalog','business_list','classroom_day','weekly_orders'].includes(current.view)){
+      if(id==='day')showBusinessView({...current,day:$('day').value,offset:current.view!=='business_catalog'?0:undefined});
+      else current={...current,meal:$('meal').value};
+    }
+    if(current?.view==='ingredient_nutrition'&&id==='day'){
+      const {recipe,...choice}=current;showBusinessView({...choice,day:$('day').value,offset:0});
     }
   });
 }
@@ -89,6 +97,6 @@ export async function showBusinessView(choice){
     $('view-source').textContent=`来源：${result.source} · 更新于 ${result.generated_at}`;
     current=result.selection;
     $('recipe-workspace').hidden=true;$('business-view').hidden=false;$('business-canvas').setAttribute('aria-label',result.title);
-    notice('');if(current.view==='meal_counts')calendarContext(current);
+    notice('');if(['meal_counts','business_list','business_catalog','ingredient_nutrition','classroom_day','weekly_orders'].includes(current.view))calendarContext(current);
   }catch(error){if(turn===ticket)notice(error.message||'数据读取失败，已保留上一次结果。',true);}
 }

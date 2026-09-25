@@ -14,16 +14,18 @@ from frappe.utils import now_datetime
 from tongjianyun.attendance_scope import allowed_groups
 from tongjianyun.classroom import _scope, _roster
 from tongjianyun.meal_scene import business_day, meal_key, class_plans
+from tongjianyun.business_views import VIEWS as BUSINESS_VIEWS, FIELDS as BUSINESS_FIELDS, clean_selection, get_business_view
 
 VIEWS = {'students': '在园学生', 'class_students': '班级学生',
-         'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析'}
+         'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析', **BUSINESS_VIEWS}
 LABELS = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                   ('早餐', '早点', '午餐', '午点', '晚餐')))
 PAGE_SIZE = 50
 COMPONENTS = {'students': {'stats', 'table', 'bars', 'notice'},
               'class_students': {'stats', 'table', 'notice'},
               'meal_counts': {'stats', 'table', 'notice'}, 'recipe_week': {'recipe_week'},
-              'recipe_nutrition': {'stats', 'table', 'notice'}}
+              'recipe_nutrition': {'stats', 'table', 'notice'},
+              **{key: {'stats', 'table', 'notice'} for key in BUSINESS_VIEWS}}
 
 
 def selection(value, default_day=None, default_meal='lunch'):
@@ -33,13 +35,17 @@ def selection(value, default_day=None, default_meal='lunch'):
         except (TypeError, ValueError):
             frappe.throw('展示指令格式无效。')
     from tongjianyun.meal_nutrition_view import FIELDS, nutrition_selection
-    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components'} | FIELDS):
+    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components'} | FIELDS | BUSINESS_FIELDS):
         frappe.throw('展示指令含不支持的内容。')
     view = value.get('view')
     if not isinstance(view, str) or view not in VIEWS:
         frappe.throw('暂不支持这种业务视图。')
     clean = {'view': view}
-    if view != 'recipe_nutrition' and set(value) & FIELDS:
+    if view in BUSINESS_VIEWS:
+        clean.update(clean_selection(value, default_day, default_meal))
+    elif set(value) & BUSINESS_FIELDS:
+        frappe.throw('这些筛选仅用于对应业务视图。')
+    if view not in {'recipe_nutrition', 'ingredient_nutrition'} and set(value) & FIELDS:
         frappe.throw('这些筛选仅用于周食谱营养分析。')
     if view == 'recipe_nutrition':
         clean.update(nutrition_selection(value))
@@ -220,8 +226,9 @@ def get_view(selection_json):
                   'source': '当前工作台周历；保留原食谱权限和读取规则',
                   'summary': {'day': choice['day'], 'meal': LABELS[choice['meal']]}}
     else:
-        result = {'students': students_view, 'class_students': class_students_view,
-                  'meal_counts': meal_counts_view, 'recipe_nutrition': nutrition_view}[choice['view']](choice)
+        result = get_business_view(choice) if choice['view'] in BUSINESS_VIEWS else {
+            'students': students_view, 'class_students': class_students_view,
+            'meal_counts': meal_counts_view, 'recipe_nutrition': nutrition_view}[choice['view']](choice)
     if choice.get('components'):
         # Required warnings cannot be hidden by a model's presentation choice.
         blocks = result['components']
@@ -258,9 +265,10 @@ def publish_for_task(task_id, requested):
 
 def tool_instruction(task_id, site, context=None):
     import shlex
+    from tongjianyun.business_view_registry import catalog_instruction
     command = ('/home/zyd/frappe/native-bench/env/bin/python -m tongjianyun.meal_view_tool'
                f' --site {shlex.quote(site)} --task {shlex.quote(task_id)}')
-    return ('\n【左侧业务视图】询问学生人数、班级名单、用餐人数、周食谱、周食谱营养分析时，必须调用下面的只读展示工具，'
+    return ('\n【左侧业务视图】询问学生、班级、考勤、健康登记、膳食、采购、库存、财务、教职工或以下目录中的业务时，必须调用下面的只读展示工具，'
             '它按当前网页用户权限查真实数据并通过 SSE 切换左侧。不要临时改页面代码、不要只口头声称已切换。'
             '工具回传 displayed=true 才能说已展示；失败则说明原因，不能编造数字。'
             '给用户的答复只说简短结论、范围和是否已展示；不要输出 displayed=true、内部 view 名、'
@@ -282,5 +290,22 @@ def tool_instruction(task_id, site, context=None):
             '用户只问学生数量时使用 students；图表需求可选 bars。'
             '若用户要求组合或调整布局，可加 --components stats bars table（按顺序显示数字、图表、表格）；'
             '只有 students 支持 bars，其余非食谱视图可组合 stats table。默认沿用简洁布局，不主动堆叠。'
-            '用户说“这个班”时参考下面左侧选择。涉及其他业务照常使用已有业务服务，不要新增未经测试的展示类型。'
+            '用户说“这个班/这些记录”时参考下面左侧选择。'
+            '全部业务目录：--view business_catalog [--domain 分组中文名]。'
+            '业务列表：--view business_list --entity 业务键 [--day YYYY-MM-DD] [--period all|day|week|month] '
+            '[--start-date YYYY-MM-DD --end-date YYYY-MM-DD] [--keyword 关键词] [--status 原单据状态] '
+            '[--group 班级编号] [--company 组织编号] [--warehouse 仓库编号] [--offset 0]。'
+            '筛选仅在该业务字段及权限支持时可用，不支持会明确报错，不可偷偷忽略。学生人数用 students，不要用档案记录数替代。'
+            '采购默认本周，财务默认本月，考勤默认当日，主数据默认全部日期；日期以页面选择为准。'
+            '跨期请假按时间交集筛选。库存是当前值，不是历史快照。用户问全部历史须明确传 --period all。'
+            '单据明细：--view business_record --entity 业务键 --record 精确编号；不猜单据编号，先展示可点击列表。'
+            '库存：--view stock [--warehouse 仓库编号]；食材营养统计：--view ingredient_nutrition [--recipe 食谱编号]。'
+            '班级当日出勤及未登记情况：--view classroom_day [--group 班级编号或唯一名称] [--day YYYY-MM-DD]；'
+            '一周食谱采购：--view weekly_orders [--period week|all] [--day YYYY-MM-DD] [--status 0|1|2]；'
+            '此视图按订单标题中的食谱日期，与普通采购订单按交易日期筛选不同。'
+            '业务键目录：' + catalog_instruction() + '。'
+            '所有展示只读；不能把展示成功说成已创建、确认、发布、付款或已完成业务。'
+            '统计记录数不是去重人数、人次、金额或物料总量。没有记录不能推断没发生业务；无权限不能报0。'
+            '厨房加工、配送签收、食品留样、生长测量、过敏配餐尚未接入，不得假装有数据或临时改生产代码生成业务。'
+            '后续沿用左侧筛选，除非用户要求调整。其他写操作仍使用原有业务服务与审批。'
             '\n工具命令：' + command + '\n当前左侧选择：' + json.dumps(context or {'view': 'recipe_week'}, ensure_ascii=False))

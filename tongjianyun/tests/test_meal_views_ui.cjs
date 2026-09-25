@@ -73,3 +73,25 @@ test('nutrition date change resolves the new week instead of keeping old recipe'
   nodes.get('meal').value='dinner';nodes.get('meal').listeners.change();
   assert.equal(context.requests.length,2);assert.equal(run('currentViewContext().meal'),'dinner');
 });
+test('registered business views render data and safe clickable details',async()=>{
+  const {run,context,nodes}=setup();context.requests=[];
+  context.fetcher=async url=>{const choice=JSON.parse(new URL(url,'http://local').searchParams.get('selection_json'));context.requests.push(choice);return {...data,selection:choice,title:'采购订单'};};
+  run('initializeViews({request:fetcher})');
+  await run("showBusinessView({view:'business_list',entity:'purchase_orders',day:'2026-09-24',meal:'lunch',period:'week',offset:30})");
+  assert.equal(nodes.get('view-title').textContent,'采购订单');
+  nodes.get('day').value='2026-10-01';nodes.get('day').listeners.change();await Promise.resolve();
+  assert.equal(context.requests[1].offset,0);assert.equal(context.requests[1].day,'2026-10-01');
+  context.data={version:1,selection:{view:'business_list'},components:[{type:'table',title:'采购',columns:['单据'],rows:[{cells:['<script>'],action:{label:'打开',selection:{view:'business_record',entity:'purchase_orders',record:'PO1'}}}]}]};
+  const section=run('buildComponents(data)').children[0];
+  const button=section.children[1].children[0].children[1].children[0].children[0].children[0];
+  assert.equal(button.tag,'button');assert.equal(button.textContent,'<script>');
+  button.listeners.click();await Promise.resolve();
+  assert.equal(context.requests[2].view,'business_record');assert.equal(context.requests[2].record,'PO1');
+});
+test('catalog, stock, classroom and ingredient views accept registered safe components',()=>{
+  const {run,context}=setup();
+  for(const view of ['business_catalog','business_record','stock','classroom_day','weekly_orders','ingredient_nutrition']){
+    context.data={version:1,selection:{view},components:[{type:'notice',text:'无记录不是零'}]};
+    assert.equal(run('buildComponents(data)').children.length,1);
+  }
+});
