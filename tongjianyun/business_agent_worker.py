@@ -103,12 +103,12 @@ def _frame(value):
     return value
 
 
-def build_prompt(task, *, include_discovery=False, include_writes=False, include_catalog=False, include_attachments=False, include_proposals=False):
+def build_prompt(task, *, include_discovery=False, include_writes=False, include_catalog=False, include_attachments=False, include_proposals=False, include_recipes=False):
     """Task data is quoted JSON, never a shell program or an identity grant."""
     if (type(task) is not dict or not isinstance(task.get('message'), str)
             or type(task.get('context')) is not dict or task.get('mode') != 'business'):
         raise ValueError('Invalid trusted task payload')
-    if any(type(value) is not bool for value in (include_discovery, include_writes, include_catalog, include_attachments, include_proposals)):
+    if any(type(value) is not bool for value in (include_discovery, include_writes, include_catalog, include_attachments, include_proposals, include_recipes)):
         raise ValueError('Trusted tool configuration must be boolean')
     tool_description = '本次已接通 classroom_read（group=班级编号、day=YYYY-MM-DD），返回真实点名与未知人数。'
     if include_discovery:
@@ -130,6 +130,11 @@ def build_prompt(task, *, include_discovery=False, include_writes=False, include
     if include_proposals:
         from tongjianyun.business_agent_proposals import TOOL_INSTRUCTIONS
         tool_description += '\n' + '\n'.join(TOOL_INSTRUCTIONS.values()) + '\n'
+    if include_recipes:
+        from tongjianyun.business_agent_recipes import TOOL_INSTRUCTIONS
+        tool_description += '\n' + TOOL_INSTRUCTIONS['recipe_read'] + '\n'
+        if include_writes:
+            tool_description += TOOL_INSTRUCTIONS['recipe_save'] + '\n'
     if include_writes:
         tool_description += (
             '\n用户明确要求修改时，先读取真实当前记录及revision，再按原权限调用以下保存工具；'
@@ -172,7 +177,7 @@ class BusinessWorker:
     """
     def __init__(self, store, runtime: Runtime, *, read_attendance: Callable,
                  model_key: Callable, proxy_factory=TaskProxy, poll_seconds=0.2, read_tools=None,
-                 write_tools=None, catalog_tools=None, attachment_tools=None, proposal_tools=None, tool_guard=None):
+                 write_tools=None, catalog_tools=None, attachment_tools=None, proposal_tools=None, recipe_tools=None, tool_guard=None):
         required = ('ready', 'bind', 'start', 'poll', 'stop', 'record_projection', 'observe', 'close')
         if any(not callable(getattr(runtime, method, None)) for method in required):
             raise ValueError('A complete trusted native runtime connector is required')
@@ -184,6 +189,13 @@ class BusinessWorker:
             raise ValueError('Source-aware business catalog adapter must be callable')
         if attachment_tools is not None and not callable(attachment_tools):
             raise ValueError('Source-bound attachment adapter must be callable')
+        if recipe_tools is not None:
+            from tongjianyun.business_agent_recipes import BusinessRecipes
+            adapter = getattr(recipe_tools, '__self__', None)
+            if (not callable(recipe_tools) or not isinstance(adapter, BusinessRecipes)
+                    or adapter.store is not store or adapter.authority is not store.authorize
+                    or adapter.authority.site != store.site):
+                raise ValueError('Recipes require the source-aware reader bound to this exact task store')
         if proposal_tools is not None and not callable(proposal_tools):
             raise ValueError('Source-bound business proposal adapter must be callable')
         if proposal_tools is not None:
@@ -213,6 +225,7 @@ class BusinessWorker:
         self.write_tools, self.catalog_tools = write_tools, catalog_tools
         self.attachment_tools = attachment_tools
         self.proposal_tools = proposal_tools
+        self.recipe_tools = recipe_tools
         # Trusted deployment/QA may only add restrictions. No HTTP/model
         # payload configures this callback, and it never replaces authorization.
         self.tool_guard = tool_guard
@@ -268,12 +281,17 @@ class BusinessWorker:
                 if not authorize():
                     raise PermissionError('Attachment authority changed before delivery')
                 return result
+            if tool == 'recipe_read' and self.recipe_tools is not None:
+                result = self.recipe_tools(claim, tool, arguments)
+                if not authorize():
+                    raise PermissionError('Recipe authority changed before delivery')
+                return result
             if tool in {'proposal_create', 'proposal_read', 'proposal_update', 'proposal_list'} and self.proposal_tools is not None:
                 result = self.proposal_tools(claim, tool, arguments, call_id)
                 if not authorize():
                     raise PermissionError('Proposal authority changed before delivery')
                 return result
-            if tool in {'attendance_save', 'meal_save'} and self.write_tools is not None:
+            if (tool in {'attendance_save', 'meal_save'} or tool == 'recipe_save' and self.recipe_tools is not None) and self.write_tools is not None:
                 result = self.write_tools.dispatch(claim, tool, arguments, call_id)
                 if not authorize():
                     raise PermissionError('Business authority changed before delivery')
@@ -344,7 +362,8 @@ class BusinessWorker:
                 raise PermissionError('Business task stopped before launch')
             self.runtime.start(claim, prompt=build_prompt(task, include_discovery=self.read_tools is not None,
                                include_writes=self.write_tools is not None, include_catalog=self.catalog_tools is not None,
-                               include_attachments=self.attachment_tools is not None, include_proposals=self.proposal_tools is not None),
+                               include_attachments=self.attachment_tools is not None, include_proposals=self.proposal_tools is not None,
+                               include_recipes=self.recipe_tools is not None),
                                proxy_path=proxy.path, token=token)
             runtime_started = True
             self.store.emit(claim, {'kind': 'status', 'text': '正在启动隔离助手并读取本次需求…'})

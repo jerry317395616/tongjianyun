@@ -500,8 +500,41 @@ class BusinessDeploymentGateTests(unittest.TestCase):
             self.assertIs(composed.write_ledger, app.writes.ledger)
             self.assertEqual(app.store.observe_execution, composed.observe)
             self.assertEqual(app.store.seal_execution, composed.seal_before_start)
+            self.assertIs(app.recipes.store, app.store)
+            self.assertIs(app.recipes.authority, app.authority)
             runtime.return_value.ready.assert_not_called()
             key.assert_not_called()
+
+    def test_recipe_and_class_writes_share_ledger_but_route_exact_adapters(self):
+        self.provision_store()
+        with patch.object(service, '_configured_runtime'), \
+                patch('tongjianyun.business_agent_write_adapter.FrappeWriteAdapter') as classroom, \
+                patch('tongjianyun.business_agent_recipes.RecipeWriteAdapter') as recipe:
+            app, runtime = service.application(require_ready=False)
+        classroom.assert_called_once_with(self.site, str(self.sites), store=app.store)
+        recipe.assert_called_once_with(self.site, str(self.sites), store=app.store, authority=app.authority)
+        self.assertIs(app.recipes, recipe.return_value.reader)
+        self.assertIs(runtime.write_ledger, app.writes.ledger)
+        claim, args, operation = object(), {'payload': 'not interpreted by router'}, str(uuid.uuid4())
+        app.writes.ledger.authorize(claim, 'recipe_save', args)
+        recipe.return_value.authorize.assert_called_once_with(claim, 'recipe_save', args)
+        app.writes.transaction_factory(claim, 'recipe_save', args, operation_id=operation)
+        recipe.return_value.transaction_factory.assert_called_once_with(claim, 'recipe_save', args, operation_id=operation)
+        app.writes.fresh_read(claim, 'recipe_save', args, operation_id=operation)
+        recipe.return_value.fresh_read.assert_called_once_with(claim, 'recipe_save', args, operation_id=operation)
+        for tool in ('attendance_save', 'meal_save'):
+            app.writes.ledger.authorize(claim, tool, args)
+            app.writes.transaction_factory(claim, tool, args)
+            app.writes.fresh_read(claim, tool, args)
+            classroom.return_value.authorize.assert_called_with(claim, tool, args)
+            classroom.return_value.transaction_factory.assert_called_with(claim, tool, args)
+            classroom.return_value.fresh_read.assert_called_with(claim, tool, args)
+            for callback in (app.writes.transaction_factory, app.writes.fresh_read):
+                with self.assertRaises(ValueError):
+                    callback(claim, tool, args, operation_id=operation)
+        for callback in (app.writes.ledger.authorize, app.writes.transaction_factory, app.writes.fresh_read):
+            with self.assertRaises(PermissionError):
+                callback(claim, 'arbitrary_method', args)
 
     def test_new_submission_disabled_before_key_runtime_or_store(self):
         with patch.object(service,'_configured_runtime') as runtime, patch.object(service,'_model_key') as key:

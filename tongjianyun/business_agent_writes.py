@@ -39,7 +39,7 @@ import uuid
 from tongjianyun.business_agent_tasks import ExecutionObservation, TaskIdentity, WorkerClaim
 from tongjianyun.business_agent_transport import private_directory
 
-TOOLS = frozenset({'attendance_save', 'meal_save'})
+TOOLS = frozenset({'attendance_save', 'meal_save', 'recipe_save'})
 MEALS = frozenset({'breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'})
 CALL_ID = re.compile(r'[A-Za-z0-9_-]{1,128}\Z')
 MAX_ARGUMENT_BYTES = 128 * 1024
@@ -61,6 +61,9 @@ rollback returns literal True only after a confirmed full precommit rollback.
 close returns literal True only after the host connection/callbacks are drained.
 A failure/None is NOT proof. commit returning normally acknowledges its commit.
 The factory receives trusted claim and a detached copy of validated arguments.
+For recipe_save only, the ledger additionally supplies keyword operation_id:
+its persisted reservation UUID, never an input field or task/call-derived ID.
+The original attendance/meal factories keep their three-argument contract.
 """
     def begin(self) -> None: ...
     def save(self) -> None: ...
@@ -124,6 +127,9 @@ def _arguments(tool, arguments):
     """Finite existing tools only; native services still own permissions/rules."""
     if not isinstance(tool, str) or tool not in TOOLS or type(arguments) is not dict:
         raise ValueError('Unsupported business write')
+    if tool == 'recipe_save':
+        from tongjianyun.business_agent_recipes import normalize_arguments
+        return normalize_arguments(tool, arguments)
     common = {'group', 'day', 'revision'}
     required = common | ({'changes'} if tool == 'attendance_save' else {'meal', 'students', 'confirm'})
     allowed = required | ({'change_reason'} if tool == 'meal_save' else set())
@@ -183,7 +189,12 @@ def _digest(tool, args):
                                     sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def _resources(args):
+def _resources(tool, args):
+    if tool == 'recipe_save':
+        from tongjianyun.business_agent_recipes import resource_keys
+        # Ledger identity already binds the complete database to exactly ONE
+        # site. Week/aggregate locks deliberately do not include owner or task.
+        return resource_keys(args)
     # Both native paths can update the daily confirmation. All meals share a
     # class-day document/revision. Do not fence only a meal, user, task or call.
     return tuple(sorted(json.dumps(key, ensure_ascii=False, separators=(',', ':')) for key in (
@@ -338,7 +349,7 @@ class BusinessWriteLedger:
                 db.execute('INSERT INTO aliases VALUES (?, ?, ?, ?)',
                            (claim.identity.task_id, call_id, digest, row[0]))
                 return None, self._outcome(row, True)
-            resources = _resources(args)
+            resources = _resources(tool, args)
             conflict = any(db.execute('SELECT 1 FROM resources WHERE resource=?', (key,)).fetchone()
                            for key in resources)
             if conflict:
@@ -394,7 +405,8 @@ class BusinessWriteLedger:
         begin_attempted = commit_started = committed = rolled_back = drained = False
         interrupt = None
         try:
-            transaction = transaction_factory(claim, tool, json.loads(json.dumps(args)))
+            trusted = {'operation_id': operation_id} if tool == 'recipe_save' else {}
+            transaction = transaction_factory(claim, tool, json.loads(json.dumps(args)), **trusted)
             begin = transaction.begin
             if not callable(begin):
                 raise TypeError('Trusted transaction must provide begin')
@@ -496,15 +508,50 @@ def combine_execution(native, host):
                    turn_completed=native.turn_completed and not host.uncertain_writes)
 
 
+def _recipe_readback(site, operation_id, args, readback):
+    """Validate the exact reserved target and page scope, not a match by week.
+
+    The trusted RecipeWriteAdapter registers native aggregate source authority
+    before returning and publishes its own finite view. A single returned page
+    is usable display data, never an assertion that the full week was verified.
+    """
+    from tongjianyun.business_agent_recipes import write_plan, week_bounds
+    plan = write_plan(site, operation_id, args)
+    start, end = week_bounds(args['day'])
+    metadata = args['payload']['recipe']
+    selection = {'view': 'recipe_week', 'day': args['day'], 'meal': 'lunch'}
+    if (type(readback) is not dict or readback.get('recipe') != plan.target_recipe
+            or readback.get('operation_id') != plan.operation_id or readback.get('day') != args['day']
+            or readback.get('calendar_week_start') != start or readback.get('calendar_week_end') != end
+            or readback.get('week_start') != metadata['weekStart'] or readback.get('week_end') != metadata['weekEnd']
+            or readback.get('visible_recipe_found') is not True or readback.get('selection') != selection):
+        raise ValueError('Fresh recipe readback is outside the reserved target/scope')
+    rows, total, count = readback.get('dishes'), readback.get('dish_count'), readback.get('page_count')
+    more, complete = readback.get('has_more'), readback.get('complete')
+    if (type(rows) is not list or type(total) is not int or type(count) is not int
+            or not 0 <= count <= total <= 10000 or count != len(rows)
+            or type(readback.get('offset')) is not int or readback['offset'] != 0
+            or type(more) is not bool or type(complete) is not bool
+            or more != (count < total) or complete != (not more)
+            or more and (count == 0 or type(readback.get('next_offset')) is not int or readback['next_offset'] != count)
+            or not more and readback.get('next_offset') is not None):
+        raise ValueError('Fresh recipe page cannot certify complete-week readback')
+    return selection, complete
+
+
 class BusinessWrites:
     """Finite worker adapter; framework-native callbacks are mandatory.
 
     fresh_read runs AFTER execute's write connection has closed, in a NEW
-    connection via authority.read_attendance/read_meals. It must register the
+    connection via authority.read_attendance/read_meals or the native recipe
+    aggregate reader. It must register the
     complete source read-set. publish_view must register view authority before
     emitting a selection, never embed a stale student snapshot in a view event.
     Neither callback is selected by a model. Clear natural-language writes do
     not require another approval; meal.confirm is the original business state.
+    Recipe callbacks receive the ledger's immutable operation_id keyword even
+    for cross-task replay. Recipe fresh_read already publishes its authorized
+    selection; this layer validates it without emitting a duplicate view event.
     """
     def __init__(self, ledger, *, transaction_factory, fresh_read, publish_view):
         if not isinstance(ledger, BusinessWriteLedger) or not all(callable(callback) for callback in (
@@ -519,12 +566,17 @@ class BusinessWrites:
         result = {'status': outcome.status, 'operation_id': outcome.operation_id, 'replayed': outcome.replayed,
                   'committed': True if outcome.status == 'committed' else False if outcome.status == 'rolled_back' else None,
                   'retry_allowed': False, 'readback_available': False, 'host_write_active': outcome.active}
+        if tool == 'recipe_save':
+            result['readback_complete'] = False
         if outcome.status != 'committed' or outcome.active:
             return result
         self.ledger.require_delivery(claim, tool, args)
         try:
-            readback = self.fresh_read(claim, tool, json.loads(json.dumps(args)))
-            if type(readback) is not dict or readback.get('group') != args['group'] or readback.get('day') != args['day']:
+            trusted = {'operation_id': outcome.operation_id} if tool == 'recipe_save' else {}
+            readback = self.fresh_read(claim, tool, json.loads(json.dumps(args)), **trusted)
+            if tool == 'recipe_save':
+                selection, complete = _recipe_readback(self.ledger.site, outcome.operation_id, args, readback)
+            elif type(readback) is not dict or readback.get('group') != args['group'] or readback.get('day') != args['day']:
                 raise ValueError('Fresh business readback is for another target')
         except Exception:
             # A commit receipt is not undone by a read failure. Recheck access
@@ -532,6 +584,9 @@ class BusinessWrites:
             self.ledger.require_delivery(claim, tool, args)
             return result
         self.ledger.require_delivery(claim, tool, args)
+        if tool == 'recipe_save':
+            return {**result, 'readback_available': True, 'readback_complete': complete,
+                    'readback': readback, 'selection': selection}
         selection = {'view': 'classroom_day' if tool == 'attendance_save' else 'meal_counts',
                      'group': args['group'], 'day': args['day']}
         if tool == 'meal_save':

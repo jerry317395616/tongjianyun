@@ -974,6 +974,31 @@ class BusinessTaskTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.store.create(self.identity.owner, str(uuid.uuid4()), '请求', authority_scopes=[scope])
 
+    def test_recipe_aggregate_source_is_exact_detached_and_durable(self):
+        source = {'kind': 'recipe', 'recipe': 'RECIPE-20260921-1'}
+        claim = self.claim()
+        self.store.register_authority(claim, source)
+        source['recipe'] = 'changed-by-caller'
+        original = {'kind': 'recipe', 'recipe': 'RECIPE-20260921-1'}
+        self.assertIn(original, self.store.required_scopes(self.identity))
+        self.assertNotIn(source, self.store.required_scopes(self.identity))
+        self.message(claim)
+        self.authorize.side_effect = lambda identity, scopes: original not in scopes
+        with self.assertRaises(PermissionError):
+            self.store.events(self.identity)
+
+    def test_recipe_source_cannot_smuggle_identity_actions_or_deleted_document_bypass(self):
+        for source in ({'kind': 'recipe', 'recipe': None}, {'kind': 'recipe', 'recipe': ''},
+                {'kind': 'recipe', 'recipe': ' R1'}, {'kind': 'recipe', 'recipe': 'R1\n'},
+                {'kind': 'recipe', 'recipe': 'r' * 141}, {'kind': 'recipe', 'recipe': True},
+                {'kind': 'recipe', 'recipe': 'R1', 'owner': 'Administrator'},
+                {'kind': 'recipe', 'recipe': 'R1', 'actions': ['write']},
+                {'kind': 'recipe', 'recipe': 'R1', 'ignore_permissions': True},
+                {'kind': 'recipe', 'doctype': 'User', 'recipe': 'Administrator'},
+                {'kind': 'recipe', 'recipe': 'R1', 'allow_missing': True}):
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                tasks.authority_scope(source)
+
     def test_revoked_terminal_history_cannot_hide_new_authorized_active_task(self):
         old = self.store.create(self.identity.owner, str(uuid.uuid4()), 'PRIVATE_OLD_FILE',
             authority_scopes=[{'kind':'class','group':'REVOKED','actions':['read']}])['identity']

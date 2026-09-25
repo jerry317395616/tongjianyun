@@ -104,6 +104,59 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(len(self.readbacks), 2)
         self.assertTrue(results[1]['replayed'])
 
+    def test_recipe_worker_uses_one_ledger_operation_and_exact_target_readback(self):
+        from tongjianyun.business_agent_recipes import BusinessRecipes, write_plan, week_bounds
+        from tongjianyun.tests.test_business_agent_recipes import CREATE
+        import copy
+        args, calls, results = copy.deepcopy(CREATE), [], []
+        self.store.authorize.site = self.site
+        reader = BusinessRecipes(self.store.authorize, self.store)
+        def factory(claim, tool, value, *, operation_id):
+            self.assertEqual(tool, 'recipe_save')
+            calls.append(operation_id)
+            return self.transaction
+        def read(claim, tool, value, *, operation_id):
+            self.assertEqual(self.transaction.events[-1], 'close')
+            plan = write_plan(self.site, operation_id, value)
+            start, end = week_bounds(value['day'])
+            selection = {'view': 'recipe_week', 'day': value['day'], 'meal': 'lunch'}
+            self.store.register_authority(claim, {'kind': 'recipe', 'recipe': plan.target_recipe})
+            self.store.register_authority(claim, {'kind': 'view', 'selection': selection})
+            self.store.emit(claim, {'kind': 'view', 'version': 1, 'selection': selection, 'title': '本周食谱'})
+            return {'recipe': plan.target_recipe, 'operation_id': operation_id, 'day': value['day'],
+                'calendar_week_start': start, 'calendar_week_end': end,
+                'week_start': value['payload']['recipe']['weekStart'], 'week_end': value['payload']['recipe']['weekEnd'],
+                'visible_recipe_found': True, 'dishes': [{'dish': '合成回读'}], 'offset': 0,
+                'page_count': 1, 'dish_count': 1, 'has_more': False, 'next_offset': None,
+                'complete': True, 'selection': selection}
+        publish = MagicMock(side_effect=AssertionError('Recipe reader already published the view'))
+        self.writes = BusinessWrites(self.ledger, transaction_factory=factory, fresh_read=read, publish_view=publish)
+        def tools():
+            for call_id in ('save-recipe', 'repeat-receipt'):
+                results.append(self.proxies[0].dispatch_tool('recipe_save', args, call_id))
+        self.native.first_poll = tools
+        outcome = self.worker(recipe_tools=reader.dispatch).run(self.identity, self.ticket.job_id)
+        self.assertEqual(outcome['status'], 'completed')
+        self.assertEqual(self.transaction.events, ['begin', 'save', 'commit', 'close'])
+        self.assertEqual(calls, [results[0]['operation_id']])
+        self.assertTrue(all(result['committed'] and result['readback_complete'] for result in results))
+        self.assertTrue(results[1]['replayed'])
+        self.assertEqual(results[0]['readback']['recipe'], results[1]['readback']['recipe'])
+        self.assertEqual(len([event for event in self.store.events(self.identity) if event['kind'] == 'view']), 2)
+        self.assertTrue(self.ledger.observe(self.identity, self.native.claim.claim_id).admission_closed)
+        self.assertIn('recipe_save', self.native.inputs['prompt'].decode())
+        publish.assert_not_called()
+
+    def test_recipe_save_not_exposed_by_class_writes_without_recipe_reader(self):
+        from tongjianyun.tests.test_business_agent_recipes import CREATE
+        def tools():
+            with self.assertRaises(PermissionError):
+                self.proxies[0].dispatch_tool('recipe_save', CREATE, 'not-installed')
+        self.native.first_poll = tools
+        self.assertEqual(self.run_worker()['status'], 'completed')
+        self.assertNotIn('recipe_save', self.native.inputs['prompt'].decode())
+        self.assertEqual(self.transactions, [])
+
     def test_draft_gate_is_opened_before_native_bind_and_drained_before_exit_observation(self):
         calls = []
         proposals = SimpleNamespace(site=self.site,

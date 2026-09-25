@@ -38,7 +38,8 @@ def main():
                'test_business_agent_meal_reads', 'test_business_agent_writes',
                'test_business_agent_write_adapter', 'test_business_agent_execution',
                'test_business_agent_catalog', 'test_business_agent_attachments', 'test_business_agent_proposals',
-               'test_business_proposal_api', 'test_business_proposal_views', 'test_business_agent_recipes']
+               'test_business_proposal_api', 'test_business_proposal_views', 'test_business_agent_recipes',
+               'test_business_agent_recipe_authority']
         result = unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(
             ['tongjianyun.tests.' + name for name in modules]))
     finally:

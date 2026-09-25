@@ -72,6 +72,21 @@ class BusinessAgentToolsTests(unittest.TestCase):
         self.assertGreaterEqual(self.read_task.call_count, 3)
         self.db.get_value.assert_called_with('User', self.task['owner'], ['enabled', 'user_type'], as_dict=True)
 
+    def test_recipe_calendar_selection_is_finite_and_not_an_old_meal_write(self):
+        selection = {'view': 'recipe_week', 'day': '2026-09-24', 'meal': 'lunch'}
+        self.assertEqual(tools._validate_arguments('business_view', {'selection': selection}), {'selection': selection})
+        for key in ('recipe', 'revision', 'group', 'payload', 'owner', 'offset'):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                tools._validate_arguments('business_view', {'selection': {**selection, key: 'x'}})
+        for tool in ('recipe_read', 'recipe_save'):
+            # New native recipe adapters own these operations. Legacy dispatch
+            # must not silently fall through to classroom's meal service.
+            with (self.subTest(tool=tool), patch.object(tools, '_meal_read') as meal_read,
+                    patch.object(tools, '_write') as write, self.assertRaises(ValueError)):
+                tools.dispatch(self.binding, tool, {'day': '2026-09-24'})
+            meal_read.assert_not_called()
+            write.assert_not_called()
+
     def test_original_exception_restores_actor_and_cache(self):
         with patch.object(tools, '_classroom_read', side_effect=RuntimeError('read failure')):
             with self.assertRaisesRegex(RuntimeError, 'read failure'):

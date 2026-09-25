@@ -220,11 +220,18 @@ authorizer. This is a protocol, not a generic Frappe permission fingerprint.
 """
     schemas = {'class': {'kind', 'group', 'actions'}, 'doctype': {'kind', 'doctype', 'actions'},
                'document': {'kind', 'doctype', 'document', 'actions'}, 'view': {'kind', 'selection'},
-               'capability': {'kind', 'name'}, 'attachment': {'kind', 'descriptor'}}
+               'capability': {'kind', 'name'}, 'attachment': {'kind', 'descriptor'},
+               'recipe': {'kind', 'recipe'}}
     if type(value) is not dict or not isinstance(value.get('kind'), str) or value['kind'] not in schemas or set(value) != schemas[value['kind']]:
         raise ValueError('Invalid registered authority scope')
     result = dict(value)
-    if value['kind'] == 'attachment':
+    if value['kind'] == 'recipe':
+        # Native recipe edits replace detail row IDs. The dedicated aggregate
+        # source follows the original whole-recipe/history permission contract,
+        # not a generic exemption for missing/deleted arbitrary documents.
+        from tongjianyun.business_agent_recipes import normalize_source
+        result = normalize_source(value)
+    elif value['kind'] == 'attachment':
         from tongjianyun.business_agent_attachments import normalize_descriptor
         result['descriptor'] = normalize_descriptor(value['descriptor'])
     elif value['kind'] == 'view':

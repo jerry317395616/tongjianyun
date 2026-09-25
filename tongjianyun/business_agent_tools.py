@@ -38,6 +38,7 @@ VIEW_FIELDS = {
     'class_students': {'group', 'offset'},
     'classroom_day': {'group', 'offset'},
     'meal_counts': {'group'},
+    'recipe_week': set(),
     'frappe_catalog': {'app', 'module', 'kind', 'keyword', 'offset'},
     'frappe_doctype': {'doctype'},
     'frappe_document': {'doctype', 'document'},

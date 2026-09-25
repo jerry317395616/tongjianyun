@@ -53,6 +53,7 @@ TOOL_INSTRUCTIONS = {
         '这是整份替换，不是补丁；不省略未要求删除的内容。每周只有一份当前食谱，已有时必须用原编号和revision编辑；'
         '不可另存副本绕过冲突，不可自动归档。日期范围不可编辑，锁定日期不可更改。'
         '仅保存草稿并保留原修改历史，不发布、不生成采购或确认用餐。原保存可排队食材匹配，排队不代表匹配完成；'
+        'readback_available=true只证明取得提交后的当前分页；readback_complete=false时仍须按recipe_read分页读取，不能宣称整周核验完成。'
         '提交结果不明时不能换任务/编号重试。明确保存意图才保存，分析和查看不自动保存。'),
 }
 
@@ -409,7 +410,8 @@ class RecipeWriteAdapter:
     Integration must pass the persisted reservation UUID to transaction_factory
     and the outcome's SAME UUID to fresh_read, including replays. There is no
     task/call/message-hash substitute and no fallback lookup by week after save.
-    The existing ledger does not yet supply that optional trusted argument.
+    The shared write ledger supplies that keyword only after reservation; the
+    worker/model JSON schema cannot supply or override it.
     """
     def __init__(self, site, sites_path, *, store, authority=None, before_connect=None):
         native_adapter, _ = _native_adapter_types()

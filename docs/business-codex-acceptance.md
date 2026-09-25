@@ -400,3 +400,15 @@ run.state=restored；记录、基线、旧失败及新证据均保留，临时�
 部署纯测试首次忘记加入既有QA defusedxml依赖目录，277中2个解析测试报parser_unavailable；
 只修正该测试进程sys.path后277全部通过，没有安装/改动系统或生产依赖。专属附件25项在
 原Frappe Python环境单独也通过。此前错误和实际31项证据不互相替代。
+
+### 2026-09-26后续：共享食谱执行链
+
+食谱原生来源权限、持久operation_id账本、周级并发限制、worker/service分派已接线。
+真实合成原生QA `2bb159c6-4ff6-4f73-afdd-3a7e5cddd9ef` 9/9，2提交/2准确原因回滚，
+同一编号修改、原历史留存、过期revision与同周重复拒绝及独立回读。运行前食谱四表为空，
+基线检查仅证明本run新增记录，不是非空既有食谱库保护的实际验收。
+证据SHA256 `eab1f730c3360c496fe0332067732c3bcc86d4a5ceb466534d32761bad768b16`。
+仅既有合成管理账号、无食材；没有模型、HTTP上传、RQ或浏览器证据，未部署生产。
+详细范围及保留记录见 [食谱接线与验收](business-agent-recipes.md)。
+最终后端强制只读1086/1086，前端177/177，Linux部署纯测试302/302。独立新READ ONLY连接
+回查最终snapshot和baseline一致；合成task没有真实runtime完成证据，不制造completed终态。

@@ -279,7 +279,7 @@ class WorkerTests(unittest.TestCase):
     @unittest.skipUnless(HAS_FRAPPE, 'Original argument validator requires installed Frappe; exercised on native-bench')
     def test_unintegrated_tools_and_identity_arguments_refused(self):
         def tools():
-            for tool in ('attendance_save', 'meal_read', 'business_view', 'scene_bootstrap', 'shell', 'run_task'):
+            for tool in ('attendance_save', 'meal_read', 'business_view', 'scene_bootstrap', 'recipe_read', 'recipe_save', 'shell', 'run_task'):
                 with self.assertRaises(PermissionError):
                     self.proxies[0].handler(tool, {}, 'read-0001')
             with self.assertRaises(ValueError):
@@ -287,6 +287,72 @@ class WorkerTests(unittest.TestCase):
         self.runtime.first_poll = tools
         self.assertEqual(self.run_worker()['status'], 'completed')
         self.read.assert_not_called()
+
+    def test_recipe_reader_requires_same_source_aware_store(self):
+        from tongjianyun.business_agent_recipes import BusinessRecipes
+        authority = self.store.authorize
+        authority.site = self.site
+        reader = BusinessRecipes(authority, self.store)
+        self.assertEqual(self.make_worker(recipe_tools=reader.dispatch).recipe_tools, reader.dispatch)
+        other = SimpleNamespace(site=self.site)
+        for invalid in (lambda *args: {}, BusinessRecipes(authority, other).dispatch,
+                        BusinessRecipes(SimpleNamespace(site=self.site), self.store).dispatch, 'recipe_read'):
+            with self.subTest(adapter=type(invalid).__name__), self.assertRaises(ValueError):
+                self.make_worker(recipe_tools=invalid)
+
+    def test_recipe_read_routed_only_to_bound_reader_and_prompt_keeps_save_disabled(self):
+        from tongjianyun.business_agent_recipes import BusinessRecipes
+        calls, replies = [], []
+        class Reader(BusinessRecipes):
+            def dispatch(self, claim, tool, args):
+                calls.append((claim, tool, args))
+                return {'recipe': 'R1', 'complete': False}
+        self.store.authorize.site = self.site
+        reader = Reader(self.store.authorize, self.store)
+        args = {'day': '2026-09-16', 'page_size': 1}
+        def tool():
+            replies.append(self.proxies[0].handler('recipe_read', args, 'recipe-page-1'))
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('recipe_save', {}, 'recipe-write-1')
+        self.runtime.first_poll = tool
+        result = self.make_worker(recipe_tools=reader.dispatch).run(self.identity, self.job_id)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(calls, [(self.runtime.claim, 'recipe_read', args)])
+        self.assertEqual(replies, [{'recipe': 'R1', 'complete': False}])
+        self.read.assert_not_called()
+        prompt = self.runtime.inputs['prompt'].decode()
+        self.assertIn('recipe_read', prompt)
+        self.assertNotIn('recipe_save', prompt)
+        self.assertIn('不能写业务', prompt)
+
+    def test_recipe_read_revocation_before_delivery_suppresses_result(self):
+        from tongjianyun.business_agent_recipes import BusinessRecipes
+        store, identity = self.store, self.identity
+        class Reader(BusinessRecipes):
+            def dispatch(self, claim, tool, args):
+                store.cancel(identity)
+                return {'recipe': 'NOT FOR DELIVERY'}
+        store.authorize.site = self.site
+        reader = Reader(store.authorize, store)
+        def tool():
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('recipe_read', {'day': '2026-09-16'}, 'recipe-page-1')
+        self.runtime.first_poll = tool
+        result = self.make_worker(recipe_tools=reader.dispatch).run(identity, self.job_id)
+        self.assertEqual(result['status'], 'cancelled')
+        self.assertNotIn('NOT FOR DELIVERY', str(self.public()))
+
+    def test_recipe_prompt_exposes_only_installed_tools_with_original_write_rules(self):
+        task = {'message': '把附件作为本周食谱', 'context': {'day': '2026-09-16'}, 'mode': 'business'}
+        for recipes, writes in ((False, False), (False, True), (True, False), (True, True)):
+            prompt = worker.build_prompt(task, include_recipes=recipes, include_writes=writes).decode()
+            self.assertEqual('recipe_read' in prompt, recipes)
+            self.assertEqual('recipe_save' in prompt, recipes and writes)
+            if recipes and writes:
+                for instruction in ('每周只有一份', '原编号和revision', '不是补丁', '不发布', '提交结果不明'):
+                    self.assertIn(instruction, prompt)
+        with self.assertRaises(ValueError):
+            worker.build_prompt(task, include_recipes=1)
 
     @unittest.skipUnless(HAS_FRAPPE, 'Original argument validator requires installed Frappe; exercised on native-bench')
     def test_tool_revocation_after_read_does_not_deliver_or_publish(self):

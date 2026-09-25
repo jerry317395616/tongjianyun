@@ -218,6 +218,10 @@ def _table_field(doctype, fieldname):
 
 
 def _projection(name):
+    from tongjianyun.business_agent_recipes import PROJECTION as RECIPE_CONTENT, check_projection
+    if name == RECIPE_CONTENT:
+        check_projection()
+        return
     if name in {SCENE, CATALOG}:
         from tongjianyun.scene_access import require_scene_account
         require_scene_account()
@@ -267,7 +271,13 @@ def _view_dependencies(selection):
         _deny()
     view = choice['view']
     result = [{'kind': 'view', 'selection': choice}]
-    if view == 'frappe_catalog':
+    if view == 'recipe_week':
+        from tongjianyun.business_agent_recipes import PROJECTION as RECIPE_CONTENT
+        # Calendar navigation is only admission, not a claim to have read a
+        # recipe. BusinessRecipes registers the actual recipe aggregate before
+        # delivering content; the original scene gate is checked below too.
+        result.append(_capability(RECIPE_CONTENT))
+    elif view == 'frappe_catalog':
         # Even an administrator's BUSINESS task cannot turn into project mode.
         if choice.get('kind') not in (None, '', 'doctype'):
             _deny()
@@ -315,6 +325,9 @@ def _check_scope(scope):
         # the File DocType or arbitrary paths. The descriptor is host-bound.
         from tongjianyun.business_agent_attachments import check_source
         check_source(scope['descriptor'])
+    elif kind == 'recipe':
+        from tongjianyun.business_agent_recipes import check_source
+        check_source(scope)
     elif kind == 'view':
         from tongjianyun.scene_access import require_view_access
         # Reject unknown/admin views BEFORE require_view_access can use its

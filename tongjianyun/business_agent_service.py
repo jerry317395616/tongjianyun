@@ -129,13 +129,14 @@ class FrappeBusinessQueue:
 
 class BusinessChatApplication:
     """Transport-independent application; identity comes from a trusted Viewer."""
-    def __init__(self, store, authority, queue, *, lock=submission_lock, writes=None, attachments=None, proposals=None):
+    def __init__(self, store, authority, queue, *, lock=submission_lock, writes=None, attachments=None, proposals=None, recipes=None):
         if store.site != authority.site or store.site != queue.site:
             raise PermissionError('Business application site mismatch')
         self.store, self.authority, self.queue, self.lock = store, authority, queue, lock
         self.writes = writes
         self.attachments = attachments
         self.proposals = proposals
+        self.recipes = recipes
 
     def viewer(self):
         return self.authority.capture_viewer()
@@ -327,8 +328,32 @@ def application(*, require_ready=False):
     from tongjianyun.business_agent_execution import BusinessExecutionRuntime
     from tongjianyun.business_agent_write_adapter import FrappeWriteAdapter
     from tongjianyun.business_agent_writes import BusinessWriteLedger, BusinessWrites
+    from tongjianyun.business_agent_recipes import RecipeWriteAdapter
     adapter = FrappeWriteAdapter(site, sites_path, store=store)
-    ledger = BusinessWriteLedger(directory, site, authorize=adapter.authorize)
+    recipe_adapter = RecipeWriteAdapter(site, sites_path, store=store, authority=authority)
+    def write_adapter(tool):
+        if tool == 'recipe_save':
+            return recipe_adapter
+        if tool in {'attendance_save', 'meal_save'}:
+            return adapter
+        raise PermissionError('No reviewed native write adapter for this tool')
+    def authorize_write(claim, tool, arguments):
+        return write_adapter(tool).authorize(claim, tool, arguments)
+    def transaction_factory(claim, tool, arguments, *, operation_id=None):
+        selected = write_adapter(tool)
+        if tool == 'recipe_save':
+            return selected.transaction_factory(claim, tool, arguments, operation_id=operation_id)
+        if operation_id is not None:
+            raise ValueError('Unexpected recipe reservation for another business tool')
+        return selected.transaction_factory(claim, tool, arguments)
+    def fresh_read(claim, tool, arguments, *, operation_id=None):
+        selected = write_adapter(tool)
+        if tool == 'recipe_save':
+            return selected.fresh_read(claim, tool, arguments, operation_id=operation_id)
+        if operation_id is not None:
+            raise ValueError('Unexpected recipe reservation for another business tool')
+        return selected.fresh_read(claim, tool, arguments)
+    ledger = BusinessWriteLedger(directory, site, authorize=authorize_write)
     runtime = BusinessExecutionRuntime(runtime, ledger, proposals=repository)
     # The SAME composition is used in RQ and in fresh web/SSE reconciliation.
     # A native cgroup cannot certify host-side database transaction drainage.
@@ -337,12 +362,13 @@ def application(*, require_ready=False):
         store.register_authorities(claim, authority.view_scopes(claim.identity, selection))
         store.emit(claim, {'kind': 'view', 'version': 1, 'selection': selection,
                           'title': '班级当日出勤' if selection['view'] == 'classroom_day' else '用餐人数'})
-    writes = BusinessWrites(ledger, transaction_factory=adapter.transaction_factory,
-                            fresh_read=adapter.fresh_read, publish_view=publish_view)
+    writes = BusinessWrites(ledger, transaction_factory=transaction_factory,
+                            fresh_read=fresh_read, publish_view=publish_view)
     from tongjianyun.business_agent_attachments import BusinessAttachments
     return BusinessChatApplication(store, authority, queue, writes=writes,
                                    attachments=BusinessAttachments(authority, store),
-                                   proposals=BusinessProposals(authority, store, repository) if repository is not None else None), runtime
+                                   proposals=BusinessProposals(authority, store, repository) if repository is not None else None,
+                                   recipes=recipe_adapter.reader), runtime
 
 
 def run_task(owner, task_id):
@@ -365,5 +391,6 @@ def run_task(owner, task_id):
         catalog_tools=BusinessCatalog(app.authority, app.store).dispatch,
         attachment_tools=app.attachments.dispatch,
         proposal_tools=app.proposals.dispatch if app.proposals is not None else None,
+        recipe_tools=app.recipes.dispatch,
         model_key=_model_key)
     return worker.run(identity, app.store.job_id(identity))

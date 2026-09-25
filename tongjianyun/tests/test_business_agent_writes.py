@@ -39,6 +39,13 @@ def meal(**changes):
             'confirm': False, **changes}
 
 
+def recipe(**changes):
+    return {'day': '2026-09-24', 'recipe': None, 'revision': '', 'payload': {
+        'recipe': {'title': 'Synthetic weekly recipe', 'weekStart': '2026-09-21', 'weekEnd': '2026-09-25'},
+        'days': [{'date': '2026-09-21', 'portions': [{'slot': 'lunch', 'dishes': ['rice'],
+            'dishIngredientRows': [{'dishName': 'rice', 'ingredient': 'rice', 'amount': 25, 'unit': 'g'}]}]}]}, **changes}
+
+
 class Transaction:
     def __init__(self, *, hook=None, failure=None, rollback=True, close=True):
         self.events, self.hook, self.failure = [], hook, failure
@@ -675,6 +682,337 @@ class BusinessWritesTests(LedgerFixture, unittest.TestCase):
         self.assertTrue(result['committed'])
         self.assertEqual(views[0]['meal'], 'lunch')
         self.assertEqual(self.factories, 1)
+
+
+class RecipeLedgerFixture(LedgerFixture):
+    def setUp(self):
+        super().setUp()
+        self.recipe_calls = []
+
+    def recipe_factory(self, current, tool, arguments, *, operation_id):
+        with self.ledger._connect() as db:
+            persisted = db.execute('SELECT state, active FROM operations WHERE operation_id=?', (operation_id,)).fetchone()
+        self.assertEqual(persisted, ('reserved', 1))
+        self.assertEqual(str(uuid.UUID(operation_id)), operation_id)
+        self.recipe_calls.append((current, tool, arguments, operation_id))
+        self.factories += 1
+        return self.tx
+
+    def execute_recipe(self, *, args=None, **options):
+        return self.execute(tool='recipe_save', args=recipe() if args is None else args,
+                            factory=options.pop('factory', self.recipe_factory), **options)
+
+
+class RecipeWriteLedgerTests(RecipeLedgerFixture, unittest.TestCase):
+    def test_recipe_gets_reserved_operation_not_task_claim_or_call(self):
+        arguments = recipe()
+        original = json.loads(json.dumps(arguments))
+        saved = self.execute_recipe(args=arguments, call=self.claim.identity.task_id)
+        self.assertEqual(saved.status, 'committed')
+        current, tool, normalized, operation_id = self.recipe_calls[0]
+        self.assertEqual(current, self.claim)
+        self.assertEqual(tool, 'recipe_save')
+        self.assertEqual(operation_id, saved.operation_id)
+        self.assertNotIn(operation_id, (self.claim.identity.task_id, self.claim.claim_id))
+        self.assertEqual(normalized['payload']['days'][0]['day'], '')
+        self.assertIs(type(normalized['payload']['days'][0]['portions'][0]['dishIngredientRows'][0]['amount']), float)
+        self.assertEqual(arguments, original)
+
+    def test_forged_operation_ids_and_nonfinite_recipe_schema_never_reserve(self):
+        invalid = [recipe(operation_id=str(uuid.uuid4())), recipe(task_id=self.claim.identity.task_id),
+                   recipe(group='unrequested'), recipe(revision='not-empty-for-create')]
+        for field, value in (('recipeId', 'injected'), ('workflowStatus', '已发布')):
+            item = recipe()
+            item['payload']['recipe'][field] = value
+            invalid.append(item)
+        for amount in (True, float('nan'), float('inf'), -1):
+            item = recipe()
+            item['payload']['days'][0]['portions'][0]['dishIngredientRows'][0]['amount'] = amount
+            invalid.append(item)
+        for item in invalid:
+            with self.subTest(item=item), self.assertRaises(ValueError):
+                self.execute_recipe(args=item)
+        self.assertEqual(self.factories, 0)
+        self.assertEqual(self.observe().operations, 0)
+
+    def test_no_three_argument_fallback_for_recipe_factory(self):
+        outcome = self.execute_recipe(factory=self.factory)
+        self.assertEqual(outcome.status, 'rolled_back')
+        self.assertFalse(outcome.active)
+        self.assertEqual(self.factories, 0)  # incompatible trusted factory never began
+        self.assertEqual(self.tx.events, [])
+
+    def test_recipe_global_intent_replay_keeps_target_across_task_owner_and_calls(self):
+        from tongjianyun.business_agent_recipes import write_plan
+        first = self.execute_recipe()
+        other = claim('teacher-two')
+        ledger = self.new_ledger()
+        ledger.open_task(other)
+        second = self.execute_recipe(current=other, ledger=ledger, call='new-call')
+        self.assertTrue(second.replayed)
+        self.assertEqual(second.operation_id, first.operation_id)
+        self.assertEqual(self.factories, 1)
+        self.assertEqual(write_plan(SITE, first.operation_id, recipe()).target_recipe,
+                         write_plan(SITE, second.operation_id, recipe()).target_recipe)
+
+    def test_recipe_normalization_defaults_and_meal_order_dedupe(self):
+        first_args = recipe()
+        portion = {'slot': 'breakfast', 'dishes': ['milk'], 'dishIngredientRows': []}
+        first_args['payload']['days'][0]['portions'].append(portion)
+        first = self.execute_recipe(args=first_args)
+        second_args = json.loads(json.dumps(first_args))
+        second_args['payload']['days'][0]['day'] = ''
+        second_args['payload']['days'][0]['portions'].reverse()
+        second = self.execute_recipe(args=second_args, call='again')
+        self.assertTrue(second.replayed)
+        self.assertEqual(first.operation_id, second.operation_id)
+        self.assertEqual(self.factories, 1)
+
+    def test_recipe_unknown_commit_fences_whole_site_week_and_existing_aggregate(self):
+        self.tx.failure = 'commit'
+        initial = recipe(recipe='recipe-existing', revision='original')
+        first = self.execute_recipe(args=initial)
+        self.assertEqual(first.status, 'uncertain')
+        other = claim('teacher-two')
+        ledger = self.new_ledger()
+        ledger.open_task(other)
+        self.tx = Transaction()
+        for number, args in enumerate((recipe(day='2026-09-21'),
+                                      recipe(day='2026-09-27', recipe='other-recipe', revision='other'))):
+            blocked = self.execute_recipe(current=other, ledger=ledger, call='blocked-' + str(number), args=args)
+            self.assertEqual(blocked.status, 'blocked')
+            self.assertIsNone(blocked.operation_id)
+        with self.ledger._connect() as db:
+            keys = [json.loads(row[0]) for row in db.execute('SELECT resource FROM resources').fetchall()]
+        self.assertCountEqual(keys, [['recipe_week', '2026-09-21'], ['recipe', 'recipe-existing']])
+        self.assertEqual(self.factories, 1)
+
+    def test_same_aggregate_cannot_escape_unknown_fence_by_changed_week(self):
+        self.tx.failure = 'commit'
+        self.execute_recipe(args=recipe(recipe='recipe-existing', revision='original'))
+        next_week = recipe(recipe='recipe-existing', revision='new', day='2026-09-28')
+        next_week['payload']['recipe'].update(weekStart='2026-09-28', weekEnd='2026-10-02')
+        next_week['payload']['days'][0]['date'] = '2026-09-28'
+        self.tx = Transaction()
+        blocked = self.execute_recipe(args=next_week, call='move-week')
+        self.assertEqual(blocked.status, 'blocked')
+        self.assertEqual(self.factories, 1)
+
+    def test_recipe_fence_does_not_block_independent_week_or_attendance(self):
+        self.tx.failure = 'commit'
+        self.execute_recipe()
+        self.tx = Transaction()
+        self.assertEqual(self.execute(call='attendance').status, 'committed')
+        next_week = recipe(day='2026-09-28')
+        next_week['payload']['recipe'].update(weekStart='2026-09-28', weekEnd='2026-10-02')
+        next_week['payload']['days'][0]['date'] = '2026-09-28'
+        self.assertEqual(self.execute_recipe(args=next_week, call='next-week').status, 'committed')
+
+    def test_proven_recipe_rollback_releases_week_but_does_not_retry_same_intent(self):
+        self.tx.failure = 'save'
+        first = self.execute_recipe()
+        self.assertEqual(first.status, 'rolled_back')
+        self.tx = Transaction()
+        repeated = self.execute_recipe(call='repeat')
+        self.assertEqual(repeated.status, 'rolled_back')
+        self.assertTrue(repeated.replayed)
+        corrected = recipe()
+        corrected['payload']['recipe']['title'] = 'Corrected original intent'
+        self.assertEqual(self.execute_recipe(args=corrected, call='corrected').status, 'committed')
+        self.assertEqual(self.factories, 2)
+
+    def test_recipe_closed_gate_or_revoked_authority_blocks_receipt_replay(self):
+        self.execute_recipe()
+        self.authorized = False
+        with self.assertRaises(PermissionError):
+            self.execute_recipe(call='revoked')
+        self.authorized = True
+        self.ledger.close_task(self.claim.identity, self.claim.claim_id)
+        with self.assertRaises(PermissionError):
+            self.execute_recipe(call='closed')
+        self.assertEqual(self.factories, 1)
+
+    def test_concurrent_different_recipe_intent_same_week_is_fenced_before_factory(self):
+        entered, release = threading.Event(), threading.Event()
+        outcomes = []
+        def hook(name):
+            if name == 'save':
+                entered.set()
+                if not release.wait(10):
+                    raise RuntimeError('coordination failed')
+        self.tx.hook = hook
+        thread = threading.Thread(target=lambda: outcomes.append(self.execute_recipe()))
+        thread.start()
+        try:
+            self.assertTrue(entered.wait(5))
+            other = claim('teacher-two')
+            ledger = self.new_ledger()
+            ledger.open_task(other)
+            changed = recipe(day='2026-09-27')
+            changed['payload']['recipe']['title'] = 'Another concurrent request'
+            self.assertEqual(self.execute_recipe(current=other, ledger=ledger, args=changed).status, 'blocked')
+            self.assertEqual(self.factories, 1)
+        finally:
+            release.set()
+            thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(outcomes[0].status, 'committed')
+
+
+class RecipeBusinessWritesTests(RecipeLedgerFixture, unittest.TestCase):
+    def readback(self, current, tool, args, *, operation_id):
+        from tongjianyun.business_agent_recipes import write_plan, week_bounds
+        self.assertEqual(self.tx.events[-1], 'close')
+        plan = write_plan(SITE, operation_id, args)
+        start, end = week_bounds(args['day'])
+        return {'recipe': plan.target_recipe, 'operation_id': operation_id, 'day': args['day'],
+                'calendar_week_start': start, 'calendar_week_end': end,
+                'week_start': args['payload']['recipe']['weekStart'], 'week_end': args['payload']['recipe']['weekEnd'],
+                'visible_recipe_found': True, 'dishes': [{'dish': 'current-snapshot'}],
+                'page_count': 1, 'dish_count': 1, 'offset': 0, 'has_more': False, 'next_offset': None, 'complete': True,
+                'selection': {'view': 'recipe_week', 'day': args['day'], 'meal': 'lunch'}}
+
+    def adapter(self, read=None):
+        def no_duplicate(*_):
+            raise AssertionError('Recipe native reader already published the authorized view')
+        return BusinessWrites(self.ledger, transaction_factory=self.recipe_factory,
+                              fresh_read=read or self.readback, publish_view=no_duplicate)
+
+    def test_recipe_readback_uses_same_persisted_id_and_does_not_republish(self):
+        result = self.adapter().dispatch(self.claim, 'recipe_save', recipe(), 'save')
+        self.assertTrue(result['committed'])
+        self.assertTrue(result['readback_available'])
+        self.assertTrue(result['readback_complete'])
+        self.assertEqual(result['operation_id'], self.recipe_calls[0][3])
+        self.assertEqual(result['operation_id'], result['readback']['operation_id'])
+        self.assertNotIn('group', result['selection'])
+
+    def test_recipe_partial_fresh_page_is_not_complete_week_proof(self):
+        def page(*args, **kwargs):
+            return {**self.readback(*args, **kwargs), 'has_more': True, 'next_offset': 1,
+                    'complete': False, 'dish_count': 20}
+        result = self.adapter(page).dispatch(self.claim, 'recipe_save', recipe(), 'save')
+        self.assertTrue(result['committed'])
+        self.assertTrue(result['readback_available'])
+        self.assertFalse(result['readback_complete'])
+        self.assertFalse(result['readback']['complete'])
+
+    def test_recipe_replay_uses_new_snapshot_same_operation_and_no_new_transaction(self):
+        observed = []
+        def read(*args, **kwargs):
+            value = self.readback(*args, **kwargs)
+            observed.append(value['operation_id'])
+            value['dishes'][0]['dish'] = str(len(observed))
+            return value
+        adapter = self.adapter(read)
+        first = adapter.dispatch(self.claim, 'recipe_save', recipe(), 'first')
+        other = claim('teacher-two')
+        self.ledger.open_task(other)
+        second = adapter.dispatch(other, 'recipe_save', recipe(), 'second')
+        self.assertTrue(second['replayed'])
+        self.assertEqual(observed, [first['operation_id'], first['operation_id']])
+        self.assertEqual(second['readback']['dishes'][0]['dish'], '2')
+        self.assertEqual(self.factories, 1)
+
+    def test_recipe_target_scope_or_page_mismatch_never_delivered_or_rewritten(self):
+        patches = ({'recipe': 'other-recipe'}, {'operation_id': str(uuid.uuid4())}, {'day': '2026-09-25'},
+                   {'calendar_week_start': '2026-09-28'}, {'calendar_week_end': '2026-10-04'},
+                   {'week_start': '2026-09-22'}, {'week_end': '2026-09-24'}, {'visible_recipe_found': False},
+                   {'selection': {'view': 'recipe_week', 'day': '2026-09-24', 'meal': 'lunch', 'recipe': 'injected'}},
+                   {'complete': False}, {'has_more': True}, {'complete': 1}, {'page_count': True},
+                   {'offset': 1}, {'next_offset': 1}, {'dish_count': 2})
+        for number, changes in enumerate(patches):
+            def read(*args, **kwargs):
+                return {**self.readback(*args, **kwargs), **changes}
+            with self.subTest(changes=changes):
+                result = self.adapter(read).dispatch(self.claim, 'recipe_save', recipe(), 'call-' + str(number))
+                self.assertTrue(result['committed'])
+                self.assertFalse(result['readback_available'])
+                self.assertFalse(result['readback_complete'])
+                self.assertNotIn('readback', result)
+                self.assertNotIn('selection', result)
+                self.assertFalse(result['retry_allowed'])
+        self.assertEqual(self.factories, 1)
+
+    def test_recipe_missing_keyword_fresh_read_contract_preserves_receipt_no_fallback(self):
+        def legacy(current, tool, args):
+            raise AssertionError('Three-argument callback must not be retried')
+        result = self.adapter(legacy).dispatch(self.claim, 'recipe_save', recipe(), 'save')
+        self.assertTrue(result['committed'])
+        self.assertFalse(result['readback_available'])
+        self.assertFalse(result['readback_complete'])
+
+    def test_recipe_unknown_commit_or_undrained_connection_never_reads(self):
+        def forbidden(*args, **kwargs):
+            raise AssertionError('Uncertain commit is not fresh read permission')
+        self.tx.failure = 'commit'
+        result = self.adapter(forbidden).dispatch(self.claim, 'recipe_save', recipe(), 'save')
+        self.assertEqual(result['status'], 'uncertain')
+        self.assertIsNone(result['committed'])
+        self.assertFalse(result['readback_complete'])
+        self.assertFalse(result['readback_available'])
+
+    def test_recipe_revocation_after_readback_blocks_all_content_delivery(self):
+        def revoked(*args, **kwargs):
+            value = self.readback(*args, **kwargs)
+            self.authorized = False
+            return value
+        with self.assertRaises(PermissionError):
+            self.adapter(revoked).dispatch(self.claim, 'recipe_save', recipe(), 'save')
+        self.assertEqual(self.factories, 1)
+
+
+class RecipeNativeLedgerIntegrationTests(unittest.TestCase):
+    def test_real_ledger_native_adapter_reader_source_registration_and_fresh_replay(self):
+        # Real ledger/transaction/reader implementations, explicit Frappe/DB
+        # doubles from the existing native fixture. Not a live recipe save.
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        from tongjianyun import business_agent_recipes as recipes
+        from tongjianyun.tests.test_business_agent_recipes import RecipeNativeTransactionTests
+        fixture = RecipeNativeTransactionTests('test_factory_requires_trusted_operation_and_opens_no_connection')
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        base = fixture.base
+        base.state['cancel_requested'] = '0'
+        registered = []
+        fixture.stack.enter_context(patch.object(base.authority, 'ReadSet',
+            side_effect=lambda scopes: SimpleNamespace(scopes=scopes)))
+        fixture.adapter.authority.register_read = MagicMock(side_effect=lambda store, claim, sources: registered.extend(sources.scopes))
+        base.store.emit = MagicMock()
+        ledger = BusinessWriteLedger(Path(base.temp), base.site, authorize=fixture.adapter.authorize)
+        ledger.open_task(base.claim)
+        def no_duplicate(*_):
+            raise AssertionError('Native recipe reader publishes exactly once')
+        adapter = BusinessWrites(ledger, transaction_factory=fixture.adapter.transaction_factory,
+            fresh_read=fixture.adapter.fresh_read, publish_view=no_duplicate)
+        result = adapter.dispatch(base.claim, 'recipe_save', fixture.args, 'native-recipe')
+        self.assertTrue(result['committed'])
+        self.assertTrue(result['readback_available'])
+        self.assertTrue(result['readback_complete'])
+        target = recipes.write_plan(base.site, result['operation_id'], fixture.args).target_recipe
+        self.assertEqual(fixture.saved[0][0]['recipe']['recipeId'], target)
+        self.assertIn(recipes.source_scope(target), registered)
+        self.assertEqual(result['readback']['dishes'][1]['ingredients'][0]['unit'], 'ml')
+        self.assertEqual(ledger.observe(base.claim.identity, base.claim.claim_id).active_writes, 0)
+        writer = fixture.saved[0][1]
+        self.assertTrue(fixture.contexts)
+        self.assertTrue(all(connection is not writer and connection is not base.outer.db for connection in fixture.contexts))
+        base.store.emit.assert_called_once()
+        self.assertEqual(base.store.emit.call_args.args[1]['selection'], result['selection'])
+        # Fresh adapter has no in-memory transaction/receipt: immutable SQLite
+        # operation identity must still select the same committed target.
+        fresh = recipes.RecipeWriteAdapter(base.site, base.temp, store=base.store)
+        fresh.authority.register_read = MagicMock(side_effect=lambda store, claim, sources: registered.extend(sources.scopes))
+        again = BusinessWrites(ledger, transaction_factory=fresh.transaction_factory,
+            fresh_read=fresh.fresh_read, publish_view=no_duplicate).dispatch(
+                base.claim, 'recipe_save', fixture.args, 'fresh-adapter-replay')
+        self.assertTrue(again['replayed'])
+        self.assertTrue(again['readback_available'])
+        self.assertEqual(result['operation_id'], again['operation_id'])
+        self.assertEqual(again['readback']['recipe'], target)
+        self.assertEqual(len(fixture.saved), 1)
+        self.assertIs(base.local.get(), base.outer)
 
 
 if __name__ == '__main__':
