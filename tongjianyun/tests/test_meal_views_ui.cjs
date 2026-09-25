@@ -258,3 +258,169 @@ test('custom page edits use local dirty tracking rather than a stale saved cur_f
   const {run}=await nativeSetup();run('nativeSession.dirty=true;nativeSession.frame.contentWindow={frappe:{pages:{"custom-page":{}},get_route:()=>["custom-page"]},cur_frm:{is_dirty:()=>false}};');
   assert.equal(run('nativeDirty()'),true);assert.equal(run('currentViewContext().view'),'frappe_page');assert.equal(run('currentViewContext().page'),'custom-page');assert.equal(run('currentViewContext().doctype'),undefined);
 });
+
+const attendanceBlock={type:'attendance_register',student_group:'CLASS-1',group_label:'测试班',day:'2026-09-25',revision:'attendance-rev',editable:true,offset:30,rows:[{student:'S1',student_name:'测试学生一',status:'Unknown',source:'尚无登记'},{student:'S2',student_name:'测试学生二',status:'Present',source:'考勤登记'}]};
+const mealBlock={type:'meal_register',student_group:'CLASS-1',group_label:'测试班',day:'2026-09-25',meal:'lunch',meal_label:'午餐',revision:'',editable:true,confirmed:false,rows:[{student:'S1',student_name:'测试学生一',value:'未确认',expected:true},{student:'S2',student_name:'测试学生二',value:'未确认',expected:false}]};
+async function registerSetup(block=attendanceBlock){
+  const fixture=setup(),isMeal=block.type==='meal_register';fixture.context.responses={...data,selection:{view:isMeal?'meal_counts':'classroom_day',group:block.student_group,day:block.day,meal:'lunch',...(!isMeal?{offset:30}:{})},components:[block]};fixture.context.calls=[];
+  fixture.run('initializeViews({request:async(url,options)=>{calls.push({url,options});return options?.method==="POST"?{saved:1}:responses;}})');
+  await fixture.run('showBusinessView(responses.selection)');return fixture;
+}
+function setRegisterValue(fixture,index,value){const field=fixture.run('registerSession.fields')[index];field.select.value=value;field.select.listeners.change();return field;}
+
+test('attendance keeps unknown explicit, uses accessible labels and never changes it automatically',async()=>{
+  const fixture=await registerSetup(),session=fixture.run('registerSession');
+  assert.equal(session.fields[0].select.value,'Unknown');assert.equal(session.fields[1].select.value,'Present');assert.equal(session.dirty,false);assert.equal(session.save.disabled,true);
+  assert.match(session.fields[0].select.attrs['aria-label'],/测试学生一出勤状态/);assert.equal(session.fields[1].select.children.find(option=>option.value==='Unknown').disabled,true);
+  assert.equal(fixture.context.calls.length,1);
+});
+
+test('attendance save sends only changed students with exact context/revision, no second confirmation, then reads back same page',async()=>{
+  const fixture=await registerSetup();fixture.run('window.confirm=()=>{throw Error("normal save must not ask again")};');
+  setRegisterValue(fixture,0,'Present');const session=fixture.run('registerSession');assert.equal(session.dirty,true);assert.equal(session.save.disabled,false);
+  fixture.context.responses={...fixture.context.responses,components:[{...attendanceBlock,revision:'new-rev',rows:attendanceBlock.rows.map(row=>({...row,status:'Present'}))}]};
+  await session.save.click();
+  const call=fixture.context.calls[1];assert.match(call.url,/classroom.save_attendance$/);assert.equal(call.options.method,'POST');
+  assert.deepEqual(JSON.parse(call.options.body),{student_group:'CLASS-1',day:'2026-09-25',revision:'attendance-rev',changes:[{student:'S1',status:'Present',leave_reason:''}]});
+  const selected=JSON.parse(new URL(fixture.context.calls[2].url,'http://local').searchParams.get('selection_json'));assert.equal(selected.group,'CLASS-1');assert.equal(selected.day,'2026-09-25');assert.equal(selected.offset,30);
+  assert.equal(fixture.run('registerSession.fields[0].select.value'),'Present');assert.equal(fixture.run('registerSession.dirty'),false);assert.equal(fixture.run('registerSession.state'),'ready');
+});
+
+test('new leave requires a reason before any request and cannot edit an existing leave reason',async()=>{
+  const fixture=await registerSetup();const field=setRegisterValue(fixture,0,'Leave'),session=fixture.run('registerSession');
+  await session.save.click();assert.equal(fixture.context.calls.length,1);assert.match(session.status.textContent,/请填写新请假/);
+  field.reason.value='家长已说明';field.reason.listeners.input();await session.save.click();assert.equal(JSON.parse(fixture.context.calls[1].options.body).changes[0].leave_reason,'家长已说明');
+  const second=await registerSetup({...attendanceBlock,rows:[{student:'S1',student_name:'测试',status:'Leave',leave_record:'LEAVE-1'}]});
+  assert.equal(second.run('registerSession.fields[0].reason.disabled'),true);
+});
+
+test('readonly or locked attendance has no enabled save and displays the reason',async()=>{
+  const fixture=await registerSetup({...attendanceBlock,editable:false,reason:'当日已锁定'}),session=fixture.run('registerSession');
+  assert.equal(session.fields[0].select.disabled,true);assert.equal(session.save.disabled,true);await session.save.click();assert.equal(fixture.context.calls.length,1);
+  assert(fixture.nodes.get('view-content').children[0].children[0].children.some(child=>child.textContent==='当日已锁定'));
+});
+
+test('dirty attendance survives background refresh and can cancel leaving the current business',async()=>{
+  const fixture=await registerSetup();setRegisterValue(fixture,0,'Absent');const session=fixture.run('registerSession');fixture.run('window.confirm=()=>false');
+  assert.equal((await fixture.run('showBusinessView(current,{origin:"refresh"})')).status,'blocked');
+  assert.equal((await fixture.run('showBusinessView({view:"students"})')).status,'blocked');assert.equal(fixture.run('showCalendar().status'),'blocked');
+  assert.equal(fixture.run('registerSession'),session);assert.equal(fixture.context.calls.length,1);
+});
+
+test('attendance in flight blocks switching and duplicate saves',async()=>{
+  const fixture=await registerSetup();setRegisterValue(fixture,0,'Absent');let resolve;fixture.context.poster=()=>new Promise(r=>resolve=r);
+  fixture.run('request=async(url,options)=>{calls.push({url,options});return options?.method==="POST"?poster():responses;};');
+  const session=fixture.run('registerSession'),pending=session.save.click();assert.equal(session.state,'saving');await session.save.click();assert.equal(fixture.context.calls.length,2);
+  assert.equal(fixture.run('showCalendar().status'),'blocked');resolve({saved:1});await pending;assert.equal(fixture.run('registerSession.state'),'ready');
+});
+
+test('lost attendance save response keeps draft and requires a read before any resubmission',async()=>{
+  const fixture=await registerSetup();setRegisterValue(fixture,0,'Absent');fixture.run('request=async(url,options)=>{calls.push({url,options});if(options?.method==="POST")throw Error("网络中断");return responses;};');
+  const session=fixture.run('registerSession');await session.save.click();assert.equal(session.state,'uncertain');assert.equal(session.fields[0].select.value,'Absent');assert.equal(session.save.disabled,true);assert.equal(session.verify.hidden,false);
+  await session.save.click();assert.equal(fixture.context.calls.length,2);fixture.run('window.confirm=()=>{throw Error("explicit verification does not need another confirmation")};');await session.verify.click();
+  assert.equal(fixture.context.calls.length,3);assert.equal(fixture.run('registerSession.state'),'ready');
+});
+
+test('successful save followed by failed readback cannot show old values as verified results',async()=>{
+  const fixture=await registerSetup();setRegisterValue(fixture,0,'Absent');fixture.run('request=async(url,options)=>{calls.push({url,options});if(options?.method==="POST")return {saved:1};throw Error("回读失败")};');
+  const session=fixture.run('registerSession');await session.save.click();assert.equal(session.state,'saved');assert.equal(session.dirty,false);assert.match(session.status.textContent,/保存已返回成功.*回读未完成/);assert.equal(session.verify.hidden,false);assert.equal(session.save.disabled,true);assert.equal(fixture.run('registerSession'),session);
+});
+
+test('attendance input validation rejects bad versions, duplicate ids and unsupported statuses',()=>{
+  const {run,context}=setup();
+  for(const block of [{...attendanceBlock,revision:''},{...attendanceBlock,student_group:''},{...attendanceBlock,rows:[attendanceBlock.rows[0],attendanceBlock.rows[0]]},{...attendanceBlock,rows:[{student:'S1',status:'bad'}]}]){
+    context.block=block;assert.throws(()=>run('renderAttendance(block)'),/不完整|格式无效/);
+  }
+});
+
+test('unconfirmed meals do not infer actual values from expected arrangements or unconfirmed stored values',async()=>{
+  const fixture=await registerSetup({...mealBlock,rows:mealBlock.rows.map(row=>({...row,value:'就餐'}))}),session=fixture.run('registerSession');
+  assert.equal(session.fields[0].select.value,'未确认');assert.equal(session.fields[1].select.value,'未确认');assert.equal(session.save.disabled,true);assert.match(session.status.textContent,/2 名学生未确认/);
+  setRegisterValue(fixture,0,'就餐');assert.equal(session.save.disabled,true);setRegisterValue(fixture,1,'不供餐');assert.equal(session.save.disabled,false);
+});
+
+test('meal save submits the entire displayed roster for only the chosen meal and reads it back',async()=>{
+  const fixture=await registerSetup(mealBlock);fixture.run('window.confirm=()=>{throw Error("normal meal save must not ask twice")};request=async(url,options)=>{calls.push({url,options});return options?.method==="POST"?{saved:true}:responses;};');
+  setRegisterValue(fixture,0,'就餐');setRegisterValue(fixture,1,'不就餐');await fixture.run('registerSession.save').click();
+  const call=fixture.context.calls[1];assert.match(call.url,/classroom.save_meal$/);
+  assert.deepEqual(JSON.parse(call.options.body),{student_group:'CLASS-1',day:'2026-09-25',revision:'',meal:'lunch',students:[{student:'S1',value:'就餐'},{student:'S2',value:'不就餐'}],confirm:1,change_reason:''});
+  const selected=JSON.parse(new URL(fixture.context.calls[2].url,'http://local').searchParams.get('selection_json'));assert.equal(selected.view,'meal_counts');assert.equal(selected.group,'CLASS-1');assert.equal(selected.meal,'lunch');
+});
+
+test('editing confirmed meal values requires a change reason and does not submit unchanged classmates as new attendance',async()=>{
+  const fixture=await registerSetup({...mealBlock,confirmed:true,revision:'meal-rev',rows:mealBlock.rows.map(row=>({...row,value:'就餐'}))});fixture.run('request=async(url,options)=>{calls.push({url,options});return options?.method==="POST"?{saved:true}:responses;};');
+  const session=fixture.run('registerSession');setRegisterValue(fixture,0,'不就餐');assert.equal(session.save.disabled,true);
+  session.changeReason.value='老师重新核对';session.changeReason.listeners.input();assert.equal(session.save.disabled,false);await session.save.click();
+  const body=JSON.parse(fixture.context.calls[1].options.body);assert.equal(body.change_reason,'老师重新核对');assert.equal(body.students.length,2);assert.equal(body.students[1].value,'就餐');assert.equal(body.revision,'meal-rev');assert.equal(body.changes,undefined);
+});
+
+test('meal errors retain draft, block resubmission and never claim confirmed',async()=>{
+  const fixture=await registerSetup(mealBlock);fixture.run('request=async(url,options)=>{calls.push({url,options});throw Error("版本已过期")};');setRegisterValue(fixture,0,'就餐');setRegisterValue(fixture,1,'不就餐');const session=fixture.run('registerSession');await session.save.click();
+  assert.equal(session.state,'uncertain');assert.equal(session.save.disabled,true);assert.match(session.status.textContent,/版本已过期.*不要直接重复提交/);assert.doesNotMatch(session.status.textContent,/确认成功/);
+});
+
+test('registers escape labels and allow neither an empty roster save nor competing edit components',async()=>{
+  const fixture=await registerSetup({...attendanceBlock,group_label:'<script>',rows:[]});assert.equal(fixture.run('registerSession.save.disabled'),true);
+  fixture.context.block={...attendanceBlock,group_label:'<script>'};const section=fixture.run('renderAttendance(block)');assert.match(section.children[1].textContent,/<script>/);assert.equal(section.children[1].children.length,0);
+  fixture.context.malformed={...data,components:[attendanceBlock,mealBlock]};assert.throws(()=>fixture.run('buildComponents(malformed)'),/一个业务编辑器/);
+});
+
+test('a pending navigation cannot discard a register once saving has begun',async()=>{
+  const fixture=await registerSetup();let resolveView,resolveSave;fixture.context.newView=data;
+  fixture.context.readNext=()=>new Promise(resolve=>resolveView=resolve);fixture.context.postNext=()=>new Promise(resolve=>resolveSave=resolve);
+  fixture.run('request=(url,options)=>options?.method==="POST"?postNext():readNext();');
+  const switchView=fixture.run('showBusinessView({view:"students"})');setRegisterValue(fixture,0,'Absent');const session=fixture.run('registerSession'),saving=session.save.click();
+  resolveView(data);assert.equal((await switchView).status,'blocked');assert.equal(fixture.run('registerSession'),session);
+  fixture.run('request=async()=>responses');resolveSave({saved:1});await saving;assert.equal(fixture.run('registerSession.state'),'ready');
+});
+
+test('partial saved meals retain actual history but never promote expectations to actuals',async()=>{
+  const fixture=await registerSetup({...mealBlock,has_plan:true,confirmed:false,revision:'partial-rev',requires_change_reason:true,rows:[{...mealBlock.rows[0],value:'就餐',expected:false},mealBlock.rows[1]]}),session=fixture.run('registerSession');
+  assert.equal(session.fields[0].select.value,'就餐');assert.equal(session.fields[1].select.value,'未确认');assert.match(session.status.textContent,/1 名学生未确认/);
+  setRegisterValue(fixture,0,'不就餐');setRegisterValue(fixture,1,'就餐');assert.equal(session.save.disabled,true);assert.equal(typeof session.changeReason.listeners.input,'function');
+  session.changeReason.value='复核原实际记录';session.changeReason.listeners.input();assert.equal(session.save.disabled,false);
+  fixture.run('request=async(url,options)=>{calls.push({url,options});return options?.method==="POST"?{saved:true}:responses;};');await session.save.click();
+  const body=JSON.parse(fixture.context.calls[1].options.body);assert.equal(body.revision,'partial-rev');assert.equal(body.change_reason,'复核原实际记录');assert.deepEqual(body.students,[{student:'S1',value:'不就餐'},{student:'S2',value:'就餐'}]);
+});
+
+test('explicit missing meal plan overrides legacy-looking values and requires fresh choices',async()=>{
+  const fixture=await registerSetup({...mealBlock,has_plan:false,confirmed:true,rows:mealBlock.rows.map(row=>({...row,value:'就餐'}))}),session=fixture.run('registerSession');
+  assert.equal(session.fields[0].select.value,'未确认');assert.equal(session.fields[1].select.value,'未确认');assert.equal(session.save.disabled,true);
+});
+
+test('an effective leave locks attendance changes and points back to the original leave workflow',async()=>{
+  const fixture=await registerSetup({...attendanceBlock,rows:[{student:'S1',student_name:'已有请假',status:'Leave',leave_record:'LEAVE-1'},attendanceBlock.rows[1]]}),session=fixture.run('registerSession'),field=session.fields[0];
+  assert.equal(field.select.disabled,true);assert.equal(field.reason.disabled,true);
+  for(const value of ['Present','Absent'])assert.equal(field.select.children.find(option=>option.value===value).disabled,true);
+  const section=fixture.nodes.get('view-content').children[0].children[0],wrapper=section.children.find(child=>child.className==='view-table-wrap');
+  assert.match(wrapper.children[0].children[1].children[0].children[2].children[1].textContent,/原请假流程撤销或标记返校/);
+  // Even a stale event on a disabled row must not add it to the changed payload.
+  field.select.value='Present';field.select.listeners.change();assert.equal(session.save.disabled,true);
+  setRegisterValue(fixture,1,'Absent');await session.save.click();
+  assert.deepEqual(JSON.parse(fixture.context.calls[1].options.body).changes,[{student:'S2',status:'Absent',leave_reason:''}]);
+});
+
+test('fill all meals is explicit local draft editing for the complete class, never an automatic request',async()=>{
+  const rows=Array.from({length:108},(_,i)=>({student:'S'+i,student_name:'测试学生'+i,value:'未确认',expected:i%2===0}));
+  const fixture=await registerSetup({...mealBlock,rows}),session=fixture.run('registerSession');
+  assert.equal(session.fields.filter(field=>field.select.value==='未确认').length,108);assert.equal(session.fillAll.textContent,'本班本餐全部就餐');assert.equal(fixture.context.calls.length,1);
+  await session.fillAll.click();assert.equal(session.fields.filter(field=>field.select.value==='就餐').length,108);assert.equal(session.dirty,true);assert.equal(session.save.disabled,false);assert.equal(fixture.context.calls.length,1);assert.match(session.status.textContent,/草稿.*才会保存/);
+  setRegisterValue(fixture,0,'不就餐');setRegisterValue(fixture,107,'不供餐');assert.equal(fixture.context.calls.length,1);
+  fixture.run('request=async(url,options)=>{calls.push({url,options});return options?.method==="POST"?{saved:true}:responses;};');await session.save.click();
+  const body=JSON.parse(fixture.context.calls[1].options.body);assert.equal(body.students.length,108);assert.equal(body.meal,'lunch');assert.equal(body.students[0].value,'不就餐');assert.equal(body.students[107].value,'不供餐');assert.equal(body.students[1].value,'就餐');
+});
+
+test('fill all retains reason requirements for existing actual meal records',async()=>{
+  const fixture=await registerSetup({...mealBlock,has_plan:true,confirmed:false,requires_change_reason:true,rows:[{...mealBlock.rows[0],value:'不就餐'},mealBlock.rows[1]]}),session=fixture.run('registerSession');
+  await session.fillAll.click();assert.equal(session.fields[0].select.value,'就餐');assert.equal(session.save.disabled,true);assert.equal(fixture.context.calls.length,1);
+  session.changeReason.value='重新核对后均实际就餐';session.changeReason.listeners.input();assert.equal(session.save.disabled,false);
+});
+
+test('fill all is unavailable for readonly, empty, attendance, saving or uncertain editors',async()=>{
+  const readonly=await registerSetup({...mealBlock,editable:false});assert.equal(readonly.run('registerSession.fillAll'),null);
+  const attendance=await registerSetup();assert.equal(attendance.run('registerSession.fillAll'),null);
+  const empty=await registerSetup({...mealBlock,rows:[]});assert.equal(empty.run('registerSession.fillAll.disabled'),true);
+  const fixture=await registerSetup(mealBlock),session=fixture.run('registerSession');await session.fillAll.click();setRegisterValue(fixture,0,'不就餐');
+  let reject;fixture.context.poster=()=>new Promise((_,r)=>reject=r);fixture.run('request=()=>poster()');const saving=session.save.click();assert.equal(session.fillAll.disabled,true);await session.fillAll.click();assert.equal(session.fields[0].select.value,'不就餐');
+  reject(Error('网络中断'));await saving;assert.equal(session.state,'uncertain');await session.fillAll.click();assert.equal(session.fields[0].select.value,'不就餐');assert.equal(session.fillAll.disabled,true);
+});

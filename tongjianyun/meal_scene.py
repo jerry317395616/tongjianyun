@@ -100,7 +100,7 @@ def class_plans(day, meal):
     if not (can(CLASS_MEAL) and can('Student Group')):
         return {'available': False, 'rows': [], 'summary': None}
     from tongjianyun.attendance_scope import allowed_groups
-    from tongjianyun.student_meals import meal_counts
+    from tongjianyun.student_meals import meal_facts
     scope = allowed_groups()
     groups = frappe.get_list('Student Group', filters={'name': ['in', scope], 'disabled': 0},
         fields=['name', 'student_group_name'], order_by='student_group_name asc', limit_page_length=0) if scope else []
@@ -110,12 +110,13 @@ def class_plans(day, meal):
     result = []
     for group in groups:
         doc = read_doc(CLASS_MEAL, index[group.name]) if group.name in index else None
-        confirmed = bool(doc and doc.status == '已确认')
+        facts = meal_facts(doc.students)[meal] if doc else None
+        confirmed = bool(facts and facts['complete'])
         result.append({'group': group.name, 'label': group.student_group_name or group.name,
             'record': doc.name if doc else None, 'has_plan': doc is not None, 'confirmed': confirmed,
-            'expected': meal_counts(doc.students, True)[meal + '_count'] if doc else None,
-            'actual': meal_counts(doc.students)[meal + '_count'] if confirmed else None,
-            'status': doc.status if doc else '尚未保存预计',
+            'expected': facts['expected'] if facts else None,
+            'actual': facts['actual'] if facts else None,
+            'status': facts['status'] if facts else '尚未保存预计',
             'modified': str(doc.modified) if doc else None})
     return {'available': True, 'rows': result, 'summary': meal_summary(result, len(groups)),
         'note': '名单取当前可见启用班级；已保存餐次使用当日快照。确认的是实际就餐，不是出餐或签收。'}

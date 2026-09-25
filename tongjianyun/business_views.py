@@ -414,7 +414,7 @@ def get_business_view(choice):
 
 def classroom_view(choice):
     from tongjianyun.meal_views import _groups
-    from tongjianyun.classroom import _scope, _attendance
+    from tongjianyun.classroom import _scope, _attendance, _capabilities
     groups = _groups()
     group = choice.get('group')
     if not group:
@@ -431,14 +431,20 @@ def classroom_view(choice):
     for doctype in ('Student Attendance', 'Student Leave Application'):
         frappe.has_permission(doctype, 'read', throw=True)
     data = _attendance(_scope(group.name), business_day(choice['day']))
+    capabilities = _capabilities(business_day(choice['day']))
     counts = data['counts']
     rows = data['students'][choice['offset']:choice['offset'] + PAGE_SIZE]
     return {'title': '班级当日出勤', 'subtitle': f'{group.student_group_name or group.name} · {choice["day"]}',
             'components': [stats([('已登记出勤', counts['Present'], '人'), ('已登记缺勤', counts['Absent'], '人'),
                                  ('请假', counts['Leave'], '人'), ('尚未登记', counts['Unknown'], '人')]),
                            notice('仅原考勤及请假记录。未登记不算出勤或缺勤；统计范围为当前可见有效名单，历史日期不重建历史学籍。', True),
-                           table('学生出勤明细', ['姓名', '学生编号', '状态', '来源'], [
-                               {'cells': [r['student_name'], r['student'], r['status_label'], r['source']]} for r in rows])],
+                           {'type': 'attendance_register', 'student_group': group.name,
+                            'group_label': group.student_group_name or group.name, 'day': choice['day'],
+                            'revision': data['revision'], 'editable': bool(capabilities['attendance_write']),
+                            'reason': ('未来日期不能登记实际出勤' if capabilities['future'] else
+                                       '该日考勤已确认或锁定，请先通过原流程核对' if capabilities['attendance_lock'] else
+                                       '' if capabilities['attendance_write'] else '当前账号没有出勤修改权限'),
+                            'rows': rows}],
             'actions': pager(choice, choice['offset'] + PAGE_SIZE < len(data['students'])), 'source': data['source'] + ' · 班级原业务权限',
             'summary': {'available': True, 'day': choice['day'], 'counts': {k: counts[k] for k in ('Present', 'Absent', 'Leave', 'Unknown')},
                         'basis': '登记事实，未登记不是出勤；没有写入考勤'}}

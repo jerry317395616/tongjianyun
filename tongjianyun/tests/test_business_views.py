@@ -9,6 +9,25 @@ from tongjianyun.business_view_registry import REGISTRY, DOMAINS
 
 
 class BusinessViewsTests(unittest.TestCase):
+    def test_attendance_form_preserves_revision_and_server_capabilities(self):
+        group = frappe._dict(name='G1', student_group_name='一班')
+        snapshot = {'revision': 'r1', 'counts': {'Present': 0, 'Absent': 0, 'Leave': 0, 'Unknown': 1},
+                    'students': [{'student': 'S1', 'student_name': 'Private child', 'status': 'Unknown'}],
+                    'source': 'original-attendance'}
+        with patch.object(views, '_groups', return_value=[group]), patch('tongjianyun.classroom._scope'), \
+             patch('tongjianyun.classroom._attendance', return_value=snapshot), \
+             patch('tongjianyun.classroom._capabilities', return_value={'attendance_write': False, 'future': True, 'attendance_lock': None}), \
+             patch.object(frappe, 'has_permission'):
+            result = business.classroom_view({'view': 'classroom_day', 'group': '一班', 'day': '2026-09-26', 'meal': 'lunch', 'offset': 0})
+        form = result['components'][-1]
+        self.assertEqual(form['type'], 'attendance_register')
+        self.assertEqual(form['student_group'], 'G1')
+        self.assertEqual(form['revision'], 'r1')
+        self.assertEqual(form['rows'][0]['status'], 'Unknown')
+        self.assertFalse(form['editable'])
+        self.assertIn('未来', form['reason'])
+        self.assertNotIn('Private', str(result['summary']))
+
     def select(self, **kwargs):
         return views.selection({'view': 'business_list', 'entity': 'purchase_orders', **kwargs}, '2026-09-24', 'lunch')
 

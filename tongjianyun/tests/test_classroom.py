@@ -50,6 +50,23 @@ class ClassroomFactsTests(unittest.TestCase):
 
 
 class ClassroomBoundaryTests(unittest.TestCase):
+    def test_single_meal_save_preserves_scope_revision_and_reason(self):
+        with patch.object(service, '_scope', return_value=_dict(name='C1')), \
+             patch.object(service, '_capabilities', return_value={'meals_write': True}), \
+             patch('tongjianyun.student_meals.save_class_meal') as save:
+            rows = [{'student': 'S1', 'value': '不就餐'}]
+            result = service.save_meal('C1', '2026-09-23', 'lunch', rows, 'revision', 1, '午餐前离园')
+        self.assertTrue(result['saved'])
+        save.assert_called_once_with('2026-09-23', 'C1', 'lunch', rows, 'revision', 1, '午餐前离园')
+
+    def test_single_meal_locked_cannot_call_save(self):
+        with patch.object(service, '_scope', return_value=_dict(name='C1')), \
+             patch.object(service, '_capabilities', return_value={'meals_write': False}), \
+             patch('tongjianyun.student_meals.save_class_meal') as save:
+            with self.assertRaises(frappe.PermissionError):
+                service.save_meal('C1', '2026-09-23', 'lunch', [], 'revision', 1)
+        save.assert_not_called()
+
     def test_guest_cannot_read(self):
         with patch.object(service.frappe, "session", _dict(user="Guest"), create=True), patch.object(service.frappe, "db", MagicMock(), create=True):
             with self.assertRaises(frappe.PermissionError): service.require_user()

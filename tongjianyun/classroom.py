@@ -149,9 +149,8 @@ def _meals(group, day):
     from tongjianyun.student_meals import get_class_meals
     result = get_class_meals(str(day), group)
     record = result["record"]
-    confirmed = record.get("status") == "已确认"
     return {"available": True, "status": record.get("status"), "has_plan": bool(result["revision"]),
-            "expected": result["expected"], "actual": result["actual"] if confirmed else None,
+            "expected": result["expected"], "actual": result["actual"], "meals": result["meals"],
             "confirmed_at": record.get("confirmed_at"), "source": "班级已保存安排" if result["revision"] else "原膳食规则预估，尚未保存安排"}
 
 
@@ -297,7 +296,7 @@ def get_meals(student_group, day, workspace=None):
     result = get_class_meals(str(_day(day)), group.name)
     # The legacy response contains every account-visible class. Do not send
     # that cross-school index through the teacher workspace.
-    return {key: result[key] for key in ("record", "revision", "expected", "actual")}
+    return {key: result[key] for key in ("record", "revision", "expected", "actual", "meals")}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -310,4 +309,16 @@ def save_meals(student_group, day, students, revision="", confirm=0, change_reas
     # Original workflow retains permission, revision, full-roster, future-date
     # and confirmed-change checks. No status is set in the scene renderer.
     save_class_meals(str(day), group.name, students, revision, confirm, change_reason)
+    return {"saved": True}
+
+
+@frappe.whitelist(methods=["POST"])
+def save_meal(student_group, day, meal, students, revision="", confirm=0, change_reason="", workspace=None):
+    """Same classroom scope, one actual meal; never marks attendance or other meals."""
+    group = _scope(student_group, workspace)
+    day = _day(day)
+    if not _capabilities(day)["meals_write"]:
+        raise frappe.PermissionError("当前权限或锁定状态不允许修改就餐记录")
+    from tongjianyun.student_meals import save_class_meal
+    save_class_meal(str(day), group.name, meal, students, revision, confirm, change_reason)
     return {"saved": True}

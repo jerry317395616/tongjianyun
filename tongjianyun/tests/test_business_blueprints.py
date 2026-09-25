@@ -55,7 +55,7 @@ class BlueprintTests(unittest.TestCase):
         value = dict(SPEC, fields=[{'fieldname': 'status', 'label': '状态', 'fieldtype': 'Select',
                                   'options': '待处理\n已完成'}])
         self.assertEqual(blueprint.validate_spec(value)['fields'][0]['options'], '待处理\n已完成')
-        for options in ['', '重复\n重复', '一\n\n二']:
+        for options in ['', '重复\n重复', '一\n\n二', '重复\n 重复 ']:
             value['fields'][0]['options'] = options
             with self.assertRaises(ValueError):
                 blueprint.validate_spec(value)

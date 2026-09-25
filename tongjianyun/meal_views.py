@@ -91,6 +91,9 @@ def selection(value, default_day=None, default_meal='lunch'):
     if view in {'meal_counts', 'recipe_week', 'recipe_nutrition'}:
         clean.update(day=str(business_day(value.get('day') or default_day)),
                      meal=meal_key(value.get('meal') or default_meal))
+    if view == 'meal_counts' and value.get('group'):
+        from tongjianyun.business_views import text_arg
+        clean['group'] = text_arg(value, 'group')
     return clean
 
 
@@ -200,6 +203,8 @@ def class_students_view(choice):
 
 
 def meal_counts_view(choice):
+    if choice.get('group'):
+        return meal_register_view(choice)
     result = class_plans(date.fromisoformat(choice['day']), choice['meal'])
     if not result['available']:
         raise frappe.PermissionError('没有班级用餐人数查看权限。')
@@ -221,13 +226,48 @@ def meal_counts_view(choice):
     else:
         answer = f"可见 {total} 个班均已确认，本餐实际用餐人数为 {summary['actual']} 人。"
     components.append(_table('班级确认情况', ['班级', '预计用餐', '已确认实际', '状态'], [
-        {'cells': [row['label'], row['expected'], row['actual'],
-                   '已确认' if row['confirmed'] else '待确认' if row['has_plan'] else '尚未保存预计']}
+        {'cells': [row['label'], row['expected'], row['actual'], row.get('status') or
+                   ('已确认' if row['confirmed'] else '待确认' if row['has_plan'] else '尚未保存预计')],
+         'action': _action('核对本餐', {**choice, 'group': row['group']})}
         for row in result['rows']]))
     return {'title': '用餐人数', 'subtitle': f"{choice['day']} · {LABELS[choice['meal']]} · 仅当前可见班级",
             'components': components, 'source': '班级餐次确认记录；未自动创建、确认或修改记录',
             'summary': {**summary, 'day': choice['day'], 'meal': LABELS[choice['meal']], 'final': final,
                         'answer': answer}}
+
+
+def meal_register_view(choice):
+    from tongjianyun.classroom import get_meals, _capabilities
+    groups = _groups()
+    matches = [g for g in groups if g.name == choice['group']] or [g for g in groups if g.student_group_name == choice['group']]
+    if len(matches) != 1:
+        frappe.throw('未找到唯一可见班级，请通过班级列表选择。')
+    group = matches[0]
+    choice['group'] = group.name
+    day, meal = business_day(choice['day']), choice['meal']
+    data = get_meals(group.name, str(day))
+    capabilities = _capabilities(day)
+    facts = dict(data['meals'][meal])
+    has_plan = bool(data['revision'])
+    if not has_plan:
+        facts.update(actual=None, complete=False, status='尚未保存预计')
+    editable = bool(capabilities['meals_write'] and not capabilities['future'] and data['record'].get('students'))
+    rows = [{'student': row['student'], 'student_name': row['student_name'],
+             'value': {'已就餐': '就餐', '未就餐': '不就餐', '不供餐': '不供餐'}.get(row.get(meal), '未确认'),
+             'expected': bool(row.get(meal + '_expected'))} for row in data['record'].get('students', [])]
+    return {'title': '核对本餐实际用餐', 'subtitle': f'{group.student_group_name or group.name} · {day} · {LABELS[meal]}',
+            'components': [_notice('只确认当前班级这一餐。预计人数不是实际就餐；其他餐次和出勤不会随之确认。'),
+                {'type': 'meal_register', 'student_group': group.name, 'group_label': group.student_group_name or group.name,
+                 'day': str(day), 'meal': meal, 'meal_label': LABELS[meal], 'revision': data['revision'],
+                 'editable': editable, 'confirmed': bool(facts['complete']), 'has_plan': has_plan,
+                 'requires_change_reason': any(row.get(meal) in {'已就餐', '未就餐'} for row in data['record'].get('students', [])),
+                 'facts': facts,
+                 'reason': ('未来日期不能确认实际就餐' if capabilities['future'] else
+                            '' if editable else '当前权限、锁定状态或空名单不允许确认'), 'rows': rows}],
+            'actions': [_action('返回用餐汇总', {'view': 'meal_counts', 'day': str(day), 'meal': meal})],
+            'source': '原班级就餐服务；保存后逐餐回读，无需再做每日二次确认',
+            'summary': {'day': str(day), 'meal': LABELS[meal], 'group': group.name, 'facts': facts,
+                        'answer': '已读取本班本餐待核对名单；打开页面不表示已经确认，学生姓名不回传模型。'}}
 
 
 @frappe.whitelist()
@@ -254,6 +294,7 @@ def get_view(selection_json):
         result['components'] = [block for kind in choice['components'] for block in blocks if block['type'] == kind]
         if 'notice' not in choice['components']:
             result['components'].extend(block for block in blocks if block['type'] == 'notice')
+        result['components'].extend(block for block in blocks if block['type'] in {'attendance_register', 'meal_register'})
     return {'version': 1, 'selection': choice, 'generated_at': str(now_datetime()).split('.')[0], **result}
 
 
@@ -321,7 +362,8 @@ def tool_instruction(task_id, site, context=None):
             '跨期请假按时间交集筛选。库存是当前值，不是历史快照。用户问全部历史须明确传 --period all。'
             '单据明细：--view business_record --entity 业务键 --record 精确编号；不猜单据编号，先展示可点击列表。'
             '库存：--view stock [--warehouse 仓库编号]；食材营养统计：--view ingredient_nutrition [--recipe 食谱编号]。'
-            '班级当日出勤及未登记情况：--view classroom_day [--group 班级编号或唯一名称] [--day YYYY-MM-DD]；'
+            '班级当日出勤及登记表：--view classroom_day [--group 班级编号或唯一名称] [--day YYYY-MM-DD]；'
+            '核对本餐实际用餐：--view meal_counts --group 班级编号 --day YYYY-MM-DD --meal 餐次；左侧直接办理，无需另做每日二次确认。'
             '一周食谱采购：--view weekly_orders [--period week|all] [--day YYYY-MM-DD] [--status 0|1|2]；'
             '此视图按订单标题中的食谱日期，与普通采购订单按交易日期筛选不同。'
             '业务键目录：' + catalog_instruction() + '。'

@@ -246,13 +246,13 @@ def refresh_confirmation(meal_date=None, *, force=False):
     doc.status = "待确认"
     doc.confirmed_by = None
     doc.confirmed_at = None
-    doc.source = "预计人数（待班级确认实际就餐）"
+    doc.source = "分餐汇总（已核对餐次用实际，其余为预计；不是全日实际人数）"
     doc.set("details", [])
     rows = calculate_rows(meal_date)
     from tongjianyun.student_meals import all_classes_confirmed
     if all_classes_confirmed(rows, meal_date):
         doc.status = "已确认"
-        doc.source = "学生餐次明细（各班已确认）"
+        doc.source = "学生餐次明细（各班各餐已核对，自动汇总）"
     for row in rows:
         doc.append("details", row)
     if name:
@@ -400,6 +400,11 @@ def get_daily_meal_confirmation(meal_date=None) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def confirm_daily_meal(meal_date=None) -> dict:
+    """Compatibility endpoint: actual facts are confirmed per class-meal.
+
+    There is no second daily confirmation state transition and a locked day is
+    never unlocked by pressing this legacy button.
+    """
     require_manager()
     from tongjianyun.student_meals import all_classes_confirmed
     if not all_classes_confirmed(calculate_rows(meal_date), getdate(meal_date or nowdate())):
@@ -411,14 +416,12 @@ def confirm_daily_meal(meal_date=None) -> dict:
     if name:
         doc = frappe.get_doc(CONFIRMATION_DOCTYPE, name)
         doc.check_permission("write")
-        doc = refresh_confirmation(meal_date)
+        doc = refresh_confirmation(meal_date, force=True)
     else:
         if not frappe.has_permission(CONFIRMATION_DOCTYPE, "create"):
             frappe.throw(_("没有创建每日就餐确认的权限"), frappe.PermissionError)
         doc = refresh_confirmation(meal_date)
     doc.check_permission("write")
-    doc.status = "已确认"
-    doc.save()
     return doc.as_dict()
 
 

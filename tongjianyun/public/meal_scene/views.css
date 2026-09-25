@@ -37,6 +37,20 @@
 .view-blueprint-activate{margin-top:12px;background:#458469;color:#fff;border:0;border-radius:9px;padding:11px 15px;font-size:13px;cursor:pointer}
 .view-blueprint-activate:disabled{opacity:.55;cursor:wait}
 .view-blueprint td:last-child{white-space:pre-line}
+.view-register-context{font-size:14px;font-weight:600;color:#284739;margin:0 0 8px}
+.view-register-row-hint{display:block;font-size:11px;line-height:1.6;color:#826221;margin-top:5px;max-width:240px}
+.view-register .view-table-wrap{max-height:58dvh;overflow:auto;border:1px solid #e3ebe0;border-radius:9px}
+.view-register th{position:sticky;top:0;z-index:1}
+.view-register-quick{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0}.view-register-quick span{font-size:12px;line-height:1.6;color:#708275}
+.view-register-fill{border:1px solid #cdddcc;border-radius:8px;padding:9px 12px;background:#f2f7ef;color:#36775a;font-size:13px;cursor:pointer;min-height:42px}
+.view-register select,.view-register input,.view-register textarea{font:inherit;max-width:100%;min-height:40px;border:1px solid #dce7da;border-radius:7px;padding:7px 9px;background:#fff;color:#284739}
+.view-register select{min-width:100px}.view-register input{width:100%;min-width:150px}.view-register textarea{display:block;width:100%;margin-top:7px}
+.view-register :disabled{background:#f4f7f2;color:#718276;cursor:not-allowed}
+.view-register-reason{display:block;font-size:12px;margin-top:14px}
+.view-register-footer{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:16px;padding:12px 0;border-top:1px solid #dce7da}
+.view-register-status{flex:1;min-width:180px;font-size:12px;line-height:1.6;color:#607b6b}
+.view-register-save{padding:11px 16px;border:0;border-radius:8px;background:#458469;color:#fff;font-size:13px;cursor:pointer}
+.view-register-save:disabled{background:#e9f0e6;color:#768d7c;cursor:not-allowed}
 .chat-view-result[data-state="failed"],.chat-view-result[data-state="blocked"]{border-color:#edd1c8;color:#984e43}
 .chat-view-result[data-state="loading"]{color:#708275}
 @media(min-width:951px){

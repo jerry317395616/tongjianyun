@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
   'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
   'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint']);
-let request,current=null,ticket=0,nativeSession=null,loadingTicket=0;
+let request,current=null,ticket=0,nativeSession=null,registerSession=null,loadingTicket=0;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
 export function currentViewContext(){if(nativeSession)syncNativeContext(nativeSession);return current||{view:'recipe_week',...mealContext()};}
@@ -17,10 +17,14 @@ function nativeDirty(){
   try{const win=nativeSession.frame.contentWindow,form=win?.cur_frm,route=win?.frappe?.get_route?.();if((!route||route[0]==='Form')&&typeof form?.is_dirty==='function')return !!form.is_dirty();}catch(_){}
   return nativeSession.dirty;
 }
+function viewDirty(){return nativeDirty()||!!registerSession&&(registerSession.dirty||['saving','uncertain'].includes(registerSession.state));}
+function editRevision(){return [nativeSession?.revision||0,registerSession?.editRevision||0].join(':');}
 function mayLeaveNative(origin){
-  if(!nativeDirty())return true;
+  if(registerSession?.state==='saving')return origin==='saved';
+  if(origin==='verify'&&['saved','uncertain'].includes(registerSession?.state))return true;
+  if(!viewDirty())return true;
   if(origin==='refresh')return false;
-  return typeof window!=='undefined'&&window.confirm('当前业务有未保存的修改。确认放弃这些修改并切换吗？');
+  return typeof window!=='undefined'&&window.confirm('当前业务有未保存或待核对的修改。确认离开并切换吗？');
 }
 function disposeNative(){
   if(!nativeSession)return;
@@ -34,7 +38,7 @@ export function initializeViews(options){
   $('view-back').addEventListener('click',()=>showCalendar());
   document.addEventListener('meal-scene:refresh',event=>{if(!event.detail?.calendarOnly&&current&&current.view!=='recipe_week')showBusinessView(current,{origin:'refresh'});});
   if(typeof window!=='undefined'){
-    window.addEventListener('beforeunload',event=>{if(nativeDirty()){event.preventDefault();event.returnValue='';}});
+    window.addEventListener('beforeunload',event=>{if(viewDirty()){event.preventDefault();event.returnValue='';}});
     window.addEventListener('pagehide',disposeNative);
   }
 }
@@ -44,7 +48,7 @@ function calendarContext(choice){
 }
 function showCalendar(choice,options={}){
   if(!options.checked&&!mayLeaveNative(options.origin))return outcome('blocked',currentViewContext(),'当前业务有未保存的修改，已保留原页面。');
-  ++ticket;loadingTicket=0;disposeNative();current=null;notice('');$('business-view').hidden=true;$('recipe-workspace').hidden=false;
+  ++ticket;loadingTicket=0;disposeNative();registerSession=null;current=null;notice('');$('business-view').hidden=true;$('recipe-workspace').hidden=false;
   $('business-view').classList.toggle('has-native',false);
   $('business-canvas').setAttribute('aria-label','本周膳食总览');
   document.dispatchEvent(new CustomEvent('meal-scene:view-change',{detail:{view:'recipe_week'}}));
@@ -168,11 +172,95 @@ function renderBlueprint(block){
   }
   return section;
 }
-const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint};
+const attendanceLabels={Unknown:'待登记',Present:'到园',Absent:'缺勤',Leave:'请假'};
+function renderAttendance(block){
+  return renderRegister(block,'attendance');
+}
+function renderMealRegister(block){
+  return renderRegister(block,'meal');
+}
+function renderRegister(block,kind){
+  const meal=kind==='meal',labels=meal?{'未确认':'未确认','就餐':'就餐','不就餐':'不就餐','不供餐':'不供餐'}:attendanceLabels;
+  const hasPlan=block.has_plan===undefined?!!block.confirmed:block.has_plan===true;
+  const requiresReason=meal&&(block.requires_change_reason===true||!!block.confirmed);
+  if(typeof block.student_group!=='string'||!block.student_group||!/^\d{4}-\d{2}-\d{2}$/.test(block.day||'')||typeof block.revision!=='string'||!meal&&!block.revision||!Array.isArray(block.rows)||block.rows.length>500)throw Error('登记表日期、班级或版本不完整，已保留原页面。');
+  if(meal&&!['breakfast','morning_snack','lunch','afternoon_snack','dinner'].includes(block.meal))throw Error('餐次无效，不能办理本餐确认。');
+  const ids=new Set();
+  for(const row of block.rows){if(typeof row.student!=='string'||!row.student||ids.has(row.student)||!Object.hasOwn(labels,meal?row.value:row.status))throw Error('登记名单格式无效，不能保存。');ids.add(row.student);}
+  const section=node('section',undefined,'view-section view-register'),session={dirty:false,state:'ready',editRevision:0,fields:[],kind};section.registerSession=session;
+  const title=meal?'本餐实际就餐确认':'班级点名';section.append(node('h2',title),node('p',`${block.group_label||block.student_group} · ${block.day}${meal?' · '+(block.meal_label||block.meal):''}`,'view-register-context'));
+  section.append(node('p',meal?'预计人数仅作参考，不会自动当成实际。填写草稿后请核对本餐情况；不会修改其他餐次或学生考勤。':'只保存你明确修改的学生。待登记不算到园或缺勤；已有请假请在原流程撤销或标记返校。','view-note'));
+  if(!block.editable)section.append(node('p',block.reason||'当前账号、日期或业务状态不允许编辑。','view-note warning'));
+  const fillAll=meal&&block.editable===true?node('button','本班本餐全部就餐','view-register-fill'):null;
+  if(fillAll){fillAll.type='button';const quick=node('div',undefined,'view-register-quick');quick.append(fillAll,node('span','只填写待核对草稿，可再修改个别学生；最后点击“确认本餐”才保存。'));section.append(quick);}
+  const wrapper=node('div',undefined,'view-table-wrap'),table=node('table'),head=node('thead'),header=node('tr');
+  table.setAttribute('aria-label',title);(meal?['学生','预计安排（非实际）','本餐实际情况']:['学生','原登记 / 来源','本次点名','请假原因']).forEach(text=>header.append(node('th',text)));head.append(header);table.append(head);
+  const body=node('tbody');
+  for(const row of block.rows){
+    const tr=node('tr'),original=meal?(hasPlan?row.value:'未确认'):row.status,select=node('select'),locked=!meal&&!!row.leave_record;
+    select.setAttribute('aria-label',`${row.student_name||row.student}${meal?'本餐实际情况':'出勤状态'}`);
+    for(const [value,label] of Object.entries(labels)){const option=node('option',label);option.value=value;option.selected=value===original;option.disabled=locked&&value!==original||(meal?value==='未确认'&&original!=='未确认':value==='Unknown'&&original!=='Unknown');select.append(option);}select.value=original;
+    const reason=node('input');reason.type='text';reason.maxLength=1000;reason.value='';reason.placeholder=row.leave_record?'已有请假，请使用原请假流程':'新请假时必填';reason.setAttribute('aria-label',`${row.student_name||row.student}请假原因`);
+    const name=node('td',row.student_name||row.student),baseline=node('td',meal?(row.expected===true?'预计就餐':row.expected===false?'预计不就餐':'未提供预计'):labels[row.status]+(row.source?' · '+row.source:'')),value=node('td');value.append(select);tr.append(name,baseline,value);
+    if(locked)value.append(node('small','已有生效请假，请先在原请假流程撤销或标记返校。','view-register-row-hint'));
+    if(!meal){const cell=node('td');cell.append(reason);tr.append(cell);}body.append(tr);
+    const field={row,original,select,reason,locked};session.fields.push(field);
+    select.addEventListener('change',()=>{session.editRevision++;update();});reason.addEventListener('input',()=>{session.editRevision++;update();});
+  }
+  table.append(body);wrapper.append(table);section.append(wrapper);
+  if(!block.rows.length)section.append(node('p','当前可见范围没有可登记学生，不会按零人完成确认。','view-empty'));
+  const changeReason=node('textarea');changeReason.maxLength=1000;changeReason.rows=2;changeReason.value='';changeReason.setAttribute('aria-label','修改已确认本餐的原因');
+  if(requiresReason){const label=node('label',undefined,'view-register-reason');label.append(node('span','修改已有实际就餐记录的原因（必填）'),changeReason);section.append(label);changeReason.addEventListener('input',()=>{session.editRevision++;update();});}
+  const footer=node('div',undefined,'view-register-footer'),status=node('p','暂无变更','view-register-status'),save=node('button',meal?'确认本餐':'保存点名变更','view-register-save'),verify=node('button','重新读取并核对','view-action');
+  status.setAttribute('role','status');save.type=verify.type='button';verify.hidden=true;footer.append(status,verify,save);section.append(footer);
+  Object.assign(session,{status,save,verify,changeReason,fillAll});
+  const changes=()=>session.fields.filter(field=>!field.locked&&(field.select.value!==field.original||!meal&&field.select.value==='Leave'&&!field.row.leave_record&&field.reason.value.trim())).map(field=>({student:field.row.student,status:field.select.value,leave_reason:field.reason.value.trim()}));
+  const target=()=>({...current,view:meal?'meal_counts':'classroom_day',group:block.student_group,day:block.day,...(meal?{meal:block.meal}:{offset:Number.isInteger(block.offset)?block.offset:current?.offset||0})});
+  function update(){
+    const changed=changes();session.dirty=changed.length>0;
+    const editing=block.editable===true&&session.state==='ready';
+    for(const field of session.fields){field.select.disabled=!editing||field.locked;field.reason.disabled=!editing||field.select.value!=='Leave'||field.locked;}
+    if(fillAll)fillAll.disabled=!editing||!block.rows.length;
+    changeReason.disabled=!editing;
+    const remaining=meal?session.fields.filter(field=>field.select.value==='未确认').length:0;
+    save.disabled=!editing||!changed.length||!block.rows.length||!!remaining||requiresReason&&!changeReason.value.trim();
+    if(session.state==='ready')status.textContent=meal&&remaining?`还有 ${remaining} 名学生未确认。`:changed.length?`待保存 ${changed.length} 条变更${meal?'，只办理本餐':'，仅本页明确修改的学生'}。`:'暂无变更';
+  }
+  fillAll?.addEventListener('click',()=>{
+    if(registerSession!==session||fillAll.disabled||session.state!=='ready')return;
+    for(const field of session.fields)field.select.value='就餐';
+    session.editRevision++;update();
+    status.textContent=session.dirty?'已填为“就餐”草稿，可修改个别学生；核对后点击“确认本餐”才会保存。':'当前本餐均为“就餐”，未新增变更。';
+  });
+  async function readBack(origin){
+    verify.disabled=true;
+    const result=await showBusinessView(target(),{origin});
+    if(result.status!=='rendered'&&registerSession===session){status.textContent=(session.state==='saved'?'保存已返回成功，但最新记录回读未完成。':'保存结果尚未核实。')+'请重新读取核对，不要重复提交。';verify.hidden=false;verify.disabled=false;}
+  }
+  verify.addEventListener('click',()=>{if(registerSession===session&&!verify.disabled)readBack('verify');});
+  save.addEventListener('click',async()=>{
+    if(registerSession!==session||save.disabled||session.state!=='ready')return;
+    const changed=changes();
+    if(!meal){
+      const invalid=session.fields.find(field=>changed.some(change=>change.student===field.row.student)&&field.select.value==='Leave'&&!field.reason.value.trim());
+      if(invalid){status.textContent='请填写新请假的原因后再保存。';invalid.reason.focus?.();return;}
+    }
+    session.state='saving';update();status.textContent='正在保存，请勿重复提交…';
+    try{
+      const args={student_group:block.student_group,day:block.day,revision:block.revision,...(meal?{meal:block.meal,students:session.fields.map(field=>({student:field.row.student,value:field.select.value})),confirm:1,change_reason:changeReason.value.trim()}:{changes:changed})};
+      const result=await request('/api/method/tongjianyun.classroom.'+(meal?'save_meal':'save_attendance'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args)});
+      if(!result||(meal?result.saved!==true:result.saved!==changed.length))throw Error('保存返回结果不完整，需要回读核对。');
+      session.state='saved';session.dirty=false;status.textContent='保存已返回成功，正在读取最新记录…';verify.hidden=false;
+      await readBack('saved');
+    }catch(error){session.state='uncertain';status.textContent=(error.message||'保存结果未知。')+' 请重新读取并核对，不要直接重复提交。';verify.hidden=false;verify.disabled=false;}
+  });
+  update();return section;
+}
+const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,attendance_register:renderAttendance,meal_register:renderMealRegister};
 export function buildComponents(data){
   if(data?.version!==1||!validViews.has(data.selection?.view)||!Array.isArray(data.components)||data.components.length>12)throw Error('展示结果格式不受支持，已保留当前页面。');
   const content=document.createDocumentFragment();
-  for(const block of data.components){if(!Object.hasOwn(renderers,block.type))throw Error('此结果需要更新页面组件，已保留当前内容。');const rendered=renderers[block.type](block);if(rendered.nativeSession){if(content.nativeSession)throw Error('同一业务视图只能打开一个原生页面。');content.nativeSession=rendered.nativeSession;}content.append(rendered);}
+  for(const block of data.components){if(!Object.hasOwn(renderers,block.type))throw Error('此结果需要更新页面组件，已保留当前内容。');const rendered=renderers[block.type](block);if(rendered.nativeSession||rendered.registerSession){if(content.nativeSession||content.registerSession)throw Error('同一业务视图只能打开一个业务编辑器。');content.nativeSession=rendered.nativeSession;content.registerSession=rendered.registerSession;}content.append(rendered);}
   return content;
 }
 export async function showBusinessView(choice,options={}){
@@ -181,18 +269,19 @@ export async function showBusinessView(choice,options={}){
   // A task finishing is a data refresh, never permission to discard a native form.
   if(nativeSession&&options.origin==='refresh')return outcome('rendered',currentViewContext(),'当前原生页面已保留，未自动重载。');
   if(!mayLeaveNative(options.origin))return outcome('blocked',currentViewContext(),'当前业务有未保存的修改，已保留原页面。');
-  const leavingDirty=nativeDirty(),leavingRevision=nativeSession?.revision;
+  const leavingDirty=viewDirty(),leavingRevision=editRevision();
   const turn=++ticket;loadingTicket=turn;notice('正在读取业务数据…');
   try{
     const result=await request('/api/method/tongjianyun.meal_views.get_view?'+new URLSearchParams({selection_json:JSON.stringify(choice)}));
     if(turn!==ticket)return outcome('superseded');
     if(result.version!==1||!validViews.has(result.selection?.view))throw Error('展示结果格式无效。');
+    if(registerSession?.state==='saving'&&options.origin!=='saved'){notice('业务正在保存，已保留当前页面。');return outcome('blocked',currentViewContext(),'业务正在保存，请等待读取最新结果。');}
     // An edit made while loading also needs consent, even if the form was clean at the start.
-    if(nativeDirty()&&(!leavingDirty||nativeSession?.revision!==leavingRevision)&&!mayLeaveNative(options.origin)){notice('已保留未保存的业务页面。');return outcome('blocked',currentViewContext(),'当前业务有未保存的修改，已保留原页面。');}
+    if(viewDirty()&&(!leavingDirty||editRevision()!==leavingRevision)&&!mayLeaveNative(options.origin)){notice('已保留未保存的业务页面。');return outcome('blocked',currentViewContext(),'当前业务有未保存的修改，已保留原页面。');}
     if(result.selection.view==='recipe_week')return showCalendar(result.selection,{checked:true});
     const fragment=buildComponents(result);
     const actions=(result.actions||[]).map(actionButton);
-    disposeNative();nativeSession=fragment.nativeSession||null;
+    disposeNative();nativeSession=fragment.nativeSession||null;registerSession=fragment.registerSession||null;
     $('view-title').textContent=result.title;$('view-subtitle').textContent=result.subtitle;
     $('view-content').replaceChildren(fragment);$('view-actions').replaceChildren(...actions);
     $('view-source').textContent=`来源：${result.source} · 更新于 ${result.generated_at}`;

@@ -70,7 +70,7 @@ class MealViewsTests(unittest.TestCase):
         self.assertEqual(result['actions'][-1]['selection']['offset'], 50)
 
     def test_unconfirmed_meals_remain_unknown(self):
-        result = {'available': True, 'rows': [{'label': '一班', 'expected': None, 'actual': None,
+        result = {'available': True, 'rows': [{'group': 'G1', 'label': '一班', 'expected': None, 'actual': None,
                     'confirmed': False, 'has_plan': False}],
                   'summary': {'visible_groups': 1, 'confirmed_groups': 0, 'actual': None, 'confirmed_subtotal': None}}
         with patch.object(views, 'class_plans', return_value=result):
@@ -79,6 +79,35 @@ class MealViewsTests(unittest.TestCase):
         self.assertFalse(data['summary']['final'])
         self.assertIn('实际用餐人数未知', data['summary']['answer'])
         self.assertTrue(data['components'][1]['warning'])
+
+    def test_meal_selection_keeps_group_for_in_scene_confirmation(self):
+        result = views.selection({'view': 'meal_counts', 'group': 'G1'}, '2026-09-22', 'lunch')
+        self.assertEqual(result['group'], 'G1')
+        self.assertEqual(result['meal'], 'lunch')
+
+    def test_meal_register_is_scoped_unknown_and_does_not_prefill_actual_from_expected(self):
+        group = frappe._dict(name='G1', student_group_name='一班')
+        data = {'revision': '', 'record': {'students': [{'student': 'S1', 'student_name': 'Private child',
+                'lunch': '未确认', 'lunch_expected': 1}]}, 'meals': {'lunch': {
+                'expected': 1, 'actual': None, 'complete': False, 'status': '未确认'}}}
+        with patch.object(views, '_groups', return_value=[group]), \
+             patch('tongjianyun.classroom.get_meals', return_value=data) as read, \
+             patch('tongjianyun.classroom._capabilities', return_value={'meals_write': True, 'future': False}):
+            result = views.meal_register_view({'view': 'meal_counts', 'group': '一班', 'day': '2026-09-22', 'meal': 'lunch'})
+        component = result['components'][1]
+        self.assertEqual(component['rows'][0]['value'], '未确认')
+        self.assertTrue(component['rows'][0]['expected'])
+        self.assertFalse(component['confirmed'])
+        self.assertIsNone(component['facts']['actual'])
+        self.assertNotIn('Private', str(result['summary']))
+        read.assert_called_once_with('G1', '2026-09-22')
+
+    def test_meal_register_rejects_foreign_group_before_roster_read(self):
+        with patch.object(views, '_groups', return_value=[]), patch.object(frappe, 'throw', side_effect=ValueError), \
+             patch('tongjianyun.classroom.get_meals') as read:
+            with self.assertRaises(ValueError):
+                views.meal_register_view({'view': 'meal_counts', 'group': 'secret'})
+        read.assert_not_called()
 
     def test_publisher_uses_task_owner_and_only_emits_descriptor(self):
         from tongjianyun import meal_chat

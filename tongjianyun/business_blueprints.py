@@ -74,7 +74,10 @@ def validate_spec(value):
             values = options.splitlines()
             if not 1 <= len(values) <= 30 or len(set(values)) != len(values):
                 raise ValueError('选项须为 1–30 项且不能重复')
-            item['options'] = '\n'.join(_text(v, '选项', 80) for v in values)
+            values = [_text(v, '选项', 80) for v in values]
+            if len(set(values)) != len(values):
+                raise ValueError('去除首尾空白后选项不能重复')
+            item['options'] = '\n'.join(values)
         elif kind == 'Link':
             item['options'] = _text(options, '关联业务')
             if item['options'] in BLOCKED_LINKS:
