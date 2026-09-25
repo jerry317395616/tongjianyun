@@ -18,6 +18,31 @@ class MealViewsTests(unittest.TestCase):
         self.assertEqual(views.selection({'view': 'meal_counts'}, '2026-09-22', 'morning_snack'),
                          {'view': 'meal_counts', 'day': '2026-09-22', 'meal': 'morning_snack'})
 
+    def test_stock_route_has_exact_source_and_cannot_reuse_other_view_filters(self):
+        choice = {'view': 'stock_reconciliation', 'source_doctype': 'Purchase Receipt', 'source_name': 'PR-1'}
+        self.assertEqual(views.selection(choice, '2026-09-22', 'lunch'), choice)
+        with patch.object(frappe, 'throw', side_effect=ValueError):
+            for extra in ({'components': ['table']}, {'day': '2026-09-22'}, {'company': 'Other'}, {'proposal_id': 'P'}):
+                with self.assertRaises(ValueError):
+                    views.selection({**choice, **extra})
+            with self.assertRaises(ValueError):
+                views.selection({'view': 'students', 'source_name': 'PR-1'})
+
+    def test_stock_view_runs_permission_gate_and_registered_reader_only(self):
+        choice = {'view': 'stock_reconciliation', 'source_doctype': 'Stock Entry', 'source_name': 'SE-1'}
+        from tongjianyun import stock_reconciliation
+        with patch('tongjianyun.meal_chat.require_chat_access', side_effect=frappe.PermissionError), \
+             patch.object(stock_reconciliation, 'get_view') as reader:
+            with self.assertRaises(frappe.PermissionError):
+                views.get_view(choice)
+            reader.assert_not_called()
+        with patch('tongjianyun.meal_chat.require_chat_access'), \
+             patch.object(stock_reconciliation, 'get_view', return_value={'components': [], 'summary': {'status': 'pending'}}) as reader:
+            result = views.get_view(choice)
+            reader.assert_called_once_with(choice)
+            self.assertEqual(result['selection'], choice)
+            self.assertEqual(result['summary']['status'], 'pending')
+
     def test_component_selection_is_bounded_and_view_specific(self):
         self.assertEqual(views.selection({'view': 'students', 'components': ['stats', 'bars', 'table']})['components'],
                          ['stats', 'bars', 'table'])

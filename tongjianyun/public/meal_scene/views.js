@@ -3,7 +3,7 @@ import {mealContext,setMealContext,refreshMealData} from './state.js?v=meal-head
 const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
   'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
-  'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint']);
+  'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint','stock_reconciliation']);
 let request,current=null,ticket=0,nativeSession=null,registerSession=null,loadingTicket=0;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
@@ -304,7 +304,42 @@ function renderRegister(block,kind){
   });
   update();return section;
 }
-const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,attendance_register:renderAttendance,meal_register:renderMealRegister};
+function renderStockRepair(block){
+  const validStatus=['not_posted','pending','mismatch','consistent','blocked'];
+  const validId=value=>typeof value==='string'&&!!value&&value===value.trim()&&value.length<=140&&!/[\u0000-\u001f]/.test(value);
+  if(!['Purchase Receipt','Stock Entry'].includes(block.source_doctype)||!validId(block.source_name)||!/^[a-f0-9]{64}$/.test(block.revision||'')||!validStatus.includes(block.status)||typeof block.can_repair!=='boolean'||!Array.isArray(block.targets)||block.targets.length>20)throw Error('库存核对凭据不完整，不能执行修复。');
+  const keys=new Set(),targets=block.targets.map(row=>{
+    if(!row||Object.keys(row).some(key=>!['item_code','warehouse'].includes(key))||!validId(row.item_code)||!validId(row.warehouse))throw Error('库存核对目标无效。');
+    const key=JSON.stringify([row.item_code,row.warehouse]);if(keys.has(key))throw Error('库存核对目标重复。');keys.add(key);return {item_code:row.item_code,warehouse:row.warehouse};
+  });
+  if(block.can_repair&&(!['mismatch','blocked'].includes(block.status)||!targets.length))throw Error('库存修复状态不一致，请重新核对。');
+  const section=node('section',undefined,'view-section view-register'),session={dirty:false,state:'ready',editRevision:0,kind:'stock'};section.registerSession=session;
+  section.append(node('h2','核对后处理'),node('p','调用原生库存汇总重算，同时更新现存数量、价值以及计划、订购、预留、预计等派生数量；不修改原单据、库存流水或估值规则。存在未完成重估时不可执行。','view-note'));
+  const footer=node('div',undefined,'view-register-footer'),status=node('p',block.status==='consistent'?'本次读取一致，无需修复。':block.can_repair?`有 ${targets.length} 组差异可申请原生重算，请先核对上表。`:'当前条件不允许修复，请先查看上方核对说明。','view-register-status');
+  status.setAttribute('role','status');
+  const save=node('button','核对并修复库存汇总','view-register-save'),verify=node('button','重新读取并核对','view-action');save.type=verify.type='button';save.hidden=!block.can_repair;save.disabled=!block.can_repair;
+  footer.append(status,verify,save);section.append(footer);Object.assign(session,{status,save,verify});
+  const target={view:'stock_reconciliation',source_doctype:block.source_doctype,source_name:block.source_name};
+  async function readBack(origin){
+    verify.disabled=true;
+    const result=await showBusinessView(target,{origin});
+    if(result.status!=='rendered'&&registerSession===session){status.textContent='最新核对结果未读取成功，请重新读取。不要重复提交修复。';verify.disabled=false;}
+  }
+  verify.addEventListener('click',()=>{if(registerSession===session&&!verify.disabled)return readBack('verify');});
+  save.addEventListener('click',async()=>{
+    if(registerSession!==session||save.disabled||session.state!=='ready')return;
+    if(!window.confirm(`确认对来源单 ${block.source_name} 涉及的 ${targets.length} 组差异执行原生库存汇总重算？同时更新现存、价值、计划、订购、预留及预计汇总，不修改来源单或库存流水。`))return;
+    session.state='saving';save.disabled=true;verify.disabled=true;status.textContent='正在核验版本并执行原生重算，请勿重复提交…';
+    try{
+      const result=await request('/api/method/tongjianyun.stock_operations.repair_stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source_doctype:block.source_doctype,source_name:block.source_name,targets,revision:block.revision,confirm:'recalculate'})});
+      const returned=Array.isArray(result?.targets)?result.targets:[],returnedKeys=returned.map(row=>JSON.stringify([row?.item_code,row?.warehouse]));
+      if(result?.status!=='recalculated'||result.before_revision!==block.revision||returned.length!==targets.length||new Set(returnedKeys).size!==keys.size||returnedKeys.some(key=>!keys.has(key))||!result.inspection||result.inspection.source_doctype!==block.source_doctype||result.inspection.source_name!==block.source_name)throw Error('修复返回结果不完整。');
+      session.state='saved';status.textContent='重算已返回，正在重新读取库存与流水核对…';await readBack('saved');
+    }catch(error){session.state='uncertain';status.textContent=(error.message||'修复结果未知。')+' 请重新读取并核对，不要直接重复修复。';verify.disabled=false;}
+  });
+  return section;
+}
+const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,attendance_register:renderAttendance,meal_register:renderMealRegister,stock_repair:renderStockRepair};
 export function buildComponents(data){
   if(data?.version!==1||!validViews.has(data.selection?.view)||!Array.isArray(data.components)||data.components.length>12)throw Error('展示结果格式不受支持，已保留当前页面。');
   const content=document.createDocumentFragment();

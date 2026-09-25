@@ -123,6 +123,37 @@ class BusinessViewsTests(unittest.TestCase):
         self.assertEqual(next(a for a in result['actions'] if a['label'] == '下一页')['selection']['offset'], 30)
         self.assertEqual(len(result['components'][1]['rows']), 30)
 
+    def test_purchase_invoice_history_is_not_presented_as_current_debt(self):
+        entry = REGISTRY['purchase_invoices']
+        rows = [
+            frappe._dict(name='QA-CANCELLED', docstatus=2, grand_total=100, outstanding_amount=100, currency='CNY'),
+            frappe._dict(name='QA-SUBMITTED', docstatus=1, grand_total=50, outstanding_amount=50, currency='CNY'),
+        ]
+        meta = MagicMock(is_submittable=True)
+        meta.get_field.return_value = SimpleNamespace(fieldtype='Data')
+        fields = {column[0] for column in entry.columns} | {'docstatus'}
+        with patch.object(business, 'guard'), patch.object(business, 'visible_fields', return_value=fields), \
+             patch.object(business, 'native_actions', return_value=[]), \
+             patch.object(business, 'query_filters', return_value=([], [])), \
+             patch.object(frappe, 'get_meta', return_value=meta), \
+             patch.object(frappe, 'get_list', side_effect=[rows, [frappe._dict(total=2)]]):
+            result = business.records_view(self.select(entity='purchase_invoices', period='all'))
+        self.assertEqual(result['summary']['record_count'], 2)
+        self.assertEqual(result['summary']['basis'], entry.note)
+        self.assertIn('已取消单据的历史未付金额不代表当前欠款', entry.note)
+        self.assertIn('限定已提交单据', entry.note)
+        self.assertIn('有效会计与付款流水', entry.note)
+        self.assertNotIn('outstanding_amount', result['summary'])
+        self.assertNotIn('outstanding_total', result['summary'])
+        self.assertTrue(any(component.get('text') == entry.note for component in result['components']))
+        table = next(component for component in result['components'] if component['type'] == 'table')
+        # Retain truthful historical fields and the cancelled state, not a fabricated zero balance.
+        amount_index = table['columns'].index('未付金额')
+        status_index = table['columns'].index('单据状态')
+        self.assertEqual(table['rows'][0]['cells'][amount_index], 100)
+        self.assertEqual(table['rows'][0]['cells'][status_index], '已取消')
+        self.assertEqual(table['rows'][1]['cells'][status_index], '已提交')
+
     def test_null_check_is_not_false_and_nonfinite_is_unknown(self):
         meta = MagicMock()
         meta.get_field.return_value.fieldtype = 'Check'

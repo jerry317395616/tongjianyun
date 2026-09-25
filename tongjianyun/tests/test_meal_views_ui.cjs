@@ -496,3 +496,99 @@ test('fill all is unavailable for readonly, empty, attendance, saving or uncerta
   let reject;fixture.context.poster=()=>new Promise((_,r)=>reject=r);fixture.run('request=()=>poster()');const saving=session.save.click();assert.equal(session.fillAll.disabled,true);await session.fillAll.click();assert.equal(session.fields[0].select.value,'不就餐');
   reject(Error('网络中断'));await saving;assert.equal(session.state,'uncertain');await session.fillAll.click();assert.equal(session.fields[0].select.value,'不就餐');assert.equal(session.fillAll.disabled,true);
 });
+
+const stockBlock={type:'stock_repair',source_doctype:'Purchase Receipt',source_name:'QA-PR-1',revision:'a'.repeat(64),status:'mismatch',can_repair:true,targets:[{item_code:'ITEM-1',warehouse:'WAREHOUSE-1'},{item_code:'ITEM-2',warehouse:'WAREHOUSE-2'}]};
+const stockData=block=>({...data,title:'库存核对',selection:{view:'stock_reconciliation',source_doctype:block.source_doctype,source_name:block.source_name},components:[block]});
+const stockResult=block=>({status:'recalculated',before_revision:block.revision,targets:block.targets,inspection:{source_doctype:block.source_doctype,source_name:block.source_name,revision:'b'.repeat(64),can_repair:false,summary:{checked_pairs:2,mismatched_pairs:0,status:'consistent'},rows:block.targets.map(row=>({...row,quantity_matches:true,value_matches:true,can_repair:false}))}});
+async function stockSetup(block=stockBlock){
+  const fixture=setup();fixture.context.responses=stockData(block);fixture.context.result=stockResult(block);fixture.context.calls=[];fixture.context.confirmations=[];
+  fixture.run('initializeViews({request:async(url,options)=>{calls.push({url,options});return options?.method==="POST"?result:responses;}});window.confirm=message=>{confirmations.push(message);return true};');
+  await fixture.run('showBusinessView(responses.selection)');return fixture;
+}
+
+test('stock view never posts automatically and confirmation binds exact source targets and revision',async()=>{
+  const fixture=await stockSetup(),session=fixture.run('registerSession');assert.equal(fixture.context.calls.length,1);assert.equal(session.kind,'stock');
+  fixture.run('window.confirm=()=>false');await session.save.click();assert.equal(fixture.context.calls.length,1);assert.equal(session.state,'ready');
+  fixture.run('window.confirm=message=>{confirmations.push(message);return true};');
+  fixture.context.responses=stockData({...stockBlock,status:'consistent',can_repair:false,targets:[],revision:'b'.repeat(64)});
+  await session.save.click();assert.equal(fixture.context.calls.length,3);assert.match(fixture.context.confirmations[0],/QA-PR-1.*2 组/);
+  assert.equal(fixture.context.calls[1].url,'/api/method/tongjianyun.stock_operations.repair_stock');
+  assert.equal(fixture.context.calls[1].options.method,'POST');
+  assert.deepEqual(JSON.parse(fixture.context.calls[1].options.body),{source_doctype:'Purchase Receipt',source_name:'QA-PR-1',targets:stockBlock.targets,revision:stockBlock.revision,confirm:'recalculate'});
+  assert.deepEqual(JSON.parse(new URL(fixture.context.calls[2].url,'https://local').searchParams.get('selection_json')),stockData(stockBlock).selection);
+  assert.equal(fixture.run('registerSession.save.hidden'),true);assert.match(fixture.run('registerSession.status.textContent'),/无需修复/);
+});
+
+test('stock pending not-posted consistent and blocked results hide repair including stale button events',async()=>{
+  for(const status of ['pending','not_posted','consistent','blocked']){
+    const fixture=await stockSetup({...stockBlock,status,can_repair:false,targets:[]}),session=fixture.run('registerSession');
+    assert.equal(session.save.hidden,true);assert.equal(session.save.disabled,true);await session.save.click();assert.equal(fixture.context.calls.length,1);
+    await session.verify.click();assert.equal(fixture.context.calls.length,2);assert(!fixture.context.calls.some(call=>call.options?.method==='POST'));
+  }
+});
+
+test('stock in-flight mutation blocks duplicate submit navigation readback and unload',async()=>{
+  const fixture=await stockSetup();let resolve;fixture.context.poster=()=>new Promise(r=>resolve=r);
+  fixture.run('request=(url,options)=>{calls.push({url,options});return options?.method==="POST"?poster():Promise.resolve(responses)}');
+  const session=fixture.run('registerSession'),saving=session.save.click();assert.equal(session.state,'saving');assert.equal(session.verify.disabled,true);
+  await session.save.click();await session.verify.click();assert.equal(fixture.context.calls.length,2);
+  assert.equal((await fixture.run('showBusinessView({view:"students"})')).status,'blocked');assert.equal(fixture.run('showCalendar().status'),'blocked');
+  let prevented=false;fixture.windowEvents.get('beforeunload')({preventDefault(){prevented=true;}});assert.equal(prevented,true);
+  fixture.context.responses=stockData({...stockBlock,status:'consistent',can_repair:false,targets:[]});resolve(stockResult(stockBlock));await saving;assert.equal(fixture.run('registerSession.state'),'ready');
+});
+
+test('uncertain stock network result requires fresh GET and never replays the POST',async()=>{
+  const fixture=await stockSetup(),session=fixture.run('registerSession');
+  fixture.run('request=async(url,options)=>{calls.push({url,options});if(options?.method==="POST")throw Error("网络中断");return responses};');
+  await session.save.click();assert.equal(session.state,'uncertain');assert.equal(session.save.disabled,true);assert.equal(session.verify.disabled,false);assert.match(session.status.textContent,/不要直接重复修复/);
+  await session.save.click();assert.equal(fixture.context.calls.length,2);
+  assert.equal((await fixture.run('showBusinessView(current,{origin:"refresh"})')).status,'blocked');assert.equal(fixture.context.calls.length,2);
+  fixture.context.responses=stockData({...stockBlock,status:'consistent',can_repair:false,targets:[],revision:'b'.repeat(64)});
+  await session.verify.click();assert.equal(fixture.context.calls.length,3);assert.equal(fixture.context.calls.filter(call=>call.options?.method==='POST').length,1);
+  assert.equal(fixture.run('registerSession.save.hidden'),true);
+});
+
+test('stock successful POST followed by failed GET does not offer repeat repair or claim verified success',async()=>{
+  const fixture=await stockSetup(),session=fixture.run('registerSession');fixture.run('request=async(url,options)=>{calls.push({url,options});if(options?.method==="POST")return result;throw Error("回读失败")};');
+  await session.save.click();assert.equal(session.save.disabled,true);assert.equal(session.verify.disabled,false);assert.match(session.status.textContent,/未读取成功.*不要重复提交/);
+  await session.save.click();assert.equal(fixture.context.calls.length,3);
+});
+
+test('stock response with wrong source or revision is uncertain and cannot trigger readback as success',async()=>{
+  for(const result of [{...stockResult(stockBlock),before_revision:'c'.repeat(64)}, {...stockResult(stockBlock),inspection:{...stockResult(stockBlock).inspection,source_name:'OTHER'}}, {status:'recalculated'}]){
+    const fixture=await stockSetup(),session=fixture.run('registerSession');fixture.context.result=result;await session.save.click();
+    assert.equal(session.state,'uncertain');assert.equal(fixture.context.calls.length,2);assert.equal(session.save.disabled,true);
+  }
+});
+
+test('stock response must acknowledge the exact requested target set before claiming recalculated',async()=>{
+  for(const targets of [undefined,[],[{item_code:'OTHER',warehouse:'WAREHOUSE-1'}],[stockBlock.targets[0],stockBlock.targets[0]]]){
+    const fixture=await stockSetup(),session=fixture.run('registerSession');fixture.context.result={...stockResult(stockBlock),targets};await session.save.click();
+    assert.equal(session.state,'uncertain');assert.equal(fixture.context.calls.length,2);
+  }
+});
+
+test('malformed stock credentials and target strings fail closed before any action',()=>{
+  const fixture=setup();
+  for(const block of [{...stockBlock,source_doctype:'Bin'},{...stockBlock,revision:'invalid'},{...stockBlock,can_repair:1},{...stockBlock,status:'pending'},
+    {...stockBlock,targets:[]},{...stockBlock,targets:[stockBlock.targets[0],stockBlock.targets[0]]},{...stockBlock,targets:[{...stockBlock.targets[0],bin:'arbitrary'}]},
+    {...stockBlock,targets:Array.from({length:21},(_,i)=>({item_code:'I'+i,warehouse:'W'}))},
+    {...stockBlock,source_name:' PR-1 '},{...stockBlock,source_name:'PR\n1'},
+    {...stockBlock,targets:[{item_code:' ',warehouse:'W'}]},{...stockBlock,targets:[{item_code:'x'.repeat(141),warehouse:'W'}]},
+    {...stockBlock,targets:[{item_code:'I',warehouse:'W\n1'}]}]){
+    fixture.context.block=block;assert.throws(()=>fixture.run('renderStockRepair(block)'),/库存/);
+  }
+});
+
+test('stock HTML-like names stay plain text and cannot introduce a second editor',async()=>{
+  const block={...stockBlock,source_name:'<img src=x onerror=alert(1)>',targets:[{item_code:'<script>',warehouse:'<iframe>'}]},fixture=await stockSetup(block);
+  const fragment=fixture.nodes.get('view-content').children[0];assert(!elementTree(fragment).some(node=>['img','script','iframe'].includes(node.tag)));
+  fixture.context.bad={...stockData(block),components:[block,attendanceBlock]};assert.throws(()=>fixture.run('buildComponents(bad)'),/一个业务编辑器/);
+});
+
+test('stock overall blocked state can repair an eligible subset without including unsupported pairs',async()=>{
+  const block={...stockBlock,status:'blocked',targets:[stockBlock.targets[0]]},fixture=await stockSetup(block),session=fixture.run('registerSession');
+  assert.equal(session.save.hidden,false);assert.equal(session.save.disabled,false);await session.save.click();
+  assert.deepEqual(JSON.parse(fixture.context.calls[1].options.body).targets,[stockBlock.targets[0]]);
+  assert.equal(fixture.context.calls.filter(call=>call.options?.method==='POST').length,1);
+});

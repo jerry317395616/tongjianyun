@@ -359,6 +359,9 @@ def native_view(choice):
         route = '/desk/' + ('' if doc.public else 'private/') + slug(doc.name)
         title, module = label(doc.name), doc.module
     actions = [_action('返回模块', {'view': 'frappe_catalog', 'app': modules[module], 'module': module, **_context(choice)})]
+    if view == 'frappe_document' and doc.name in {'Purchase Receipt', 'Stock Entry'}:
+        actions.append(_action('核对当前库存', {'view': 'stock_reconciliation',
+                       'source_doctype': doc.name, 'source_name': choice['document']}))
     if view == 'frappe_doctype' and capabilities:
         if any(row['key'] == 'create' and row['available'] for row in capabilities['operations']):
             actions.insert(0, _action('新建', {'view': 'frappe_new', 'doctype': doc.name, **_context(choice)}))

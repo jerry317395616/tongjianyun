@@ -1,8 +1,47 @@
-# 隔离浏览器验收建议（未启动）
+# 隔离浏览器验收工具与边界
 
-日期：2026-09-25。本文件是只读环境调查和操作建议；本轮没有新建静态资源目录、改站点配置、设置密码、启动 Web、启动 SSH 转发或使用浏览器。
+日期：2026-09-25。最初为只读建议，后经明确授权实现 `deploy/unified_business/serve_isolated_browser.py`，并已准备合成浏览器 fixture、独立静态资源和 loopback Web。没有启动对外代理、执行生产写入或由本子任务操作浏览器；本机 SSH 转发和 CUA 验收由根任务负责。
 
-## 已核实状态
+## 已实施工具
+
+- `prepare`：重复精确 root/site/DB/Redis 守卫，将四个应用的 1,295 个公共文件复制到 QA 真实 `sites/assets`；不跟随 public/node_modules symlink，不改生产 assets。设置仅 QA `maintenance_mode=0` 与独立 host_name，仍禁用 scheduler、开发模式、邮件发送。
+- 合成管理用户 `browser-manager-02e16a31d7@example.invalid` 具有明确 System Manager + Academics User；教师 `teacher-scope-9680e04d9f@example.invalid` 保持原角色。两套强随机临时口令只存 QA root 下 `browser-credentials.json`，0600、不输出。重复 prepare 不重置口令或业务事实。
+- 复用授课班 `QA Teacher 9680e04d9f Assigned` 的两名合成学生，浏览器业务日期 `2026-09-18`、午餐，初始考勤 Unknown，未创建实际考勤或就餐确认。
+- QA Redis 的“隔离测试导航，未调用Codex”任务通过实际 `publish_for_task` 校验并发出 classroom_day / meal_counts 视图指令后标记 completed，没有 RQ job、worker 或 Codex 进程。打开右侧“查看”按钮将真实查询 QA 后端，不用浏览器隐藏函数。
+- `serve`：使用 Werkzeug `make_server` 而非会设置 debug 标记的 Frappe 开发启动器；固定 site/sites_path，绑定 `127.0.0.1:23380`，单线程、无 debugger/reloader/worker。运行时再次逐请求校验隔离配置，拒绝其他 Host 和 site header。
+- WSGI 测试防火墙对 RPC 默认拒绝，仅允许登录/登出、课堂考勤/分餐保存和必要只读接口。真实 Codex send/cancel/private runner、文件上传、非白名单方法、generic resource/native 写入均被拒绝；校验路径及 form/JSON/query cmd，不能借别名绕过。没有猴子补丁业务权限。
+- `refresh-assets`：只刷新独立 QA 公共文件，不连接 Frappe/DB/Redis，不创建导航、轮换口令或改配置；内部比较 credential/fixture/config 字节摘要保持不变，摘要不输出。
+- `prepare` / `refresh-assets` 将每个公开源文件与副本的 SHA256 写入私有测试清单；记录模板资源版本和 chat→views import，必须含考勤、分餐、蓝图、库存核对组件。`serve` / `verify` 检测源文件、模板或副本变更后拒绝声称版本一致。
+- `verify`：仅输出非敏感 readiness、公开资源 SHA256 和合成 fixture；另将 HTTP 实际返回的五个关键文件与源/副本摘要逐一比较。已确认 health=ready、login=200、agent send POST/GET-body cmd=403、端口监听仅 loopback。
+- 防火墙 9 / 9、资产证据与只刷新契约 5 / 5 无密钥单测通过。版本化工具已复制到 QA remote-workspace 用于运行；没有提交或生产部署。
+
+启动记录：精确核对脚本后停止旧 PID `2545326`，当前服务器 PID `2619194`、exec session `63201`。根任务可使用该 session 结束本次进程；若状态变化，以 `verify`、`browser-server.json` 和精确 PID/监听检查为准。
+
+首次管理者浏览器验收发现候选 overlay/QA 副本仍是旧 views.js，缺少 attendance 组件；这是测试资产同步问题，不是已证明的生产缺陷。根任务同步完整候选前端后，已执行只刷新资产、验证 1,295 个文件源/副本一致并重启精确 QA 进程。chat 和 views import 为 `unified-business-20260925-4`，模板 views.css 为 `unified-business-20260925-2`；凭据、fixture 和导航未变。公开资源摘要以 `browser-assets.json` / `verify` 输出为准，不把旧文档摘要当实时版本证据。
+
+```sh
+/home/zyd/frappe/native-bench/env/bin/python /home/zyd/frappe/remote-workspace/serve_isolated_browser.py prepare
+/home/zyd/frappe/native-bench/env/bin/python /home/zyd/frappe/remote-workspace/serve_isolated_browser.py refresh-assets
+/home/zyd/frappe/native-bench/env/bin/python /home/zyd/frappe/remote-workspace/serve_isolated_browser.py serve
+/home/zyd/frappe/native-bench/env/bin/python /home/zyd/frappe/remote-workspace/serve_isolated_browser.py verify
+```
+
+管理场景 URL：`http://unified-business-acceptance.localhost:23380/tongjianyun-meal-scene?day=2026-09-18&meal=lunch`。口令文件只交根任务的授权浏览器流程读取，不贴聊天或录屏。
+
+## 管理者浏览器保存后的独立回读
+
+根任务通过真实 QA 页面完成：第一名合成学生到园、第二名保持待点名；午餐先保存为“就餐 / 不就餐”，再填写“隔离浏览器验收：核对后补录本餐实际就餐”改为两人就餐。根任务另行刷新浏览器核对显示。这里只证明合成管理者办理，不替代纯教师权限验收。
+
+`verify_browser_fixture_readback.py` 随后新建独立连接，以合成管理者执行 `START TRANSACTION READ ONLY`，只核对固定班级/2026-09-18 记录并最终 rollback。18 / 18 检查通过，证据保存在 QA root 的 `browser-readback-ad5c578350.json`（0600）：
+
+- 考勤为 Present / Unknown，原生到园记录只有第一人，记录 actor 为合成管理者。
+- 午餐实际人数 2，两名均已就餐；其他四餐仍未确认、actual 为 null；班级日记录和每日汇总仍待确认，没有整日确认人/时间。
+- 午餐预计仍为两人；全部 expected 字段与原预计规则一致，持久化 Version 没有 expected 字段变更。没有独立保存前数据库快照，故证据明确限定为“浏览器保存前看到两人预计就餐 + 当前原规则一致 + 历史无预计字段改动”，不冒称完整数据库前后快照。
+- Version 保留第二人午餐“未就餐→已就餐”、精确修订原因与管理者 actor；两条原生午餐核对 Comment 保留且 actor 一致。
+
+未保存离开保护的原生 `window.confirm` 使 CUA 标签 13 停住，工具不能关闭/响应；根任务改用标签 14 完成其余检查。**离开保护的真实浏览器结果仍为未验证，不能记为通过。** 此次回读未执行新的业务写入，没有运行 Codex、重启服务或触及生产数据。
+
+## 初始只读调查
 
 - 固定站点：`/home/zyd/frappe/remote-workspace/tgy-blueprint-lifecycle-qa-20260925/sites/unified-business-acceptance.localhost`。
 - 隔离 `sites/assets` 尚不存在；站点 `public` 是独立真实目录，sites 下没有发现 symlink。
@@ -37,4 +76,4 @@
 4. 页面截图/操作录像仅含合成人名，不能录入一次性口令或控制台私密请求头。
 5. 独立后端回读报告及固定站点/数据库标记，且旧历史 fixture 摘要保持不变。
 
-先取得后续启动/浏览器步骤授权并确认所测页面范围，再实施本方案。现有 54 项 ORM/原生 resource handler 验收和 127 项单元回归不替代上述浏览器到真实后端证据。
+现有 54 项 ORM/原生 resource handler 验收、127 项业务单元回归及 14 项 Web/资产边界单测不替代上述浏览器到真实后端证据。当前防火墙尚不允许蓝图激活、库存修复或通用原生单据写入；如需扩大 QA 验收范围，应在版本化白名单中明确增加所需接口并补测试，不关闭整个屏障。未增加一次性链接或 LoginManager 登录旁路；使用正常登录页与隔离强随机口令。

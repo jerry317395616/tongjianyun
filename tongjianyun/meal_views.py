@@ -19,7 +19,7 @@ from tongjianyun.frappe_project_views import VIEWS as PROJECT_VIEWS, FIELDS as P
 
 VIEWS = {'students': '在园学生', 'class_students': '班级学生',
          'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析',
-         'business_blueprint': '新业务方案', **BUSINESS_VIEWS, **PROJECT_VIEWS}
+         'business_blueprint': '新业务方案', 'stock_reconciliation': '库存核对', **BUSINESS_VIEWS, **PROJECT_VIEWS}
 LABELS = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                   ('早餐', '早点', '午餐', '午点', '晚餐')))
 PAGE_SIZE = 50
@@ -38,12 +38,17 @@ def selection(value, default_day=None, default_meal='lunch'):
         except (TypeError, ValueError):
             frappe.throw('展示指令格式无效。')
     from tongjianyun.meal_nutrition_view import FIELDS, nutrition_selection
-    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components', 'proposal_id'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS):
+    from tongjianyun.stock_reconciliation import FIELDS as STOCK_FIELDS, selection as stock_selection
+    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components', 'proposal_id'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS | STOCK_FIELDS):
         frappe.throw('展示指令含不支持的内容。')
     view = value.get('view')
     if not isinstance(view, str) or view not in VIEWS:
         frappe.throw('暂不支持这种业务视图。')
     clean = {'view': view}
+    if view == 'stock_reconciliation':
+        return stock_selection(value)
+    if set(value) & STOCK_FIELDS:
+        frappe.throw('来源单据参数仅用于库存核对。')
     if view == 'business_blueprint':
         from tongjianyun.business_views import text_arg
         if set(value) - {'view', 'proposal_id', 'day', 'meal'} or not value.get('proposal_id'):
@@ -284,6 +289,9 @@ def get_view(selection_json):
     elif choice['view'] == 'business_blueprint':
         from tongjianyun.business_blueprints import preview
         result = preview(choice['proposal_id'])
+    elif choice['view'] == 'stock_reconciliation':
+        from tongjianyun.stock_reconciliation import get_view as stock_view
+        result = stock_view(choice)
     else:
         result = project_view(choice) if choice['view'] in PROJECT_VIEWS else get_business_view(choice) if choice['view'] in BUSINESS_VIEWS else {
             'students': students_view, 'class_students': class_students_view,
@@ -362,6 +370,10 @@ def tool_instruction(task_id, site, context=None):
             '跨期请假按时间交集筛选。库存是当前值，不是历史快照。用户问全部历史须明确传 --period all。'
             '单据明细：--view business_record --entity 业务键 --record 精确编号；不猜单据编号，先展示可点击列表。'
             '库存：--view stock [--warehouse 仓库编号]；食材营养统计：--view ingredient_nutrition [--recipe 食谱编号]。'
+            '库存流水与汇总核对：--view stock_reconciliation --source-doctype "Purchase Receipt"或"Stock Entry" --source-name 精确单据编号；'
+            '先核实原单据，不猜编号。该工具只核对；当前生产环境仅开放诊断，原生修复仍限隔离验收，不得声称已经修好。'
+            '隔离验收的修复按钮也要求用户明确确认，复用原生重算，不改流水或来源单。'
+            '不得替用户调用repair_stock或伪造确认；待重估/失败重估、无修复权限或不支持估值法时说明阻断原因。'
             '班级当日出勤及登记表：--view classroom_day [--group 班级编号或唯一名称] [--day YYYY-MM-DD]；'
             '核对本餐实际用餐：--view meal_counts --group 班级编号 --day YYYY-MM-DD --meal 餐次；左侧直接办理，无需另做每日二次确认。'
             '一周食谱采购：--view weekly_orders [--period week|all] [--day YYYY-MM-DD] [--status 0|1|2]；'

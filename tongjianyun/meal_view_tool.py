@@ -36,7 +36,7 @@ def main():
     mode.add_argument('--propose-business', help='Absolute path to a data-only business proposal JSON')
     mode.add_argument('--view', choices=['students', 'class_students', 'meal_counts', 'recipe_week', 'recipe_nutrition',
                         'business_catalog', 'business_list', 'business_record', 'stock', 'ingredient_nutrition', 'classroom_day', 'weekly_orders',
-                        'project_catalog', 'frappe_catalog', 'frappe_doctype', 'frappe_new', 'frappe_document', 'frappe_report', 'frappe_page', 'frappe_workspace', 'business_blueprint'])
+                        'project_catalog', 'frappe_catalog', 'frappe_doctype', 'frappe_new', 'frappe_document', 'frappe_report', 'frappe_page', 'frappe_workspace', 'business_blueprint', 'stock_reconciliation'])
     parser.add_argument('--proposal-id', dest='proposal_id')
     parser.add_argument('--presentation', choices=['table', 'bars'])
     parser.add_argument('--components', nargs='+', choices=['stats', 'table', 'bars', 'notice', 'recipe_week'])
@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--gender', choices=['男女平均', '男', '女'])
     parser.add_argument('--student-groups', dest='student_groups', nargs='+')
     for name in ('entity', 'record', 'keyword', 'period', 'start-date', 'end-date', 'status', 'company', 'warehouse', 'domain',
-                 'app', 'module', 'doctype', 'document', 'report', 'page', 'workspace', 'kind'):
+                 'app', 'module', 'doctype', 'document', 'report', 'page', 'workspace', 'kind', 'source-doctype', 'source-name'):
         parser.add_argument('--' + name)
     parser.add_argument('--offset', type=int)
     args = parser.parse_args()
