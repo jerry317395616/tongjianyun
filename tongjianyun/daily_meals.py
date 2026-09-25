@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import timedelta
+from typing import NamedTuple
 
 import frappe
 from frappe import _
@@ -46,7 +47,7 @@ def _active_students(group: str) -> list[str]:
     return [row["student"] for row in _active_student_rows(group)]
 
 
-def _active_student_rows(group: str) -> list[dict]:
+def _active_student_rows(group: str, *, source_collector=None) -> list[dict]:
     rows = [
         dict(row)
         for row in frappe.get_all(
@@ -57,6 +58,8 @@ def _active_student_rows(group: str) -> list[dict]:
         )
     ]
     enabled = set(frappe.get_all("Student", filters={"name": ["in", [r["student"] for r in rows]], "enabled": 1}, pluck="name")) if rows else set()
+    if source_collector is not None:
+        source_collector['students'].update(enabled)
     unique = {}
     for row in rows:
         if row["student"] in enabled:
@@ -64,7 +67,7 @@ def _active_student_rows(group: str) -> list[dict]:
     return list(unique.values())
 
 
-def _attendance_records(group: str, meal_date) -> dict[str, dict]:
+def _attendance_records(group: str, meal_date, *, source_collector=None) -> dict[str, dict]:
     rows = frappe.get_all(
         "Student Attendance",
         filters={
@@ -75,6 +78,8 @@ def _attendance_records(group: str, meal_date) -> dict[str, dict]:
         fields=["name", "student", "status", "leave_application", "docstatus"],
         order_by="modified desc",
     )
+    if source_collector is not None:
+        source_collector['attendance_records'].update(row.name for row in rows)
     records = {}
     for row in rows:
         records.setdefault(row.student, dict(row))
@@ -88,7 +93,7 @@ def _attendance_by_student(group: str, meal_date) -> dict[str, str]:
     }
 
 
-def _leave_records(group: str, students: list[str], meal_date) -> dict[str, dict]:
+def _leave_records(group: str, students: list[str], meal_date, *, source_collector=None) -> dict[str, dict]:
     if not students:
         return {}
     rows = frappe.get_all(
@@ -103,6 +108,8 @@ def _leave_records(group: str, students: list[str], meal_date) -> dict[str, dict
         fields=["name", "student", "reason", "mark_as_present", "docstatus"],
         order_by="modified desc",
     )
+    if source_collector is not None:
+        source_collector['leave_records'].update(row.name for row in rows)
     records = {}
     for row in rows:
         records.setdefault(row.student, dict(row))
@@ -171,14 +178,39 @@ def calculate_rows(meal_date=None) -> list[dict]:
     return apply_class_snapshots(results, meal_date)
 
 
+class StudentMealReadSources(NamedTuple):
+    """Private identifiers from the exact legacy estimate queries, never RPC data.
+
+    Student-level estimates do not apply daily aggregate adjustments. The empty
+    adjustment tuple makes that boundary explicit; do not invent adjustment
+    dependencies by re-querying the separate whole-school calculate_rows path.
+    """
+    day: str
+    groups: tuple[str, ...]
+    students: tuple[str, ...]
+    attendance_records: tuple[str, ...]
+    leave_records: tuple[str, ...]
+    adjustment_records: tuple[str, ...] = ()
+
+
 def calculate_student_details(meal_date=None, student_group=None) -> list[dict]:
+    return _calculate_student_details(meal_date, student_group)
+
+
+def _calculate_student_details(meal_date=None, student_group=None, *, source_observer=None) -> list[dict]:
+    # Private Python adapter only: no whitelisted method accepts this callback.
+    if source_observer is not None and not callable(source_observer):
+        raise TypeError('Meal estimate source observer must be callable')
+    sources = {key: set() for key in ('groups', 'students', 'attendance_records', 'leave_records')}
+    options = {'source_collector': sources} if source_observer is not None else {}
     meal_date = getdate(meal_date or nowdate())
     all_details = []
     for group in _active_groups(student_group):
-        student_rows = _active_student_rows(group["name"])
+        sources['groups'].add(group['name'])
+        student_rows = _active_student_rows(group["name"], **options)
         students = [row["student"] for row in student_rows]
-        attendance = _attendance_records(group["name"], meal_date)
-        leave_records = _leave_records(group["name"], students, meal_date)
+        attendance = _attendance_records(group["name"], meal_date, **options)
+        leave_records = _leave_records(group["name"], students, meal_date, **options)
         absent_students = {
             student
             for student, record in attendance.items()
@@ -227,6 +259,11 @@ def calculate_student_details(meal_date=None, student_group=None) -> list[dict]:
                     "dinner": 0,
                 }
             )
+        if source_observer is not None:
+            sources['students'].update(name_map)
+    if source_observer is not None:
+        source_observer(StudentMealReadSources(str(meal_date), **{
+            key: tuple(sorted(value)) for key, value in sources.items()}))
     return all_details
 
 

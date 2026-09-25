@@ -378,9 +378,17 @@ def save_health(student_group, day, payload, workspace=None):
 @frappe.whitelist()
 def get_meals(student_group, day, workspace=None):
     """Revalidate this workspace before loading the existing meal workflow."""
+    return _get_meals(student_group, day, workspace)
+
+
+def _get_meals(student_group, day, workspace=None, *, source_observer=None):
+    """Source-aware trusted Python read; public parameters stay unchanged."""
+    if source_observer is not None and not callable(source_observer):
+        raise TypeError('Class meal source observer must be callable')
     group = _scope(student_group, workspace)
-    from tongjianyun.student_meals import get_class_meals
-    result = get_class_meals(str(_day(day)), group.name)
+    from tongjianyun.student_meals import get_class_meals, _get_class_meals
+    result = (_get_class_meals(str(_day(day)), group.name, source_observer=source_observer)
+              if source_observer is not None else get_class_meals(str(_day(day)), group.name))
     # The legacy response contains every account-visible class. Do not send
     # that cross-school index through the teacher workspace.
     return {key: result[key] for key in ("record", "revision", "expected", "actual", "meals")}

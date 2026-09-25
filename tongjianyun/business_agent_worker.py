@@ -14,10 +14,11 @@ and proxy path ownership, enforce one start per claim, drain both pipes, stop
 the exact unit on control-lease disconnect, and retain actual exit/cgroup proof.
 No such daemon is installed or claimed available by this code.
 
-classroom_read uses authority.read_attendance; optional trusted BusinessReads
-adds scoped class discovery and paginated rosters. All register same-query
-sources BEFORE returning. Other tools stay unavailable until integrated. This
-is an incremental execution surface, not the final project business scope.
+classroom_read uses authority.read_attendance; trusted adapters add class/meal
+reads, installed-business discovery and the existing attendance/meal writes.
+Writes require shared durable host/native lifecycle evidence and independent
+post-commit reads. Other workflows stay unavailable until integrated. This is
+an incremental execution surface, not the final project business scope.
 One shared Codex binary, no per-module agent installation.
 """
 from __future__ import annotations
@@ -36,7 +37,7 @@ import threading
 from typing import Callable, Protocol
 import uuid
 
-from tongjianyun.business_agent_events import CodexEventProjector, CodexObservation
+from tongjianyun.business_agent_events import CodexEventProjector, CodexObservation, ProjectionError, ProjectionDeliveryError
 from tongjianyun.business_agent_tasks import TaskIdentity, WorkerClaim, ExecutionObservation
 from tongjianyun.business_agent_transport import TaskProxy, private_directory, strict_json
 
@@ -102,25 +103,42 @@ def _frame(value):
     return value
 
 
-def build_prompt(task, *, include_discovery=False):
+def build_prompt(task, *, include_discovery=False, include_writes=False, include_catalog=False):
     """Task data is quoted JSON, never a shell program or an identity grant."""
     if (type(task) is not dict or not isinstance(task.get('message'), str)
             or type(task.get('context')) is not dict or task.get('mode') != 'business'):
         raise ValueError('Invalid trusted task payload')
-    if type(include_discovery) is not bool:
-        raise ValueError('Trusted discovery configuration must be boolean')
+    if any(type(value) is not bool for value in (include_discovery, include_writes, include_catalog)):
+        raise ValueError('Trusted tool configuration must be boolean')
     tool_description = '本次已接通 classroom_read（group=班级编号、day=YYYY-MM-DD），返回真实点名与未知人数。'
     if include_discovery:
         from tongjianyun.business_agent_reads import TOOL_INSTRUCTIONS
         tool_description += '\n' + '\n'.join(TOOL_INSTRUCTIONS.values()) + '\n'
     else:
         tool_description += '缺少班级编号时向用户询问。'
+    if include_catalog:
+        from tongjianyun.business_agent_catalog import TOOL_INSTRUCTIONS
+        tool_description += '\n' + '\n'.join(TOOL_INSTRUCTIONS.values()) + '\n'
+    if include_writes:
+        tool_description += (
+            '\n用户明确要求修改时，先读取真实当前记录及revision，再按原权限调用以下保存工具；'
+            '普通明确登记不额外要求通用审批，但指代不清或事实缺失时必须询问，不猜事实。'
+            'attendance_save 参数为 {group,day,revision,changes:[{student,status,leave_reason?}]}，'
+            'status仅Present、Absent、Leave，Leave必须有用户提供的实际原因。'
+            'meal_save 参数为 {group,day,meal,revision,students:[{student,value}],confirm,change_reason?}，'
+            'value仅就餐、不就餐、不供餐。confirm是实际餐次确认，不是权限凭证；'
+            '查询或预计人数不能自动变成实际就餐。保留原业务完整名单、日期、修订和变更原因要求。'
+            '只有committed=true证明提交，readback_available=true才有提交后真实回读。'
+            'uncertain/in_progress/blocked不得称为已保存，也不能换call_id或任务盲目重试。'
+            '已提交但回读失败时说明已提交、结果尚未核实，不重复保存。\n')
     request = json.dumps({'request': task['message'], 'context': task['context']},
                          ensure_ascii=False, allow_nan=False, separators=(',', ':'))
     prompt = (
         '你是统一业务场景中的业务助手。只按当前账号实际有权读取的数据回答，不假定所有人都到园。\n'
         + tool_description +
-        '未接通的业务不能声称已经执行。不能写业务、开发代码、访问宿主、猜测权限或换成管理员。\n'
+        '未接通的业务不能声称已经执行。' +
+        ('只能通过已接通的保存工具办理明确请求。' if include_writes else '不能写业务。') +
+        '不能开发代码、访问宿主、猜测权限或换成管理员。\n'
         '调用方式：将单个有限JSON对象通过stdin交给 /usr/bin/python3 -I /opt/business-codex/business_tool.py。'
         '对象仅含tool、arguments、call_id，例如'
         '{"tool":"classroom_read","arguments":{"group":"已知班级编号","day":"已知日期"},"call_id":"read-0001"}。'
@@ -142,7 +160,8 @@ class BusinessWorker:
     resumes the model. Reconnection reads durable events only.
     """
     def __init__(self, store, runtime: Runtime, *, read_attendance: Callable,
-                 model_key: Callable, proxy_factory=TaskProxy, poll_seconds=0.2, read_tools=None):
+                 model_key: Callable, proxy_factory=TaskProxy, poll_seconds=0.2, read_tools=None,
+                 write_tools=None, catalog_tools=None):
         required = ('ready', 'bind', 'start', 'poll', 'stop', 'record_projection', 'observe', 'close')
         if any(not callable(getattr(runtime, method, None)) for method in required):
             raise ValueError('A complete trusted native runtime connector is required')
@@ -150,12 +169,23 @@ class BusinessWorker:
             raise ValueError('Trusted read/model/proxy adapters required')
         if read_tools is not None and not callable(read_tools):
             raise ValueError('Source-aware discovery adapter must be callable')
+        if catalog_tools is not None and not callable(catalog_tools):
+            raise ValueError('Source-aware business catalog adapter must be callable')
+        if write_tools is not None:
+            from tongjianyun.business_agent_writes import BusinessWrites
+            if (not isinstance(write_tools, BusinessWrites)
+                    or getattr(runtime, 'write_ledger', None) is not write_tools.ledger
+                    or not callable(getattr(runtime, 'close_admission', None))
+                    or store.observe_execution != runtime.observe
+                    or store.seal_execution != runtime.seal_before_start):
+                raise ValueError('Writes require the same durable host/native observer in worker and task store')
         if type(poll_seconds) not in (int, float) or not 0 <= poll_seconds <= 1:
             raise ValueError('Invalid worker poll interval')
         self.store, self.runtime = store, runtime
         self.read_attendance, self.model_key, self.proxy_factory = read_attendance, model_key, proxy_factory
         self.poll_seconds = poll_seconds
         self.read_tools = read_tools
+        self.write_tools, self.catalog_tools = write_tools, catalog_tools
 
     def run(self, identity, job_id):
         if os.name == 'posix' and os.geteuid() == 0:
@@ -171,6 +201,7 @@ class BusinessWorker:
         bound = False
         runtime_started = False
         failure = None
+        failure_category = None
         status = 'running'
         token = secrets.token_urlsafe(32)
         projector = CodexEventProjector(lambda event: self.store.emit(claim, event), secrets=(token, claim.token))
@@ -187,15 +218,30 @@ class BusinessWorker:
 
         def close_proxy():
             closed.set()  # Revokes tools/model requests before closing sockets.
-            if proxy is not None:
-                proxy.close()
+            close_admission = getattr(self.runtime, 'close_admission', None)
+            try:
+                if callable(close_admission):
+                    close_admission(claim)
+            finally:
+                if proxy is not None:
+                    proxy.close()
 
         def read_tool(tool, arguments, call_id):
             if not authorize():
                 raise PermissionError('Business task no longer accepts tools')
             if not isinstance(call_id, str) or not _CALL_ID.fullmatch(call_id):
                 raise ValueError('Invalid tool request id')
-            if tool in {'scene_bootstrap', 'class_students_read'} and self.read_tools is not None:
+            if tool in {'attendance_save', 'meal_save'} and self.write_tools is not None:
+                result = self.write_tools.dispatch(claim, tool, arguments, call_id)
+                if not authorize():
+                    raise PermissionError('Business authority changed before delivery')
+                return result
+            if tool in {'business_catalog_read', 'business_view'} and self.catalog_tools is not None:
+                result = self.catalog_tools(claim, tool, arguments)
+                if not authorize():
+                    raise PermissionError('Business authority changed before delivery')
+                return result
+            if tool in {'scene_bootstrap', 'class_students_read', 'meal_read'} and self.read_tools is not None:
                 result = self.read_tools(claim, tool, arguments)
                 if not authorize():
                     raise PermissionError('Business authority changed before delivery')
@@ -219,6 +265,23 @@ class BusinessWorker:
                 raise PermissionError('Business authority changed before delivery')
             return result
 
+        def business_tool(tool, arguments, call_id):
+            try:
+                return read_tool(tool, arguments, call_id)
+            except PermissionError:
+                raise
+            except Exception as error:
+                # Native Frappe PermissionError is NOT Python PermissionError.
+                # Preserve a finite denial at the HTTP bridge rather than
+                # incorrectly describing missing authority as a 502 outage.
+                try:
+                    from frappe import PermissionError as FrappePermissionError
+                except ImportError:
+                    raise error
+                if isinstance(error, FrappePermissionError):
+                    raise PermissionError('Business tool authority denied') from None
+                raise
+
         try:
             self.runtime.bind(claim)
             bound = True
@@ -231,11 +294,14 @@ class BusinessWorker:
             directory.mkdir(mode=0o700)
             private_directory(directory)
             proxy = self.proxy_factory(directory, token, authorize=authorize,
-                                       tool_handler=read_tool, model_key=self.model_key)
+                                       tool_handler=business_tool, model_key=self.model_key)
+            if self.write_tools is not None and not callable(getattr(proxy, 'wait_for_tools', None)):
+                raise ValueError('Business writes require host callback drainage')
             proxy.start()  # Keep the constructed socket reachable if start raises.
             if not authorize():
                 raise PermissionError('Business task stopped before launch')
-            self.runtime.start(claim, prompt=build_prompt(task, include_discovery=self.read_tools is not None),
+            self.runtime.start(claim, prompt=build_prompt(task, include_discovery=self.read_tools is not None,
+                               include_writes=self.write_tools is not None, include_catalog=self.catalog_tools is not None),
                                proxy_path=proxy.path, token=token)
             runtime_started = True
             self.store.emit(claim, {'kind': 'status', 'text': '正在启动隔离助手并读取本次需求…'})
@@ -263,6 +329,15 @@ class BusinessWorker:
                 closed.wait(self.poll_seconds)
         except BaseException as error:
             failure = ('interrupted' if isinstance(error, (KeyboardInterrupt, SystemExit)) else 'execution_failed')
+            # Keep a bounded diagnosis in the trusted RQ receipt. Never retain
+            # exception text, stdout/stderr, command arguments or credentials.
+            failure_category = ('interrupted' if isinstance(error, (KeyboardInterrupt, SystemExit))
+                else 'event_delivery_uncertain' if isinstance(error, ProjectionDeliveryError)
+                else 'event_protocol_error' if isinstance(error, ProjectionError)
+                else 'native_runtime_unavailable' if isinstance(error, RuntimeUnavailable)
+                else 'authority_denied' if isinstance(error, PermissionError)
+                else 'invalid_runtime_data' if isinstance(error, (ValueError, TypeError))
+                else 'unexpected_worker_error')
             projector.cancel()
         finally:
             try:
@@ -273,11 +348,29 @@ class BusinessWorker:
             if bound:
                 # On failures/cancel/early return stop only this bound unit.
                 # stop is idempotent and must wait for its actual cgroup drain.
+                runtime_proven = True
                 try:
                     if failure or not runtime_started or not projector.observation.input_closed:
                         self.runtime.stop(claim)
                     self.runtime.record_projection(claim, projector.observation)
-                    status = self.store.finish(claim)
+                except Exception:
+                    runtime_proven = False
+                    failure = 'execution_unverified'
+                    status = 'unresolved'
+                try:
+                    if proxy is not None and callable(getattr(proxy, 'wait_for_tools', None)):
+                        # No total job deadline: keep this host process alive
+                        # until actual callbacks settle. A lost acknowledgement
+                        # never becomes a second business write.
+                        while proxy.wait_for_tools(self.poll_seconds) is not True:
+                            if self.poll_seconds == 0:
+                                threading.Event().wait(0.01)
+                    if runtime_proven:
+                        status = self.store.finish(claim)
+                    if self.write_tools is not None:
+                        host = self.write_tools.ledger.observe(identity, claim.claim_id)
+                        if host.active_writes:
+                            failure = 'host_write_drain_unverified'
                 except Exception:
                     failure = 'execution_unverified'
                     status = 'unresolved'
@@ -291,6 +384,10 @@ class BusinessWorker:
                 # invent an exited process. Trusted reconciliation is required.
                 status = 'unresolved'
         return {'started': True, 'status': status, 'error': failure,
+                'diagnostics': {'failure_category': failure_category,
+                    'runtime_turn_failed': projector.observation.turn_failed,
+                    'event_protocol_failed': projector.observation.protocol_failed,
+                    'event_delivery_uncertain': projector.observation.delivery_uncertain},
                 'automatic_retry_allowed': False, 'task_id': identity.task_id}
 
 
@@ -455,8 +552,8 @@ class UnixLauncherRuntime:
         completed = bool(observation and observation.input_closed and observation.turn_completed
                          and not observation.cancelled and not observation.turn_failed
                          and not observation.delivery_uncertain and not observation.protocol_failed)
-        # This worker has NO business writes. New write tools require a trusted
-        # durable-ledger drainage observer before this constant can be extended.
+        # Native evidence covers this isolated process only. The service wraps
+        # this runtime with BusinessExecutionRuntime before enabling host writes.
         return ExecutionObservation(claim_id, state, 0, value['exit_code'], completed, value['lease_closed'])
 
     def poll(self, claim):

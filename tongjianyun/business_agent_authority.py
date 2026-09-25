@@ -48,8 +48,16 @@ ROSTER = 'projection:class-roster:v1'
 GROUPS = 'projection:class-discovery:v1'
 ATTENDANCE = 'projection:attendance:v1'
 MEALS = 'projection:class-meals:v1'
+MEAL_ESTIMATES = 'projection:class-meal-estimates:v1'
 SCENE = 'scene:business:v1'
 CATALOG = 'catalog:business:v1'
+
+
+class MealReadScopeLimit(ValueError):
+    """No partial roster may be returned when complete source registration fails."""
+    def __init__(self, *, single_read):
+        self.single_read = single_read
+        super().__init__('Complete meal read exceeds the business source scope budget')
 
 
 def _deny():
@@ -218,7 +226,7 @@ def _projection(name):
         _doctype('Student Group', ['read'])
         _fields('Student Group', ('student_group_name', 'academic_year', 'disabled'))
         return
-    if name not in {ROSTER, ATTENDANCE, MEALS}:
+    if name not in {ROSTER, ATTENDANCE, MEALS, MEAL_ESTIMATES}:
         _deny()
     for dt in ('Student Group', 'Student'):
         _doctype(dt, ['read'])
@@ -228,13 +236,20 @@ def _projection(name):
     if roster_child != 'Student Group Student':
         _deny()
     _fields(roster_child, ('student', 'active', 'group_roll_number'), parenttype='Student Group')
-    if name == ATTENDANCE:
+    if name in {ATTENDANCE, MEAL_ESTIMATES}:
         for dt, fields in (
             ('Student Attendance', ('student', 'student_group', 'date', 'status')),
             ('Student Leave Application', ('student', 'student_group', 'from_date', 'to_date', 'mark_as_present')),
         ):
             _doctype(dt, ['read'])
             _fields(dt, fields)
+    if name == MEAL_ESTIMATES:
+        # The original estimate path uses the group's stored display name,
+        # attendance linkage and leave reasons; these are not model output but
+        # may not silently bypass the native field-level read policy either.
+        _fields(roster_child, ('student_name',), parenttype='Student Group')
+        _fields('Student Attendance', ('leave_application',))
+        _fields('Student Leave Application', ('reason',))
     if name == MEALS:
         _doctype(CLASS_MEAL, ['read'])
         _fields(CLASS_MEAL, ('student_group', 'meal_date', 'status'))
@@ -428,6 +443,52 @@ class FrappeBusinessAuthority:
         self.register_read(store, claim, read_set)
         return result
 
+    def read_meals(self, store, claim, *, group, day):
+        """Original class-day meal snapshot, with same-query dependencies.
+
+        Existing snapshots depend on their saved class-meal document; first
+        reads additionally depend on every native estimate attendance/leave
+        source. Expected values remain estimates, never actual attendance.
+        Nothing is saved or confirmed by opening this reader.
+        """
+        if not isinstance(claim, WorkerClaim):
+            _deny()
+        _identity(claim.identity, self.site)
+        args = _validate_arguments('meal_read', {'group': group, 'day': day})
+        state = store.binding_state(claim)
+        if state['status'] != 'running' or state['cancel_requested'] not in (False, 0, '0'):
+            _deny()
+        def read():
+            from tongjianyun import classroom, student_meals
+            _account(claim.identity.owner, self.site)
+            _projection(MEALS)
+            captured = []
+            raw = classroom._get_meals(args['group'], args['day'], source_observer=captured.append)
+            record = raw['record']
+            if (len(captured) != 1 or not isinstance(captured[0], student_meals.ClassMealReadSources)
+                    or captured[0].group != args['group'] or captured[0].day != args['day']
+                    or captured[0].revision != raw['revision']
+                    or record.get('student_group') != args['group'] or str(record.get('meal_date')) != args['day']
+                    or tuple(row['student'] for row in record.get('students', [])) != captured[0].students
+                    or (captured[0].record is not None and record.get('name') != captured[0].record)):
+                _deny()
+            read_set = meal_read_set(captured[0])
+            if captured[0].estimates is not None:
+                _projection(MEAL_ESTIMATES)
+            fields = ('student', 'student_name', *sorted(student_meals.MEALS),
+                      *(meal + '_expected' for meal in sorted(student_meals.MEALS)))
+            result = {'group': args['group'], 'day': args['day'],
+                      'scope': '当前账号有权查看的本班餐次名单；预计值不是实际就餐，未确认不计为零',
+                      'revision': raw['revision'], 'meals': raw['meals'],
+                      'students': [{key: row.get(key) for key in fields} for row in record.get('students', [])]}
+            return result, read_set
+        result, read_set = self.run_check(claim.identity.owner, read)
+        combined = {_json_scope(scope) for scope in (*store.required_scopes(claim.identity), *read_set.scopes)}
+        if len(combined) > MAX_SCOPES:
+            raise MealReadScopeLimit(single_read=False)
+        self.register_read(store, claim, read_set)
+        return result
+
 
 def attendance_read_set(sources):
     """Use ONLY the trusted observer's complete same-query source object.
@@ -446,6 +507,47 @@ def attendance_read_set(sources):
             raise ValueError('Invalid immutable attendance source identifiers')
         scopes.extend(_read(dt, name) for name in records)
     return ReadSet(tuple(scopes))
+
+
+def meal_read_set(sources):
+    """All native snapshot/estimate sources; never reconstruct from public rows."""
+    from tongjianyun.student_meals import ClassMealReadSources, DOCTYPE
+    from tongjianyun.daily_meals import StudentMealReadSources
+    if not isinstance(sources, ClassMealReadSources) or type(sources.students) is not tuple:
+        raise ValueError('Complete same-query meal sources are required')
+    _validate_arguments('meal_read', {'group': sources.group, 'day': sources.day})
+    if (not isinstance(sources.revision, str) or len(sources.revision) > 64
+            or len(set(sources.students)) != len(sources.students)):
+        raise ValueError('Invalid meal source revision or roster')
+    scopes = [_class(sources.group), _read('Student Group', sources.group), _capability(MEALS),
+              *(_read('Student', name) for name in sources.students)]
+    if sources.record is not None:
+        if not sources.revision or sources.estimates is not None:
+            raise ValueError('Stored meal source must be a saved snapshot, not a new estimate')
+        scopes.append(_read(DOCTYPE, sources.record))
+    else:
+        estimate = sources.estimates
+        if (sources.revision or not isinstance(estimate, StudentMealReadSources)
+                or estimate.day != sources.day or estimate.groups != (sources.group,)
+                or estimate.adjustment_records != ()):
+            raise ValueError('Original student estimates are required; aggregate adjustments are not this service')
+        if any(type(getattr(estimate, key)) is not tuple for key in
+               ('groups', 'students', 'attendance_records', 'leave_records', 'adjustment_records')):
+            raise ValueError('Estimate source identifiers must be immutable')
+        if not set(sources.students) <= set(estimate.students):
+            raise ValueError('Meal estimate is missing student sources')
+        scopes.append(_capability(MEAL_ESTIMATES))
+        for dt, records in (('Student', estimate.students), ('Student Attendance', estimate.attendance_records),
+                            ('Student Leave Application', estimate.leave_records)):
+            scopes.extend(_read(dt, name) for name in records)
+    canonical = {_json_scope(scope): authority_scope(scope) for scope in scopes}
+    if len(canonical) > MAX_SCOPES:
+        raise MealReadScopeLimit(single_read=True)
+    return ReadSet(tuple(canonical.values()))
+
+
+def _json_scope(scope):
+    return json.dumps(authority_scope(scope), sort_keys=True, ensure_ascii=False, separators=(',', ':'))
 
 
 def _session_row(sid):

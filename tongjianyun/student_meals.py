@@ -1,5 +1,6 @@
 """Class-scoped meal snapshots. Attendance and meal participation are separate facts."""
 import hashlib
+from dataclasses import dataclass
 
 import frappe
 from frappe.utils import getdate, nowdate, now_datetime
@@ -38,18 +39,39 @@ def _editor(group):
     require_group(group, allowed_groups())
 
 
-def _roster(day, group):
-    from tongjianyun.daily_meals import calculate_student_details
+def _roster(day, group, *, source_observer=None):
+    from tongjianyun.daily_meals import calculate_student_details, _calculate_student_details
+    if source_observer is not None:
+        return _calculate_student_details(day, group, source_observer=source_observer)
     return calculate_student_details(day, group)
 
 
-def _load(day, group):
+@dataclass(frozen=True)
+class ClassMealReadSources:
+    """Private snapshot/estimate provenance from the same native read."""
+    group: str
+    day: str
+    revision: str
+    record: str | None
+    students: tuple[str, ...]
+    estimates: object | None = None
+
+
+def _load(day, group, *, source_observer=None):
+    if source_observer is not None and not callable(source_observer):
+        raise TypeError('Class meal source observer must be callable')
     name = record_name(day, group)
     if frappe.db.exists(DOCTYPE, name):
-        return frappe.get_doc(DOCTYPE, name)
+        doc = frappe.get_doc(DOCTYPE, name)
+        if source_observer is not None:
+            source_observer(ClassMealReadSources(group, str(getdate(day)), str(doc.modified or ''),
+                doc.name, tuple(row.student for row in doc.students)))
+        return doc
     doc = frappe.new_doc(DOCTYPE)
     doc.meal_date, doc.student_group, doc.status = getdate(day), group, "待确认"
-    for student in _roster(day, group):
+    sources = []
+    options = {'source_observer': sources.append} if source_observer is not None else {}
+    for student in _roster(day, group, **options):
         row = {"student": student["student"], "student_name": student["student_name"],
                "attendance_hint": student["attendance_status"]}
         for meal in MEALS:
@@ -58,6 +80,13 @@ def _load(day, group):
             # dinner is not evidence that dinner is actually not provided.
             row[meal] = "未确认"
         doc.append("students", row)
+    if source_observer is not None:
+        from tongjianyun.daily_meals import StudentMealReadSources
+        if (len(sources) != 1 or not isinstance(sources[0], StudentMealReadSources)
+                or sources[0].day != str(getdate(day)) or sources[0].groups != (group,)):
+            raise ValueError('Original meal estimate source capture is incomplete')
+        source_observer(ClassMealReadSources(group, str(getdate(day)), '', None,
+            tuple(row.student for row in doc.students), sources[0]))
     return doc
 
 
@@ -156,13 +185,20 @@ def validate(doc):
 
 @frappe.whitelist()
 def get_class_meals(meal_date=None, student_group=None):
+    return _get_class_meals(meal_date, student_group)
+
+
+def _get_class_meals(meal_date=None, student_group=None, *, source_observer=None):
+    if source_observer is not None and not callable(source_observer):
+        raise TypeError('Class meal source observer must be callable')
     frappe.has_permission(DOCTYPE, "read", throw=True)
     scope = allowed_groups()
     groups = [{"name": g, "label": frappe.db.get_value("Student Group", g, "student_group_name") or g} for g in scope]
     if not student_group:
         return {"groups": groups}
     require_group(student_group, scope)
-    doc = _load(meal_date or nowdate(), student_group)
+    options = {'source_observer': source_observer} if source_observer is not None else {}
+    doc = _load(meal_date or nowdate(), student_group, **options)
     if not doc.is_new():
         doc.check_permission("read")
     return {"groups": groups, "record": doc.as_dict(), "revision": "" if doc.is_new() else str(doc.modified or ""),

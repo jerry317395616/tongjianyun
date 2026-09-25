@@ -114,6 +114,30 @@ def _depth(value, level=0):
         raise ProjectionError('Non-finite event value')
 
 
+def _failure_label(error):
+    """Fixed runtime-reported labels, never raw error text or a retry policy.
+
+    Execution termination and committed writes remain supervisor-owned. An
+    unknown, malformed or oversized error receives the generic label.
+    """
+    if type(error) is not dict:
+        return '模型执行未完成'
+    code, message = error.get('code'), error.get('message')
+    code = code.lower() if isinstance(code, str) and len(code) <= 128 else ''
+    message = message.lower() if isinstance(message, str) and len(message) <= 16000 else ''
+    if code in {'stream_idle_timeout', 'stream_idle_timeout_ms'} or 'idle timeout' in message or 'timed out waiting for' in message:
+        return '模型报告输出等待超时'
+    if code in {'invalid_api_key', 'authentication_error'}:
+        return '模型服务认证失败'
+    if code in {'rate_limit_exceeded', 'rate_limit_error'}:
+        return '模型服务请求受到限流'
+    if code in {'context_length_exceeded', 'context_window_exceeded'}:
+        return '模型报告上下文超过限制'
+    if code in {'stream_disconnected', 'connection_error'} or 'stream disconnected before completion' in message:
+        return '模型输出连接未完整结束'
+    return '模型执行未完成'
+
+
 class CodexEventProjector:
     """One invocation/worker claim, fed sequentially from that stdout pipe only.
 
@@ -286,6 +310,12 @@ class CodexEventProjector:
             target = kind.split('.')[1]
             if self._turn not in ('running', target):
                 self._fail('Invalid turn result order')
+            if target == 'failed' and self._turn != target:
+                # Status is replaced by terminal text in the browser. Preserve
+                # a fixed failure stage without exposing URLs/keys/provider text
+                # or treating a recoverable error notice as a failed turn.
+                self._emit({'kind': 'progress', 'item_id': 'codex-runtime-failure',
+                            'text': _failure_label(value.get('error')), 'status': 'failed'})
             self._turn = target
             self._status('turn-result', '助手已返回结果，正在核对执行状态。' if target == 'completed'
                          else '本轮处理遇到问题，正在核对执行结果。')

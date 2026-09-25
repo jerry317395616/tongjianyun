@@ -307,6 +307,43 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.make_worker(read_tools='untrusted-method-name')
 
+    @unittest.skipUnless(HAS_FRAPPE, 'Meal reader imports native Frappe permission contracts')
+    def test_meal_read_uses_source_aware_adapter_and_emits_only_its_view(self):
+        def dispatch(claim, tool, args):
+            self.assertEqual(claim, self.runtime.claim)
+            self.assertEqual(tool, 'meal_read')
+            self.assertEqual(args, {'group': 'G1', 'day': '2026-09-16'})
+            self.store.register_authority(claim, {'kind': 'class', 'group': 'G1', 'actions': ['read']})
+            self.store.emit(claim, {'kind': 'view', 'version': 1,
+                'selection': {'view': 'meal_counts', **args}, 'title': '本班用餐人数'})
+            return {'group': 'G1', 'day': '2026-09-16', 'revision': '',
+                    'meals': {'lunch': {'actual': None}}, 'students': []}
+        adapter = MagicMock(side_effect=dispatch)
+        def call():
+            result = self.proxies[0].handler('meal_read', {'group': 'G1', 'day': '2026-09-16'}, 'meal-0001')
+            self.assertIsNone(result['meals']['lunch']['actual'])
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('meal_save', {}, 'meal-0002')
+        self.runtime.first_poll = call
+        result = self.make_worker(read_tools=adapter).run(self.identity, self.job_id)
+        self.assertEqual(result['status'], 'completed')
+        adapter.assert_called_once()
+        self.read.assert_not_called()
+        self.assertEqual(sum(event['kind'] == 'view' for event in self.public()), 1)
+
+    @unittest.skipUnless(HAS_FRAPPE, 'Meal reader imports native Frappe permission contracts')
+    def test_meal_read_cancelled_before_delivery_does_not_release_result(self):
+        def dispatch(claim, tool, args):
+            self.store.cancel(self.identity)
+            return {'students': ['MUST NOT DELIVER']}
+        def call():
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('meal_read', {'group': 'G1', 'day': '2026-09-16'}, 'meal-0001')
+        self.runtime.first_poll = call
+        result = self.make_worker(read_tools=dispatch).run(self.identity, self.job_id)
+        self.assertEqual(result['status'], 'cancelled')
+        self.assertNotIn('MUST NOT DELIVER', str(self.public()))
+
     def test_explicit_cancel_closes_proxy_before_stopping_exact_runtime(self):
         self.runtime.first_poll = lambda: self.store.cancel(self.identity)
         result = self.run_worker()
@@ -323,7 +360,11 @@ class WorkerTests(unittest.TestCase):
 
     def test_malformed_jsonl_is_not_restarted_or_stored_raw(self):
         self.runtime.frames = [worker.RuntimeFrame(b'{private broken stderr secret}\n')]
-        self.assertEqual(self.run_worker()['status'], 'failed')
+        result = self.run_worker()
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(result['diagnostics']['failure_category'], 'event_protocol_error')
+        self.assertTrue(result['diagnostics']['event_protocol_failed'])
+        self.assertNotIn('private broken', str(result))
         self.assertEqual(self.calls.count('start'), 1)
         self.assertNotIn('private broken', str(self.store.events(self.identity)))
 

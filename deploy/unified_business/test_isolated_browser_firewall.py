@@ -315,7 +315,9 @@ class AssetEvidenceTests(unittest.TestCase):
         values = {"ROOT": root, "SITES": root / "sites", "SOURCE": root / "candidate",
                   "BENCH": root / "bench", "ASSETS": root / "sites/assets",
                   "STATE": root / "fixture.json", "CREDENTIALS": root / "credentials.json",
-                  "ASSET_MARKER": root / "asset-evidence.json", "APPS": ("tongjianyun",)}
+                  "ASSET_MARKER": root / "asset-evidence.json", "SERVER_STATE": root / "server.json",
+                  "BLUEPRINT_STATE": root / "blueprint-fixture.json", "DESK_STATE": root / "desk-readiness.json",
+                  "APPS": ("tongjianyun",)}
         for key, value in values.items():
             patcher = patch.object(web, key, value)
             patcher.start()
@@ -338,8 +340,16 @@ class AssetEvidenceTests(unittest.TestCase):
             (web.BENCH / "sites/assets" / name).write_text('{}')
         (web.SITES / web.SITE).mkdir(parents=True)
         for path in (web.STATE, web.CREDENTIALS, web.SITES / web.SITE / "site_config.json",
-                     web.SITES / "common_site_config.json"):
+                     web.SITES / "common_site_config.json", web.BLUEPRINT_STATE, web.DESK_STATE):
             path.write_text('{"synthetic":true}')
+
+    def test_all_harness_path_constants_are_isolated_from_retained_qa_files(self):
+        # Fail visibly if a future preserved path is added without fixture
+        # isolation. Do not depend on real server marker existence or absence.
+        for name, value in vars(web).items():
+            if name.isupper() and isinstance(value, Path):
+                with self.subTest(name=name):
+                    self.assertTrue(value.resolve().is_relative_to(web.ROOT))
 
     def test_asset_refresh_is_versioned_without_database_or_fixture_work(self):
         with patch.object(web, "connect") as connect, patch.object(web, "prepare_fixture") as fixtures, \
@@ -385,6 +395,19 @@ class AssetEvidenceTests(unittest.TestCase):
             return {}
         with patch.object(web, "copy_public_assets", side_effect=changed), self.assertRaises(AssertionError):
             web.refresh_assets()
+
+    def test_asset_refresh_preserves_existing_blueprint_and_desk_markers(self):
+        markers = (web.BLUEPRINT_STATE, web.DESK_STATE)
+        before = {path: path.read_bytes() for path in markers}
+        web.refresh_assets()
+        self.assertEqual(before, {path: path.read_bytes() for path in markers})
+        for path in markers:
+            def changed(target=path):
+                target.write_text('unexpected marker change')
+                return {}
+            with self.subTest(marker=path.name), patch.object(web, "copy_public_assets", side_effect=changed), \
+                 self.assertRaises(AssertionError):
+                web.refresh_assets()
 
 
 if __name__ == "__main__":

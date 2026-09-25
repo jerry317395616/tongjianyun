@@ -609,8 +609,15 @@ def reply(start_response, status, payload):
 
 class QAFirewall:
     """A test-only WSGI request boundary, not a business authorization bypass."""
-    def __init__(self, application):
+    def __init__(self, application, *, request_policy=None):
         self.application = application
+        # Trusted QA code only; never configured from a URL/header/site option.
+        # None preserves this harness's original deny-all-Codex boundary. A
+        # separate acceptance harness may narrow existing routes (False) or
+        # explicitly admit one audited RPC (True), after the common parser.
+        if request_policy is not None and not callable(request_policy):
+            raise TypeError('QA request policy must be trusted callable code')
+        self.request_policy = request_policy
 
     def __call__(self, environ, start_response):
         audit_context = {"method": environ.get("REQUEST_METHOD", "GET").upper(), "commands": [], "parameter_keys": []}
@@ -681,7 +688,14 @@ class QAFirewall:
             if any(not isinstance(command, str) for command in commands) or len(set(commands)) != 1:
                 return self.block(start_response, audit_context)
             command = commands[0]
-            if command in DESK_READ_METHODS:
+            decision = self.request_policy(command, parameters, method, environ) if self.request_policy else None
+            if decision is not None and type(decision) is not bool:
+                raise TypeError('Invalid QA request policy decision')
+            if decision is False:
+                return self.block(start_response, audit_context)
+            if decision is True:
+                pass
+            elif command in DESK_READ_METHODS:
                 if not desk_read_allowed(command, parameters, method):
                     return self.block(start_response, audit_context)
             elif command in BLUEPRINT_METHODS:

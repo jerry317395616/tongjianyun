@@ -274,6 +274,8 @@ not authentication: every request needs this task's random bearer as well.
         self.slots = threading.BoundedSemaphore(8)
         self.lock = threading.Lock()
         self._close_lock = threading.Lock()
+        self._tools_condition = threading.Condition()
+        self._active_tools = 0
         self.connections = set()
         self.stream_sockets = set()
         self.closed = threading.Event()
@@ -376,6 +378,33 @@ not authentication: every request needs this task's random bearer as well.
         self.thread.start()
         return self
 
+    def dispatch_tool(self, tool, arguments, call_id):
+        # Admission and callback counting share the close lock. Closing sockets
+        # does not stop a host DB transaction; the queue worker must drain these
+        # callbacks before its process exits. The durable ledger remains the
+        # authority after a worker crash, not this in-memory counter.
+        with self._tools_condition:
+            if self.closed.is_set():
+                raise PermissionError('Task proxy tool admission is closed')
+            self._active_tools += 1
+        try:
+            if not self.permitted():
+                raise PermissionError('Task proxy authority changed')
+            return self.tool_handler(tool, arguments, call_id)
+        finally:
+            with self._tools_condition:
+                self._active_tools -= 1
+                self._tools_condition.notify_all()
+
+    def wait_for_tools(self, timeout=0.2):
+        """One bounded observation; False is live work, not an expired task."""
+        if type(timeout) not in (int, float) or not 0 <= timeout <= 1:
+            raise ValueError('Invalid host callback observation interval')
+        with self._tools_condition:
+            if self._active_tools or not self.closed.is_set():
+                self._tools_condition.wait(timeout)
+            return self.closed.is_set() and self._active_tools == 0
+
     def close(self):
         with self._close_lock:
             if self._disposed:
@@ -386,7 +415,9 @@ not authentication: every request needs this task's random bearer as well.
                 self._disposed = True
 
     def _close(self):
-        self.closed.set()
+        with self._tools_condition:
+            self.closed.set()
+            self._tools_condition.notify_all()
         with self.lock:
             pending = list(self.connections)
             sockets = list(self.stream_sockets)
@@ -478,7 +509,7 @@ class _Handler(BaseHTTPRequestHandler):
                         or not isinstance(payload['call_id'], str) or not CALL_ID.fullmatch(payload['call_id'])
                         or type(payload['arguments']) is not dict):
                     raise ValueError('Invalid tool envelope')
-                result = proxy.tool_handler(payload['tool'], payload['arguments'], payload['call_id'])
+                result = proxy.dispatch_tool(payload['tool'], payload['arguments'], payload['call_id'])
                 if not proxy.permitted():
                     self.send_error(403)
                     return

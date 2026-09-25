@@ -129,10 +129,11 @@ class FrappeBusinessQueue:
 
 class BusinessChatApplication:
     """Transport-independent application; identity comes from a trusted Viewer."""
-    def __init__(self, store, authority, queue, *, lock=submission_lock):
+    def __init__(self, store, authority, queue, *, lock=submission_lock, writes=None):
         if store.site != authority.site or store.site != queue.site:
             raise PermissionError('Business application site mismatch')
         self.store, self.authority, self.queue, self.lock = store, authority, queue, lock
+        self.writes = writes
 
     def viewer(self):
         return self.authority.capture_viewer()
@@ -293,7 +294,22 @@ def application(*, require_ready=False):
     store = BusinessTaskStore(directory, site, authorize=authority,
                               observe_execution=runtime.observe, observe_queue=queue.observe,
                               seal_execution=runtime.seal_before_start)
-    return BusinessChatApplication(store, authority, queue), runtime
+    from tongjianyun.business_agent_execution import BusinessExecutionRuntime
+    from tongjianyun.business_agent_write_adapter import FrappeWriteAdapter
+    from tongjianyun.business_agent_writes import BusinessWriteLedger, BusinessWrites
+    adapter = FrappeWriteAdapter(site, sites_path, store=store)
+    ledger = BusinessWriteLedger(directory, site, authorize=adapter.authorize)
+    runtime = BusinessExecutionRuntime(runtime, ledger)
+    # The SAME composition is used in RQ and in fresh web/SSE reconciliation.
+    # A native cgroup cannot certify host-side database transaction drainage.
+    store.observe_execution, store.seal_execution = runtime.observe, runtime.seal_before_start
+    def publish_view(claim, selection):
+        store.register_authorities(claim, authority.view_scopes(claim.identity, selection))
+        store.emit(claim, {'kind': 'view', 'version': 1, 'selection': selection,
+                          'title': '班级当日出勤' if selection['view'] == 'classroom_day' else '用餐人数'})
+    writes = BusinessWrites(ledger, transaction_factory=adapter.transaction_factory,
+                            fresh_read=adapter.fresh_read, publish_view=publish_view)
+    return BusinessChatApplication(store, authority, queue, writes=writes), runtime
 
 
 def run_task(owner, task_id):
@@ -302,6 +318,7 @@ def run_task(owner, task_id):
     from frappe.utils.background_jobs import create_job_id
     from tongjianyun.business_agent_worker import BusinessWorker
     from tongjianyun.business_agent_reads import BusinessReads
+    from tongjianyun.business_agent_catalog import BusinessCatalog
     app, runtime = application(require_ready=True)
     identity = TaskIdentity(app.store.site, owner, task_id)
     job = get_current_job()
@@ -311,5 +328,7 @@ def run_task(owner, task_id):
     worker = BusinessWorker(app.store, runtime,
         read_attendance=lambda claim, **args: app.authority.read_attendance(app.store, claim, **args),
         read_tools=BusinessReads(app.authority, app.store).dispatch,
+        write_tools=app.writes,
+        catalog_tools=BusinessCatalog(app.authority, app.store).dispatch,
         model_key=_model_key)
     return worker.run(identity, app.store.job_id(identity))

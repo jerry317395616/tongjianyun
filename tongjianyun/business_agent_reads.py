@@ -37,6 +37,11 @@ TOOL_INSTRUCTIONS = {
         'has_more=null表示扫描未完成，不能说没有其他学生。按next_cursor继续，名单变更后从第一页重查。'
         'scope_budget_exhausted不是空名单，应说明本次读取额度已到，需要新任务继续。'
         '工具会请求左侧打开本班名单，不代表浏览器已加载，不在聊天重复学生姓名表。'),
+    'meal_read': (
+        'meal_read 参数仅为 {group:已知班级编号,day:"YYYY-MM-DD"}，读取原服务本班当日五餐的真实保存状态。'
+        'meals中expected是预计，actual=null是实际未知，不能报为0，也不能把预计或到园人数当实际就餐。'
+        '本工具只读，不保存、不确认、不修订。会请求左侧打开本班用餐核对视图；仅代表展示请求，'
+        '不在对话重复姓名名单。来源权限额度不足时说明无法完整读取，不能用部分名单核餐。'),
 }
 
 
@@ -54,6 +59,8 @@ def _arguments(tool, arguments):
     if len(raw.encode()) > 8192:
         raise ValueError('Tool arguments exceed bound')
     args = json.loads(raw)
+    if tool == 'meal_read':
+        return _validate_arguments(tool, args)
     keys = ({'day', 'meal', 'after', 'page_size'} if tool == 'scene_bootstrap' else
             {'group', 'cursor', 'page_size'} if tool == 'class_students_read' else None)
     required = {'day'} if tool == 'scene_bootstrap' else {'group'}
@@ -134,11 +141,38 @@ class BusinessReads:
         self._active(claim)
         if tool == 'scene_bootstrap':
             return self._bootstrap(claim, args)
+        if tool == 'meal_read':
+            return self._meals(claim, args)
         return self._students(claim, args)
+
+    def _meals(self, claim, args):
+        # The reader owns complete same-query registration. No raw legacy
+        # get_meals document or permission-bypassing convenience result escapes.
+        try:
+            result = self.authority.read_meals(self.store, claim, **args)
+        except gates.MealReadScopeLimit as error:
+            self._active(claim)
+            return {'available': False, 'error': 'scope_budget_exhausted',
+                    'retry': 'use_business_view' if error.single_read else 'new_task',
+                    'message': ('本班完整核对所需来源超过读取额度，不能用部分名单核餐，请在原业务视图核对。'
+                                if error.single_read else '本次任务来源额度不足，无法完整读取本班核餐名单；请在新任务中读取。')}
+        self._active(claim)
+        selection = {'view': 'meal_counts', 'group': args['group'], 'day': args['day']}
+        context = self.store.task(claim.identity)['context']
+        meal = context.get('meal') or context.get('selection', {}).get('meal') or 'lunch'
+        from tongjianyun.business_agent_tools import MEALS
+        if not isinstance(meal, str) or meal not in MEALS:
+            raise ValueError('Trusted task context has no valid meal selection')
+        selection['meal'] = meal
+        self.store.register_authority(claim, {'kind': 'view', 'selection': selection})
+        self._active(claim)
+        self.store.emit(claim, {'kind': 'view', 'version': 1, 'selection': selection, 'title': '核对本班用餐'})
+        self._active(claim)
+        return result  # Keep the existing meal_read projection contract unchanged.
 
     def _bootstrap(self, claim, args):
         base = (gates._capability(gates.SCENE), gates._capability(gates.GROUPS))
-        size = self._page_budget(claim, base, args['page_size'], 2, reserve=2)
+        size = self._page_budget(claim, base, args['page_size'], 2, reserve=3)
         if not size:
             self._active(claim)
             return _budget_result()
@@ -170,7 +204,8 @@ class BusinessReads:
             navigation = []
             supported = ['scene_bootstrap']
             for capability, tool, label in ((gates.ROSTER, 'class_students_read', '班级学生'),
-                                             (gates.ATTENDANCE, 'classroom_read', '本班点名')):
+                                             (gates.ATTENDANCE, 'classroom_read', '本班点名'),
+                                             (gates.MEALS, 'meal_read', '本班用餐')):
                 try:
                     gates._projection(capability)
                 except (frappe.PermissionError, frappe.DoesNotExistError):

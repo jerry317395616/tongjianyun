@@ -21,6 +21,13 @@ class SceneAccessTests(unittest.TestCase):
         self.roles = self.stack.enter_context(patch.object(frappe, 'get_roles', return_value=['Instructor', 'Academics User']))
         self.groups = self.stack.enter_context(patch('tongjianyun.attendance_scope.allowed_groups', return_value=['G1']))
         self.private = self.stack.enter_context(patch.object(access, 'mark_private_response'))
+        # Shell unit tests must not inherit the host site's persisted task store
+        # or contact its launcher/queue. Enabled/history modes are opted into
+        # explicitly in their own tests below.
+        self.business_access = self.stack.enter_context(patch(
+            'tongjianyun.business_agent_service.chat_access',
+            return_value={'allowed': False, 'can_submit': False, 'reason': 'Business chat is not provisioned'},
+        ))
 
     def user_value(self, doctype, name=None, fieldname=None, **kwargs):
         self.assertEqual(doctype, 'User')
@@ -135,6 +142,7 @@ class SceneAccessTests(unittest.TestCase):
         self.readable.add(meal_scene.RECIPE)
         with patch('tongjianyun.business_agent_service.available', side_effect=AssertionError('unexpected probe')):
             self.assertEqual(self.bootstrap()['chat']['mode'], 'admin_project')
+        self.business_access.assert_not_called()
 
     def test_bootstrap_does_not_invent_chat_access_for_manager_without_meal_access(self):
         self.roles.return_value = ['System Manager']

@@ -115,6 +115,20 @@ test('new view received during conversation recovery still switches the canvas',
   assert.equal(run('opened.length'),1);assert.equal(run('opened[0].view'),'meal_counts');
 });
 
+test('business failure stage survives terminal status and history replay',()=>{
+  const {run}=setup({mode:'business'});
+  const stage={kind:'progress',item_id:'codex-runtime-failure',status:'failed',text:'模型输出连接未完整结束'};
+  const ended={kind:'terminal',status:'failed',text:'本次任务未完成，请先核对业务记录。'};
+  run(`applyEvent(view,${JSON.stringify(stage)},'${businessTask}:1',true)`);
+  run(`applyEvent(view,${JSON.stringify(ended)},'${businessTask}:2',true)`);
+  run(`applyEvent(view,${JSON.stringify(stage)},'${businessTask}:1',true)`);
+  assert.equal(run("view.items.get('progress:codex-runtime-failure').dataset.state"),'failed');
+  assert.match(run("view.items.get('progress:codex-runtime-failure').textContent"),/模型输出连接未完整结束/);
+  assert.equal(run("view.root.children.filter(node=>node.textContent.includes('模型输出连接未完整结束')).length"),1);
+  assert.equal(run('view.state'),'failed');
+  assert.equal(run('activeTask'),null);
+});
+
 test('chat waits for the frontend rendering result before showing success',async()=>{
   const {run,context}=setup();let resolve;context.showBusinessView=()=>new Promise(r=>resolve=r);
   run('applyEvent(view,{kind:"view",version:1,title:"学生",selection:{view:"students"}},"1-0")');

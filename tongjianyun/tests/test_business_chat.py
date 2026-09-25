@@ -413,8 +413,12 @@ class BusinessDeploymentGateTests(unittest.TestCase):
     def test_read_application_does_not_touch_key_or_launcher_readiness(self):
         self.provision_store()
         with patch.object(service,'_configured_runtime') as runtime, patch.object(service,'_model_key') as key:
-            app, _ = service.application(require_ready=False)
+            app, composed = service.application(require_ready=False)
             self.assertEqual(app.store.directory,self.directory)
+            self.assertIs(composed.native, runtime.return_value)
+            self.assertIs(composed.write_ledger, app.writes.ledger)
+            self.assertEqual(app.store.observe_execution, composed.observe)
+            self.assertEqual(app.store.seal_execution, composed.seal_before_start)
             runtime.return_value.ready.assert_not_called()
             key.assert_not_called()
 

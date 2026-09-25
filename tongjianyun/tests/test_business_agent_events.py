@@ -138,6 +138,30 @@ class ProjectionTests(unittest.TestCase):
         self.assertFalse(self.projector.finish_input().turn_completed)
         self.assertTrue(self.projector.observation.cancelled)
 
+    def test_failed_turn_keeps_fixed_diagnostic_stage_without_private_error(self):
+        for error, label in (
+            ({'message': 'stream disconnected before completion: PRIVATE_URL'}, '模型输出连接未完整结束'),
+            ({'message': 'timed out waiting for response PRIVATE_DATA'}, '模型报告输出等待超时'),
+            ({'code': 'invalid_api_key', 'message': 'sk-PRIVATE_CREDENTIAL'}, '模型服务认证失败'),
+            ({'code': 'rate_limit_exceeded'}, '模型服务请求受到限流'),
+            ({'code': 'context_length_exceeded'}, '模型报告上下文超过限制'),
+            ({'message': 'PRIVATE_UNKNOWN'}, '模型执行未完成'),
+            ({'message': 'x' * 16001 + 'idle timeout'}, '模型执行未完成'),
+            (['PRIVATE_MALFORMED'], '模型执行未完成'),
+        ):
+            with self.subTest(label=label, error_type=type(error).__name__):
+                published = []
+                projector = self.start(events.CodexEventProjector(published.append))
+                failure = encoded({'type': 'turn.failed', 'error': error})
+                projector.feed(failure + failure)
+                stages = [row for row in published if row['kind'] == 'progress']
+                self.assertEqual(stages, [{'kind': 'progress', 'item_id': 'codex-runtime-failure',
+                                          'text': label, 'status': 'failed'}])
+                self.assertTrue(projector.finish_input().turn_failed)
+                self.assertNotIn('PRIVATE_', json.dumps(published))
+                for row in published:
+                    tasks.public_event(row)
+
     def test_error_event_has_only_fixed_text_without_vetoing_a_real_completed_turn(self):
         self.start()
         self.projector.feed(encoded({'type': 'error', 'message': 'PRIVATE_STACK password=hunter2'}))
