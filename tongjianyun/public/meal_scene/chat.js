@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-header-20260925-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-ingredients-20260925-1';
 import {mealContext as context,refreshMealData} from './state.js?v=meal-header-20260925-1';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');

@@ -22,6 +22,7 @@ function calendarContext(choice){
 function showCalendar(choice){
   ++ticket;current=null;notice('');$('business-view').hidden=true;$('recipe-workspace').hidden=false;
   $('business-canvas').setAttribute('aria-label','本周膳食总览');
+  document.dispatchEvent(new CustomEvent('meal-scene:view-change',{detail:{view:'recipe_week'}}));
   calendarContext(choice);
 }
 function actionButton(action){
@@ -91,6 +92,7 @@ export async function showBusinessView(choice){
     $('view-source').textContent=`来源：${result.source} · 更新于 ${result.generated_at}`;
     current=result.selection;
     $('recipe-workspace').hidden=true;$('business-view').hidden=false;$('business-canvas').setAttribute('aria-label',result.title);
+    document.dispatchEvent(new CustomEvent('meal-scene:view-change',{detail:{view:current.view}}));
     notice('');if(['meal_counts','business_list','business_catalog','ingredient_nutrition','classroom_day','weekly_orders'].includes(current.view))calendarContext(current);
   }catch(error){if(turn===ticket)notice(error.message||'数据读取失败，已保留上一次结果。',true);}
 }

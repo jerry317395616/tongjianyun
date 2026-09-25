@@ -4,7 +4,7 @@ function setup(search=''){
   const nodes=new Map(),events=new Map(),requests=[];
   const document={hidden:false,getElementById(id){
     assert(!['day','meal','refresh'].includes(id),'removed header control requested: '+id);
-    if(!nodes.has(id))nodes.set(id,{open:false,style:{},classList:{toggle(){},remove(){}},addEventListener(){}});
+    if(!nodes.has(id))nodes.set(id,{open:false,style:{},classList:{toggle(){},remove(){}},addEventListener(){},focus(){}});
     return nodes.get(id);
   },addEventListener(type,handler){const list=events.get(type)||[];list.push(handler);events.set(type,list);},dispatchEvent(event){for(const handler of events.get(event.type)||[])handler(event);}};
   const context=vm.createContext({document,URLSearchParams,location:{search},history:{replaceState(){}},window:{addEventListener(){},confirm:()=>true,matchMedia:()=>({matches:false})},CustomEvent:class{constructor(type,options={}){this.type=type;this.detail=options.detail;}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){},requests});

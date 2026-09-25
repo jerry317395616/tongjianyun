@@ -89,3 +89,66 @@ body{height:auto;min-height:100dvh;overflow:auto;background:#f3f6f2}
 @media(max-width:950px){#stage.workbench{grid-template-columns:minmax(0,1fr)}#stage.workbench #panel{grid-column:1;position:static;width:100%;height:min(720px,85dvh);top:auto}.workbench-main{min-height:0}}
 @media(max-width:760px){#stage.workbench .workbench-main,#stage.workbench #panel{margin-bottom:9px}#stage.workbench .more-work .flow-nav{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}#stage.workbench .more-work .flow-nav button{min-height:42px;flex-direction:row;text-align:left;justify-content:flex-start}#stage.workbench .more-work .flow-nav strong{font-size:11px;white-space:normal}.workbench-main>.worklist{padding:11px}#stage.workbench .worklist-heading{display:flex;grid-template-columns:none;align-items:center}.worklist-heading p{font-size:9px}}
 @media print{#stage.workbench .workbench-main{display:none!important}}
+
+/* The week fills the left workspace. Ingredient details stay local to the meal. */
+#stage.workbench #recipe-workspace{display:flex;flex-direction:column;min-width:0;min-height:0}
+#recipe-workspace>.intro,#recipe-workspace>.message{flex:none}
+#recipe-workspace>.week-shell{display:flex;flex:1;flex-direction:column;min-height:0;min-width:0}
+#recipe-workspace .week-heading,#recipe-workspace .week-mobile-picker{flex:none}
+.week-calendar-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+#recipe-workspace .workbench-week-grid{min-height:100%;grid-template-rows:44px minmax(min-content,1.2fr) minmax(min-content,.7fr) minmax(min-content,1.55fr) minmax(min-content,.8fr) minmax(min-content,1.3fr)}
+#recipe-workspace .workbench-week-axis,#recipe-workspace .workbench-week-day{position:sticky;top:0;z-index:2}
+#recipe-workspace .workbench-week-day b,#recipe-workspace .workbench-week-meal{font-size:12px}
+#recipe-workspace .workbench-week-day span{font-size:11px}
+#recipe-workspace .workbench-week-cell{min-height:0;justify-content:flex-start;gap:5px;padding:10px 9px}
+#recipe-workspace .workbench-week-cell[data-workbench-meal="breakfast"]{min-height:86px}
+#recipe-workspace .workbench-week-cell[data-workbench-meal="morning_snack"]{min-height:58px}
+#recipe-workspace .workbench-week-cell[data-workbench-meal="lunch"]{min-height:118px}
+#recipe-workspace .workbench-week-cell[data-workbench-meal="afternoon_snack"]{min-height:70px}
+#recipe-workspace .workbench-week-cell[data-workbench-meal="dinner"]{min-height:110px}
+#recipe-workspace .workbench-week-cell b{display:block;font-size:13px;line-height:1.5;font-weight:600;overflow-wrap:anywhere}
+#recipe-workspace .workbench-week-cell:focus-visible{position:relative;z-index:3;outline:3px solid #439aca;outline-offset:-3px}
+.meal-ingredients-panel{flex:none;display:flex;flex-direction:column;min-height:0;margin-top:12px;border:1px solid #cfdfd2;border-radius:14px;background:#f9fcf8;overflow:hidden}
+.meal-ingredients-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex:none;padding:13px 15px;border-bottom:1px solid #e0e9dc}
+.meal-ingredients-heading>div{min-width:0}
+.meal-ingredients-heading h2{font-size:17px;line-height:1.5;overflow-wrap:anywhere}
+.meal-ingredients-heading p{font-size:12px;color:#718577;line-height:1.6;margin-top:3px}
+#meal-ingredients-close{flex:none;min-width:54px;min-height:40px;padding:6px 10px;border:1px solid #d7e3d3;border-radius:9px;background:white;color:#497661;font-size:12px}
+.meal-ingredients-content{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));align-content:start;gap:12px;padding:14px 15px}
+.meal-ingredient-dish{min-width:0;border:1px solid #e0e8dc;border-radius:10px;background:white;padding:11px 12px}
+.meal-ingredient-dish h3{font-size:14px;line-height:1.5;overflow-wrap:anywhere;margin-bottom:7px}
+.meal-ingredient-list{margin:0;font-size:13px}
+.meal-ingredient-list>div{display:flex;justify-content:space-between;align-items:baseline;gap:15px;padding:5px 0;border-top:1px solid #edf1e9}
+.meal-ingredient-list dt{min-width:0;overflow-wrap:anywhere;color:#647c6d}
+.meal-ingredient-list dd{flex:none;margin:0;font-variant-numeric:tabular-nums;color:#315442}
+.meal-ingredients-empty{grid-column:1/-1;margin:0;padding:8px 0;font-size:13px;line-height:1.7;color:#718577}
+.meal-ingredients-actions{flex:none;display:flex;justify-content:flex-end;padding:9px 15px;border-top:1px solid #e0e9dc;background:#f9fcf8}
+.meal-ingredients-actions button{min-height:40px;font-size:13px}
+@media screen and (min-width:951px){
+  #stage.workbench #business-canvas{display:flex;flex-direction:column;height:calc(100dvh - 98px);min-height:480px;overflow:hidden}
+  #business-canvas>#view-status{flex:none}
+  #stage.workbench #recipe-workspace{flex:1;overflow:hidden}
+  #business-view{min-height:0;overflow:auto;overscroll-behavior:contain}
+  #recipe-workspace.ingredients-open .meal-ingredients-panel{flex:0 1 34dvh;min-height:220px;max-height:48%}
+}
+@media(max-width:950px){
+  #recipe-workspace .week-shell{min-height:calc(100dvh - 205px)}
+  #recipe-workspace .week-calendar-scroll{overflow:visible;scrollbar-gutter:auto}
+  #recipe-workspace .workbench-week-grid{flex:1}
+  #recipe-workspace .meal-ingredients-panel{max-height:65dvh;min-height:220px}
+}
+@media(max-width:760px){
+  #recipe-workspace .week-shell{min-height:0}
+  #recipe-workspace .workbench-week-grid{grid-template-rows:44px repeat(5,minmax(80px,auto))}
+  #recipe-workspace .week-mobile-picker{font-size:12px}
+  #recipe-workspace .week-mobile-picker select{font-size:16px;min-height:44px}
+  #recipe-workspace .workbench-week-cell{padding:12px}
+  #recipe-workspace .workbench-week-cell b{font-size:14px}
+  #recipe-workspace .workbench-week-axis,#recipe-workspace .workbench-week-day{position:static}
+  .meal-ingredients-heading{padding:12px;gap:8px}
+  .meal-ingredients-heading h2{font-size:16px}
+  .meal-ingredients-heading p{font-size:12px}
+  .meal-ingredients-content{grid-template-columns:1fr;padding:12px;gap:10px}
+  .meal-ingredients-actions{padding:10px 12px}
+  #meal-ingredients-close,.meal-ingredients-actions button{min-height:44px}
+}
