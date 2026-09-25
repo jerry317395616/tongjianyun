@@ -38,7 +38,7 @@ async function load(automatic=false){
     const result=await api('get_overview',{day:$('day').value||'',meal:$('meal').value});if(ticket!==loadSequence)return;
     data=result;ready=true;$('day').value=data.day;$('meal').value=data.meal;$('user-label').textContent=data.user_label;
     document.querySelectorAll('#flow-nav button').forEach(el=>el.title=stepBadge(el.dataset.step,data));
-    renderWorklist();renderWeekOverview();message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
+    renderWeekOverview();message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
     if(!active)await openStep('recipe');
   }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);}
   finally{if(ticket===loadSequence)$('refresh').disabled=false;}
@@ -79,15 +79,6 @@ async function recipesView(ticket,offset=0,all=false){
 function businessWeekDates(day){
   const date=new Date(`${day}T00:00:00Z`),oneDay=86400000,weekday=date.getUTCDay(),monday=date.getTime()-((weekday+6)%7)*oneDay;
   return Array.from({length:5},(_,index)=>new Date(monday+index*oneDay).toISOString().slice(0,10));
-}
-function renderWorklist(){
-  if(!data)return;
-  const items=[],summary=data.plans?.summary;
-  if(data.capabilities.recipe&&data.recipes.rows.length===0)items.push([data.capabilities.recipe_create?'draft':'recipe',data.capabilities.recipe_create?'开始编排本周食谱':'选择本周食谱','当前日期还没有选定覆盖食谱']);
-  if(summary&&summary.visible_groups>summary.planned_groups)items.push(['dispatch','核对预计用餐人数',`${summary.planned_groups} / ${summary.visible_groups} 个可见班已保存预计`]);
-  if(summary&&data.day<=data.today&&summary.visible_groups>summary.confirmed_groups)items.push(['dining','确认实际用餐人数',`${summary.confirmed_groups} / ${summary.visible_groups} 个可见班已确认`]);
-  const first=items[0]||['recipe','查看本周食谱','当前没有可从已接入数据判定的待办'];
-  $('worklist-items').innerHTML=`<button type="button" class="worklist-item" ${first[0]==='draft'?'data-start-draft="1"':`data-step="${first[0]}"`}><span><strong>${h(first[1])}</strong><small>${h(first[2])}</small></span><span aria-hidden="true">→</span></button>${items.length>1?`<p class="worklist-rest">还有 ${items.length-1} 项需核对，可在“其他业务”中查看。</p>`:''}`;
 }
 function renderWeekOverview(){
   if(!data)return;
@@ -378,7 +369,7 @@ function openNative(key,name=''){
     `<div class="buttons"><a class="secondary" href="${h(route)}" target="_blank" rel="noopener">在新页打开原模块 ↗</a><button class="secondary" id="native-back">返回本站业务</button></div><iframe class="professional" title="原 Frappe 专业业务模块" src="${h(route)}" referrerpolicy="same-origin"></iframe>`);
   $('native-back').onclick=()=>openStep(active);
 }
-document.addEventListener('click',async event=>{
+document.addEventListener('click',event=>{
   const weekCell=event.target.closest('[data-workbench-date][data-workbench-meal]');if(weekCell){
     const day=weekCell.dataset.workbenchDate,meal=weekCell.dataset.workbenchMeal;
     if(draftState?.kind==='draft'){
@@ -388,7 +379,6 @@ document.addEventListener('click',async event=>{
     revealPanel();
     return;
   }
-  const startDraft=event.target.closest('[data-start-draft]');if(startDraft){if(await openStep('recipe')){beginRecipeDraft();revealPanel();}return;}
   const step=event.target.closest('[data-step]');if(step){$('search-results').hidden=true;openStep(step.dataset.step);revealPanel();return;}
   const native=event.target.closest('[data-native]');if(native){openNative(native.dataset.native,native.dataset.doc||'');return;}
   const draftCell=event.target.closest('[data-draft-day][data-draft-slot]');if(draftCell&&draftState?.kind==='draft'){captureDraftEditor();const top=$('panel-body').scrollTop,left=$('panel-body').querySelector('.recipe-week-scroll')?.scrollLeft||0;draftState.day=draftCell.dataset.draftDay;draftState.slot=draftCell.dataset.draftSlot;renderDraftEditor();$('panel-body').scrollTop=top;$('panel-body').querySelector('.recipe-week-scroll').scrollLeft=left;return;}
