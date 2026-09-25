@@ -4,6 +4,8 @@ Only entry metadata is returned, never native-view summaries, records, routes,
 capabilities, HTML or project paths. The trusted worker supplies its own claim;
 model arguments cannot choose a user/site. Publishing requests a supported
 selection: the browser must independently read it under the current user.
+The proposal inbox extension is navigation-only: its existing authority wrapper
+rechecks the recipient's original manager gate without returning private rows.
 
 The original catalog reader owns metadata/permission filtering. A page and its
 lookahead come from ONE such result. Only those entries contribute to this
@@ -25,6 +27,7 @@ DEFAULT_PAGE = 20
 MAX_PAGE = 30
 MAX_CATALOG_ENTRIES = 20000
 NATIVE_VIEWS = frozenset({'frappe_catalog', 'frappe_doctype', 'frappe_document', 'frappe_new'})
+PROPOSAL_INBOX = 'business_proposal_inbox'
 MEALS = frozenset({'breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'})
 TOOL_INSTRUCTIONS = {
     'business_catalog_read': (
@@ -36,10 +39,13 @@ TOOL_INSTRUCTIONS = {
         'scope_budget_exhausted不是空目录，应在新任务继续。使用返回selection调用business_view打开入口；'
         '报表、独立Page/Workspace和服务器项目暂不由此工具开放。'),
     'business_view': (
-        'business_view 参数仅为 {selection:{view:"frappe_catalog"|"frappe_doctype"|"frappe_document"|"frappe_new",...}}。'
+        'business_view 参数仅为 {selection:对象}。原生业务的view仅frappe_catalog、frappe_doctype、frappe_document或frappe_new。'
         '优先使用目录返回的selection，不猜业务编号。目录可带app/module/keyword/kind:"doctype"/offset；'
         'doctype/new必须带doctype，document必须带doctype和已有document；可带day/meal但不把膳食日期当业务筛选。'
-        '服务端保留原读取、行权限及新建权限。只请求左侧打开原生目录/列表/详情/新建表单，'
+        '具备原方案管理权限的账号还可请求 {selection:{view:"business_proposal_inbox",folder:"received",state:"pending"}} '
+        '打开自己收到的方案；state可为pending或all，cursor仅使用页面给出的分页标识。'
+        '该入口只发送页面选择，不读取或返回交接内容、人数或数量；不能指定其他接收者，不能接收或启用方案。'
+        '服务端保留原读取、行权限及新建权限。只请求左侧打开原生目录/列表/详情/新建表单或自己的方案接收箱，'
         '不创建、编辑、审批或提交单据，也不代表浏览器已加载；不要把display_requested当业务成功。'),
 }
 
@@ -88,6 +94,15 @@ def _arguments(tool, value):
         if set(args) != {'selection'}:
             raise ValueError('Only a business selection may be published')
         choice = args['selection']
+        if type(choice) is dict and choice.get('view') == PROPOSAL_INBOX:
+            # A navigation-only extension, not an addition to the native data
+            # reader or its generic VIEW_FIELDS/DocType authority registry.
+            from tongjianyun.business_agent_proposals import _handoff_selection
+            choice = _handoff_selection(choice)
+            if choice['folder'] != 'received':
+                raise ValueError('Only this actor\'s received proposal navigation is supported')
+            args['selection'] = choice
+            return args
         if type(choice) is not dict or not isinstance(choice.get('view'), str) or choice['view'] not in NATIVE_VIEWS:
             raise ValueError('Native business view is not supported')
         fields = {'frappe_catalog': {'app', 'module', 'keyword', 'kind', 'offset'},
@@ -179,6 +194,12 @@ class BusinessCatalog:
         return self._view(claim, args['selection'])
 
     def _canonical(self, claim, choice):
+        if choice['view'] == PROPOSAL_INBOX:
+            # Already canonicalized by the existing inbox schema. Do not add
+            # meal/date context or capture a browser Viewer in a worker. The
+            # proposal wrapper below checks the claim's account and native
+            # manager permissions, then persists this exact navigation scope.
+            return dict(choice)
         _, gates, native = _services()
         context = self._context(claim)
         def resolve():
@@ -272,9 +293,15 @@ class BusinessCatalog:
         self.authority.register_read(self.store, claim, gates.ReadSet(tuple(dependencies)))
         self._active(claim)
         title = {'frappe_catalog': '可用业务', 'frappe_doctype': '业务单据',
-                 'frappe_document': '业务详情', 'frappe_new': '新建业务表单'}[choice['view']]
+                 'frappe_document': '业务详情', 'frappe_new': '新建业务表单',
+                 PROPOSAL_INBOX: '收到的业务方案'}[choice['view']]
         self.store.emit(claim, {'kind': 'view', 'version': 1, 'selection': choice, 'title': title})
         self._active(claim)
+        if choice['view'] == PROPOSAL_INBOX:
+            return {'available': True, 'selection': choice, 'display_requested': True,
+                    'data_read': False, 'executed_business_operation': False,
+                    'display_note': '已请求左侧按当前账号原权限打开收到的方案；未读取交接内容或数量，'
+                                    '未核实浏览器加载，未接收、启用方案或更改权限。'}
         return {'available': True, 'selection': choice, 'display_requested': True,
                 'executed_business_operation': False,
                 'display_note': '已请求左侧按当前账号权限打开原生业务视图；未核实浏览器加载，未创建、编辑、提交或执行任何业务操作。'}

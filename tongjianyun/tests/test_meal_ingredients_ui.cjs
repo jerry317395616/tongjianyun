@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const read=file=>fs.readFileSync(path.join(__dirname,file),'utf8');
 const DAY='2026-09-21';
-const overview=(day=DAY,meal='lunch',rows=[{name:'R1'}])=>({day,meal,user_label:'老师',recipes:{rows},capabilities:{recipe:true,recipe_write:true}});
+const overview=(day=DAY,meal='lunch',rows=[{name:'R1'}])=>({day,meal,user_label:'老师',recipes:{rows},week_recipes:{available:true,rows,has_more:false},capabilities:{recipe:true,recipe_write:true}});
 const payload=(day=DAY,ingredient='大米',slot='lunch')=>({recipe:{title:'本周食谱',weekStart:DAY,weekEnd:'2026-09-25',workflowStatus:'草稿'},days:[{date:day,portions:[{slot,dishes:['米饭','青菜','第三道菜'],dishIngredientRows:[{dishName:'米饭',ingredient,amount:40,unit:'g'}]}]}]});
 const flush=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 function setup(){
@@ -42,6 +42,148 @@ function setup(){
   function open(day=DAY,meal='lunch'){const selected=cell(day,meal);document.dispatchEvent({type:'click',target:{closest:selector=>selector==='[data-workbench-date][data-workbench-meal]'?selected:null}});}
   return {run,nodes,context,requests,emitted,document,seed,open,cell,node:getNode};
 }
+
+async function installViews(fixture){
+  const source=read('../public/meal_scene/views.js').replace(/^import .*;\r?\n/gm,'').replace(/export /g,'');
+  fixture.run('globalThis.testViews=(()=>{'+source+';return {initializeViews,showCalendar,showBusinessView};})()');
+  fixture.context.viewHandler=async url=>({version:1,selection:JSON.parse(new URL(url,'https://qa.invalid').searchParams.get('selection_json')),title:'业务',subtitle:'',source:'原服务',generated_at:'now',components:[{type:'notice',text:'原生结果'}]});
+  await fixture.run('testViews.initializeViews({request:(url)=>viewHandler(url)})');
+  fixture.requests.length=0;fixture.emitted.length=0;
+}
+
+test('same-context recipe view waits for real overview and detail, not container visibility',async()=>{
+  const fixture=setup(),{seed,run,context,requests,emitted,node}=fixture;seed();await installViews(fixture);
+  let resolveDetail,settled=false;
+  context.apiHandler=async(method,args)=>method==='get_recipe'?new Promise(resolve=>resolveDetail=resolve):overview(args.day,args.meal);
+  const pending=run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})").then(result=>{settled=true;return result;});
+  await flush();assert.equal(settled,false);assert.equal(node('recipe-workspace').hidden,false);
+  assert.equal(emitted.some(event=>event.type==='meal-scene:view-status'&&event.detail.status==='rendered'),false);
+  run('refreshMealData()');await flush();assert.equal(requests.length,2,'terminal refresh joins the in-flight post-request read');
+  resolveDetail({payload:payload(DAY,'保存后的真实原料')});
+  assert.equal((await pending).status,'rendered');fixture.open();assert.match(node('meal-ingredients-content').innerHTML,/保存后的真实原料/);
+  assert.equal(requests.filter(row=>row.method==='get_overview').length,1);
+  context.apiHandler=async(method,args)=>method==='get_recipe'?{payload:payload(DAY,'随后另一次保存的原料')}:overview(args.day,args.meal);
+  run('refreshMealData()');await flush();
+  assert.equal(requests.filter(row=>row.method==='get_overview').length,2,'completed reads are never cached across another save');
+  assert.match(node('meal-ingredients-content').innerHTML,/随后另一次保存的原料/);
+});
+
+test('a recipe view does not reuse an older in-flight pre-save snapshot',async()=>{
+  const fixture=setup(),{seed,run,context,requests,node}=fixture;seed();await installViews(fixture);
+  let resolveOld;
+  context.apiHandler=async(method,args)=>method==='get_recipe'?new Promise(resolve=>resolveOld=resolve):overview(args.day,args.meal);
+  const old=run('load()');await flush();
+  context.apiHandler=async(method,args)=>method==='get_recipe'?{payload:payload(DAY,'刚保存的原料')}:overview(args.day,args.meal);
+  assert.equal((await run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})")).status,'rendered');
+  resolveOld({payload:payload(DAY,'旧请求原料')});assert.equal((await old).status,'superseded');fixture.open();
+  assert.match(node('meal-ingredients-content').innerHTML,/刚保存的原料/);assert.doesNotMatch(node('meal-ingredients-content').innerHTML,/旧请求原料/);
+  assert.equal(requests.filter(row=>row.method==='get_overview').length,2);
+});
+
+test('failed overview or recipe detail yields failed and a real retry, never rendered',async()=>{
+  for(const failingMethod of ['get_overview','get_recipe']){
+    const fixture=setup(),{seed,run,context,node,emitted}=fixture;seed();await installViews(fixture);
+    context.apiHandler=async(method,args)=>{if(method===failingMethod)throw Error('本次周历读取失败');return overview(args.day,args.meal);};
+    const result=await run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})");
+    assert.equal(result.status,'failed');assert.match(node('view-status').textContent,/本次周历读取失败/);
+    assert.equal(emitted.some(event=>event.type==='meal-scene:view-status'&&event.detail.status==='rendered'),false);
+    context.apiHandler=async(method,args)=>method==='get_recipe'?{payload:payload()}:overview(args.day,args.meal);
+    assert.equal((await run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})")).status,'rendered');
+  }
+});
+
+test('a late calendar read cannot report rendered or replace a newer business view',async()=>{
+  const fixture=setup(),{seed,run,context,node}=fixture;seed();await installViews(fixture);let resolveDetail;
+  context.apiHandler=async(method,args)=>method==='get_recipe'?new Promise(resolve=>resolveDetail=resolve):overview(args.day,args.meal);
+  const pending=run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})");await flush();
+  assert.equal((await run("testViews.showBusinessView({view:'students'})")).status,'rendered');
+  resolveDetail({payload:payload()});assert.equal((await pending).status,'superseded');
+  assert.equal(node('recipe-workspace').hidden,true);assert.equal(node('business-view').hidden,false);
+});
+
+test('calendar read rejects a mismatched context and a missing or denied week projection',async()=>{
+  for(const mode of ['wrong-context','old-server','denied']){
+    const fixture=setup(),{seed,run,context,node}=fixture;seed();await installViews(fixture);
+    context.apiHandler=async(method,args)=>{assert.equal(method,'get_overview');const result=overview(args.day,args.meal);if(mode==='wrong-context')result.day='2026-09-22';if(mode==='old-server')delete result.week_recipes;if(mode==='denied')result.week_recipes.available=false;return result;};
+    assert.equal((await run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})")).status,'failed');
+    assert.match(node('view-status').textContent,/不一致|尚未更新|权限/);
+  }
+});
+
+test('missing recipe detail cannot be acknowledged as a rendered empty calendar',async()=>{
+  const fixture=setup(),{seed,run,context,node}=fixture;seed();await installViews(fixture);
+  context.apiHandler=async(method,args)=>method==='get_recipe'?{}:overview(args.day,args.meal);
+  assert.equal((await run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})")).status,'failed');
+  assert.match(node('view-status').textContent,/食谱明细返回不完整/);assert.equal(run('weekPayload'),null);
+});
+
+test('weekend calendar uses weekly recipes without changing the user date or claiming weekend service',async()=>{
+  const fixture=setup(),{seed,run,context,node}=fixture;seed();await installViews(fixture);
+  context.apiHandler=async(method,args)=>{if(method==='get_recipe')return {payload:payload()};const result=overview(args.day,args.meal);result.recipes={rows:[],available:true,has_more:false};return result;};
+  const result=await run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-27',meal:'dinner'})");
+  assert.equal(result.status,'rendered');assert.equal(run('mealContext().day'),'2026-09-27');assert.equal(run('mealContext().meal'),'dinner');
+  assert.equal(node('week-title').textContent,'2026-09-21 — 2026-09-25');assert.match(node('workbench-week').innerHTML,/<b>米饭<\/b>/);
+  assert.doesNotMatch(node('workbench-week').innerHTML,/data-workbench-date="2026-09-27"/);
+  assert.equal(run('data.recipes.rows.length'),0);assert.equal(run('data.week_recipes.rows.length'),1);
+});
+
+test('stored Saturday and Sunday dishes expand the same week and both ingredients remain clickable',async()=>{
+  const fixture=setup(),{seed,run,context,node,open}=fixture;
+  const saved=payload();saved.recipe.weekEnd='2026-09-27';
+  for(const [day,dish,ingredient] of [['2026-09-26','周六青菜粥','周六大米'],['2026-09-27','周日蒸蛋','周日鸡蛋']]){
+    saved.days.push({date:day,portions:[{slot:'lunch',dishes:[dish],dishIngredientRows:[{dishName:dish,ingredient,amount:35,unit:'g'}]}]});
+  }
+  seed(DAY,'lunch',saved);assert.equal(node('workbench-week').style['--workbench-days'],'7');
+  assert.equal(node('week-title').textContent,'2026-09-21 — 2026-09-27');
+  assert.match(node('workbench-week').innerHTML,/<b>周六青菜粥<\/b>/);assert.match(node('workbench-week').innerHTML,/<b>周日蒸蛋<\/b>/);
+  context.apiHandler=async(method,args)=>method==='get_recipe'?{payload:saved}:overview(args.day,args.meal);
+  for(const [day,ingredient] of [['2026-09-26','周六大米'],['2026-09-27','周日鸡蛋']]){
+    open(day,'lunch');await run('load()');assert.equal(run('mealContext().day'),day);
+    assert.match(node('meal-ingredients-title').textContent,new RegExp(day));assert.match(node('meal-ingredients-content').innerHTML,new RegExp(ingredient));
+    assert.match(node('meal-ingredients-content').innerHTML,/35 g/);
+  }
+  open('2026-09-27','dinner');await run('load()');
+  assert.match(node('meal-ingredients-content').innerHTML,/尚未编排，不代表不供餐/);
+});
+
+test('empty weekend placeholders or another week never expand or masquerade as this week meals',()=>{
+  const fixture=setup(),{seed,run,context,node}=fixture;
+  const blank=payload();blank.days.push({date:'2026-09-26',portions:[]},{date:'2026-09-27',portions:[{slot:'lunch',dishes:[],dishIngredientRows:[]}]});
+  seed(DAY,'lunch',blank);assert.equal(node('workbench-week').style['--workbench-days'],'5');
+  const other=payload('2026-10-04','其他周日原料');other.recipe.weekStart='2026-09-28';other.recipe.weekEnd='2026-10-04';
+  seed(DAY,'lunch',other);assert.equal(node('workbench-week').style['--workbench-days'],'5');
+  assert.doesNotMatch(node('workbench-week').innerHTML,/<b>米饭<\/b>|其他周日原料/);assert.match(node('week-caption').textContent,/不覆盖本周/);
+  context.weekPayloadWithOnlySaturday=payload('2026-09-26','周六原料');context.weekPayloadWithOnlySaturday.recipe.weekEnd='2026-09-26';
+  run('weekPayload.payload=weekPayloadWithOnlySaturday;renderWeekOverview()');
+  assert.equal(node('workbench-week').style['--workbench-days'],'7');
+  assert.match(node('workbench-week').innerHTML,/data-workbench-date="2026-09-27"[^>]*><b>未编排<\/b>/);
+});
+
+test('narrow calendar picker includes stored weekend dates without changing context until a meal is clicked',async()=>{
+  const fixture=setup(),{seed,run,context,node,open}=fixture;
+  context.window.matchMedia=()=>({matches:true});
+  const saved=payload();saved.recipe.weekEnd='2026-09-27';saved.days.push(payload('2026-09-27','周日食材').days[0]);
+  seed(DAY,'lunch',saved);assert.match(node('week-mobile-day').innerHTML,/<option value="2026-09-26"/);assert.match(node('week-mobile-day').innerHTML,/<option value="2026-09-27"/);
+  node('week-mobile-day').value='2026-09-27';node('week-mobile-day').onchange();
+  assert.equal(run('mobileWeekDay'),'2026-09-27');assert.equal(run('mealContext().day'),DAY);
+  assert.match(node('workbench-week').innerHTML,/class="workbench-week-cell [^"]*mobile-day[^"]*" data-workbench-date="2026-09-27"/);
+  context.apiHandler=async(method,args)=>method==='get_recipe'?{payload:saved}:overview(args.day,args.meal);
+  open('2026-09-27','lunch');await run('load()');assert.equal(run('mealContext().day'),'2026-09-27');
+  assert.match(node('meal-ingredients-content').innerHTML,/周日食材/);assert(node('meal-ingredients-panel').scrolled>0);
+  const css=read('../public/meal_scene/app.css');
+  assert.match(css,/repeat\(var\(--workbench-days,5\),minmax\(0,1fr\)\)/);
+  assert.match(css,/\.workbench-week-cell:not\(\.mobile-day\)\{display:none\}/);
+});
+
+test('an empty-ingredient saved recipe remains a draft with explicit missing detail and edit prompt only',async()=>{
+  const fixture=setup(),{seed,run,context,node,requests}=fixture;seed();await installViews(fixture);
+  const saved=payload();saved.days[0].portions[0].dishIngredientRows=[];
+  context.apiHandler=async(method,args)=>method==='get_recipe'?{payload:saved}:overview(args.day,args.meal);
+  assert.equal((await run("testViews.showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})")).status,'rendered');
+  fixture.open();assert.match(node('meal-ingredients-content').innerHTML,/食材明细未填写/);assert.doesNotMatch(node('meal-ingredients-content').innerHTML,/0 g/);
+  assert.match(node('meal-ingredients-caption').textContent,/草稿.*不能作为采购依据/);run('askToEditMeal()');
+  assert.equal(node('chat-input').value,'帮我修改 2026-09-21 午餐的食谱：');assert.equal(requests.some(item=>item.write),false);
+});
 
 test('ingredient region is hidden initially and belongs to the calendar workspace',()=>{
   const html=read('../www/tongjianyun-meal-scene.html');
@@ -109,7 +251,7 @@ test('API meal keys map to morningSnack and snack payload slots',()=>{
 });
 
 test('no permission, no selected recipe and multiple recipes cannot pretend to have ingredients',()=>{
-  for(const [source,expected] of [['data.capabilities.recipe=false','没有读取食谱明细的权限'],['data.recipes.rows=[]','尚未选定食谱'],['data.recipes.rows=[{name:"R1"},{name:"R2"}]','请先选择本周食谱']]){
+  for(const [source,expected] of [['data.capabilities.recipe=false','没有读取食谱明细的权限'],['data.week_recipes.rows=[]','尚未选定食谱'],['data.week_recipes.rows=[{name:"R1"},{name:"R2"}]','请先选择本周食谱']]){
     const {seed,run,open,node}=setup();seed();run('weekPayload=null;'+source);open();
     assert.match(node('meal-ingredients-content').innerHTML,new RegExp(expected));assert.equal(node('meal-ingredients-ask').disabled,true);
     assert.doesNotMatch(node('meal-ingredients-content').innerHTML,/大米|40 g/);

@@ -141,9 +141,18 @@ def get_overview(day=None, meal='lunch'):
     day, meal = business_day(day), meal_key(meal)
     recipes = visible_rows(RECIPE, ['name', 'title', 'week_start', 'week_end', 'workflow_status', 'modified'],
         {'is_deleted': 0, 'workflow_status': ['!=', '已归档'], 'week_start': ['<=', str(day)], 'week_end': ['>=', str(day)]})
+    # Calendar discovery and today's supply coverage are different questions.
+    # A Monday-Friday recipe remains visible on Sunday without claiming that
+    # it supplies Sunday, changing the selected day, or widening row access.
+    week_start = day - timedelta(days=day.weekday())
+    week_end = week_start + timedelta(days=6)
+    week_recipes = visible_rows(RECIPE, ['name', 'title', 'week_start', 'week_end', 'workflow_status', 'modified'],
+        {'is_deleted': 0, 'workflow_status': ['!=', '已归档'], 'week_start': ['<=', str(week_end)],
+         'week_end': ['>=', str(week_start)]})
+    week_recipes = {**week_recipes, 'start': str(week_start), 'end': str(week_end)}
     return {'day': str(day), 'today': today(), 'meal': meal, 'generated_at': str(now_datetime()),
         'user_label': frappe.db.get_value('User', frappe.session.user, 'full_name') or '膳食工作空间',
-        'recipes': recipes, 'plans': class_plans(day, meal),
+        'recipes': recipes, 'week_recipes': week_recipes, 'plans': class_plans(day, meal),
         'orders': purchase_rows(day), 'receipts': purchase_rows(day, 'receipt'),
         'capabilities': {'recipe': can(RECIPE), 'recipe_write': can(RECIPE, 'write'),
             'recipe_create': can(RECIPE, 'create') and can(RECIPE, 'write'),

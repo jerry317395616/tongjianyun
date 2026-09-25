@@ -1,4 +1,4 @@
-import {mealContext,MEALS} from './state.js?v=meal-header-20260925-1';
+import {mealContext,MEALS} from './state.js?v=meal-calendar-read-20260926-2';
 
 // One shared request for calendar and chat modules. This is UI capability data,
 // never an authorization token; every business request is checked server-side.

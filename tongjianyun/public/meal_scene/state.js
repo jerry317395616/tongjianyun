@@ -20,6 +20,23 @@ export function setMealContext({day,meal}){
   selectedContext={day,meal};return changed;
 }
 export function refreshMealData({calendarOnly=false}={}){document.dispatchEvent(new CustomEvent('meal-scene:refresh',{detail:{calendarOnly}}));}
+// Only the calendar controller can acknowledge a completed native read. A
+// selection event or a visible container is not evidence that data was loaded.
+let recipeCalendarReader=null;
+export function registerRecipeCalendarReader(reader){
+  if(typeof reader!=='function')throw Error('周历读取器无效。');
+  recipeCalendarReader=reader;
+}
+export async function readRecipeCalendar(choice){
+  const context={day:choice?.day,meal:choice?.meal};
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(context.day||'')||!MEALS.some(([key])=>key===context.meal))return {status:'failed',...context,message:'周历日期或餐次尚未初始化，请刷新后重试。'};
+  if(!recipeCalendarReader)return {status:'failed',...context,message:'周历尚未初始化，请刷新后重试。'};
+  try{
+    const result=await recipeCalendarReader(context);
+    if(!result||!['rendered','failed','blocked','superseded'].includes(result.status)||result.day!==context.day||result.meal!==context.meal)throw Error('周历读取结果与所选日期或餐次不一致，请重试。');
+    return result;
+  }catch(error){return {status:'failed',...context,message:error?.message||'周历读取失败，请重试。'};}
+}
 export const SLOTS={breakfast:'breakfast',morning_snack:'morningSnack',lunch:'lunch',afternoon_snack:'snack',dinner:'dinner'};
 export const stepFor=id=>STEPS.find(s=>s.id===id)||null;
 export const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

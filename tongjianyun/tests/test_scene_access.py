@@ -14,6 +14,9 @@ class SceneAccessTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         self.account = frappe._dict(enabled=1, user_type='System User')
         self.readable = {'Student', 'Student Group', 'Student Attendance', 'Student Leave Application', meal_scene.CLASS_MEAL}
+        # Routing policy belongs to this fixture, not the host QA/live config.
+        self.config = frappe._dict()
+        self.stack.enter_context(patch.object(frappe, 'conf', self.config))
         self.stack.enter_context(patch.object(frappe, 'session', frappe._dict(user='teacher')))
         self.stack.enter_context(patch.object(frappe.db, 'get_value', side_effect=self.user_value))
         self.stack.enter_context(patch.object(frappe.db, 'exists', return_value=True))
@@ -142,6 +145,101 @@ class SceneAccessTests(unittest.TestCase):
         self.readable.add(meal_scene.RECIPE)
         with patch('tongjianyun.business_agent_service.available', side_effect=AssertionError('unexpected probe')):
             self.assertEqual(self.bootstrap()['chat']['mode'], 'admin_project')
+        self.business_access.assert_not_called()
+
+    def test_explicit_business_mode_routes_teacher_manager_and_administrator_without_admin_probe(self):
+        self.config.business_codex_scene_mode = 'business'
+        self.business_access.return_value = {'allowed': True, 'can_submit': True, 'reason': ''}
+        self.readable.add(meal_scene.RECIPE)
+        for user, roles in (('teacher', ['Instructor', 'Academics User']),
+                            ('manager', ['System Manager']), ('Administrator', [])):
+            self.roles.return_value = roles
+            with (self.subTest(user=user), patch.object(frappe, 'session', frappe._dict(user=user)),
+                    patch.object(access, 'can_use_admin_chat', side_effect=AssertionError('No administrator runner probe'))):
+                result = self.bootstrap()
+            self.assertEqual(result['chat'], {'allowed': True, 'can_submit': True, 'mode': 'business', 'reason': ''})
+            self.assertEqual(result['default_view']['view'], 'recipe_week')
+            self.assertEqual(result['coverage'], 'audited_classroom_and_native_doctypes')
+        self.assertEqual(self.business_access.call_count, 3)
+
+    def test_forced_business_manager_offline_retains_history_and_cancel_without_admin_fallback(self):
+        self.config.business_codex_scene_mode = 'business'
+        self.roles.return_value = ['System Manager']
+        self.readable.add(meal_scene.RECIPE)
+        self.business_access.return_value = {'allowed': True, 'can_submit': False, 'reason': '后台不可用，已有任务可停止'}
+        with patch.object(access, 'can_use_admin_chat', side_effect=AssertionError('No fallback')):
+            result = self.bootstrap()
+        self.assertEqual(result['chat']['mode'], 'business')
+        self.assertTrue(result['chat']['allowed'])
+        self.assertFalse(result['chat']['can_submit'])
+        self.assertIn('已有任务可停止', result['chat']['reason'])
+
+    def test_forced_business_unprovisioned_manager_stays_business_route_and_cannot_submit(self):
+        self.config.business_codex_scene_mode = 'business'
+        self.roles.return_value = ['System Manager']
+        self.readable.add(meal_scene.RECIPE)
+        with patch.object(access, 'can_use_admin_chat', side_effect=AssertionError('No fallback')):
+            result = self.bootstrap()
+        self.assertEqual(result['chat']['mode'], 'business')
+        self.assertFalse(result['chat']['allowed'])
+        self.assertFalse(result['chat']['can_submit'])
+        self.assertEqual(result['chat']['reason'], 'Business chat is not provisioned')
+        self.assertEqual(result['default_view']['view'], 'recipe_week')
+
+    def test_forced_business_service_error_never_retries_administrator_route(self):
+        self.config.business_codex_scene_mode = 'business'
+        self.roles.return_value = ['System Manager']
+        self.readable.add(meal_scene.RECIPE)
+        self.business_access.side_effect = RuntimeError('unavailable trusted business service')
+        with patch.object(access, 'can_use_admin_chat', side_effect=AssertionError('No fallback')), self.assertRaises(RuntimeError):
+            self.bootstrap()
+
+    def test_invalid_explicit_scene_mode_fails_closed_and_null_preserves_legacy(self):
+        self.roles.return_value = ['System Manager']
+        self.readable.add(meal_scene.RECIPE)
+        for mode in ('admin_project', '', 'Business', True, False, 1, {}, []):
+            self.config.business_codex_scene_mode = mode
+            with (self.subTest(mode=mode), patch.object(access, 'can_use_admin_chat') as admin,
+                    self.assertRaisesRegex(frappe.PermissionError, '模式配置无效')):
+                self.bootstrap()
+            admin.assert_not_called()
+        self.business_access.assert_not_called()
+        self.config.business_codex_scene_mode = None
+        self.assertEqual(self.bootstrap()['chat']['mode'], 'admin_project')
+
+    def test_scene_business_routing_does_not_revoke_manager_or_grant_teacher_project_permissions(self):
+        self.config.business_codex_scene_mode = 'business'
+        with self.assertRaises(frappe.PermissionError):
+            access.require_project_access()
+        self.roles.return_value = ['System Manager']
+        self.readable.add(meal_scene.RECIPE)
+        access.require_project_access()
+        self.assertTrue(access.can_use_admin_chat())  # Native permission is unchanged.
+        self.assertEqual(self.bootstrap()['chat']['mode'], 'business')  # Only this scene's routing differs.
+
+    def test_http_context_cannot_choose_mode_or_override_server_business_policy(self):
+        self.config.business_codex_scene_mode = 'business'
+        self.roles.return_value = ['System Manager']
+        self.readable.add(meal_scene.RECIPE)
+        self.business_access.return_value = {'allowed': True, 'can_submit': True, 'reason': ''}
+        for extra in ({'mode': 'admin_project'}, {'business_codex_scene_mode': 'admin_project'},
+                      {'runner_mode': 'admin_project'}, {'actor': 'Administrator'}):
+            with self.subTest(extra=extra), self.assertRaises(TypeError):
+                self.bootstrap(**extra)
+        with patch.object(frappe, 'form_dict', frappe._dict(mode='admin_project', business_codex_scene_mode='admin_project')):
+            for day, meal, group in (('2026-09-21', 'breakfast', 'G1'), ('2026-09-24', 'lunch', None)):
+                self.assertEqual(access.get_bootstrap(day=day, meal=meal, group=group)['chat']['mode'], 'business')
+        self.assertEqual(self.config.business_codex_scene_mode, 'business')
+
+    def test_business_scene_setting_does_not_admit_disabled_guest_or_website_accounts(self):
+        self.config.business_codex_scene_mode = 'business'
+        self.business_access.return_value = {'allowed': True, 'can_submit': True, 'reason': ''}
+        for user, enabled, user_type in (('Guest', 1, 'System User'),
+                ('manager', 0, 'System User'), ('parent', 1, 'Website User')):
+            self.account.update(enabled=enabled, user_type=user_type)
+            with (self.subTest(user=user), patch.object(frappe, 'session', frappe._dict(user=user)),
+                    self.assertRaises(frappe.PermissionError)):
+                self.bootstrap()
         self.business_access.assert_not_called()
 
     def test_bootstrap_does_not_invent_chat_access_for_manager_without_meal_access(self):

@@ -23,6 +23,11 @@ WORKER_METHOD = 'tongjianyun.business_agent_service.run_task'
 MODEL_KEY_PATH = Path('/home/zyd/frappe/.codex-deepseek/private/api-key')
 
 
+class BusinessServiceUnavailable(PermissionError):
+    """A finite admission failure, not an account/session permission failure."""
+    http_status_code = 503
+
+
 @contextmanager
 def submission_lock(directory, owner):
     """OS-held owner lock: worker/web crashes release it; no expiring lease."""
@@ -101,7 +106,14 @@ class FrappeBusinessQueue:
             return QueueObservation(job_id, 'unknown')
 
     def ready(self):
-        """Admission health hint, never task-exit or cancellation evidence."""
+        """Use RQ's expiring worker lease, not a shorter invented heartbeat age.
+
+        Native RQ idle workers can block in dequeue for 405 seconds with a
+        420-second worker TTL. A 120-second age cutoff incorrectly rejects a
+        healthy idle worker. The native Redis expiry is the freshness bound;
+        an absent/non-expiring lease is not healthy. This remains only an
+        admission hint, never task-exit or cancellation evidence.
+        """
         self._context()
         try:
             from rq import Worker
@@ -112,7 +124,9 @@ class FrappeBusinessQueue:
                 if isinstance(stamp, datetime):
                     stamp = stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp
                     age = (datetime.now(timezone.utc) - stamp).total_seconds()
-                    if 0 <= age <= 120 and worker.get_state() in {'idle', 'busy'} and queue.name in worker.queue_names():
+                    ttl = queue.connection.ttl(worker.key)
+                    if (age >= 0 and type(ttl) is int and ttl > 0
+                            and worker.get_state() in {'idle', 'busy'} and queue.name in worker.queue_names()):
                         return True
         except Exception:
             pass
@@ -302,12 +316,20 @@ def chat_access():
 
 def application(*, require_ready=False):
     if require_ready and not _enabled():
-        raise PermissionError('Business Codex is not enabled')
-    runtime = _configured_runtime()
-    if require_ready and runtime.ready() is not True:
-        raise PermissionError('Isolated business runtime is unavailable')
+        raise BusinessServiceUnavailable('Business executor is unavailable')
+    try:
+        runtime = _configured_runtime()
+    except Exception:
+        if not require_ready:
+            raise
+        raise BusinessServiceUnavailable('Business executor is unavailable') from None
     if require_ready:
-        _model_key()  # Never retain or disclose this secret in tasks.
+        try:
+            if runtime.ready() is not True:
+                raise BusinessServiceUnavailable('Business executor is unavailable')
+            _model_key()  # Never retain or disclose this secret in tasks.
+        except Exception:
+            raise BusinessServiceUnavailable('Business executor is unavailable') from None
     site, sites_path = frappe.local.site, str(Path(frappe.local.sites_path).resolve(strict=True))
     directory = Path(sites_path) / site / 'private' / 'business-codex' / 'tasks'
     # Deployment creates this 0700 path as the site owner. A request cannot
@@ -321,7 +343,7 @@ def application(*, require_ready=False):
         authority = ProposalAuthority(authority, repository)
     queue = FrappeBusinessQueue(site)
     if require_ready and not queue.ready():
-        raise PermissionError('Business queue worker is unavailable')
+        raise BusinessServiceUnavailable('Business executor is unavailable')
     store = BusinessTaskStore(directory, site, authorize=authority,
                               observe_execution=runtime.observe, observe_queue=queue.observe,
                               seal_execution=runtime.seal_before_start)

@@ -189,6 +189,83 @@ class WorkerTests(unittest.TestCase):
         guard.assert_not_called()
         self.read.assert_not_called()
 
+    def test_read_observer_rejects_non_callable_at_construction(self):
+        for value in (True, {}, 'observer'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.make_worker(read_observer=value)
+
+    def test_read_observer_only_sees_successful_copies_and_cannot_replace_result(self):
+        arguments = {'file_id': 'F1'}
+        original = {'file_id': 'F1', 'records': [{'text': 'native source'}]}
+        adapter = MagicMock(return_value=original)
+        observed = []
+        def observe(claim, tool, args, result):
+            self.assertTrue(adapter.called)
+            observed.append((claim, tool, args.copy()))
+            args['file_id'] = 'foreign'
+            result['records'][0]['text'] = 'replacement'
+            return {'file_id': 'forged'}
+        def attempt():
+            result = self.proxies[0].handler('attachment_read', arguments, 'observed-file')
+            self.assertIs(result, original)
+            self.assertEqual(result['records'][0]['text'], 'native source')
+            self.assertEqual(arguments, {'file_id': 'F1'})
+        self.runtime.first_poll = attempt
+        self.make_worker(attachment_tools=adapter, read_observer=observe).run(self.identity, self.job_id)
+        self.assertEqual(observed, [(self.runtime.claim, 'attachment_read', {'file_id': 'F1'})])
+        self.assertNotIn('native source', str(self.public()))
+
+    def test_failed_attachment_callback_never_emits_success_observation(self):
+        observer = MagicMock()
+        def attempt():
+            with self.assertRaises(ValueError):
+                self.proxies[0].handler('attachment_read', {'file_id': 'F1'}, 'failed-file')
+        self.runtime.first_poll = attempt
+        adapter = MagicMock(side_effect=ValueError('invalid source'))
+        self.make_worker(attachment_tools=adapter, read_observer=observer).run(self.identity, self.job_id)
+        observer.assert_not_called()
+
+    def test_read_observer_is_not_called_after_adapter_revokes_authority(self):
+        observer = MagicMock()
+        def read(*args):
+            self.store.cancel(self.identity)
+            return {'file_id': 'F1'}
+        def attempt():
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('attachment_read', {'file_id': 'F1'}, 'revoked-file')
+        self.runtime.first_poll = attempt
+        self.make_worker(attachment_tools=read, read_observer=observer).run(self.identity, self.job_id)
+        observer.assert_not_called()
+
+    def test_observer_cannot_deliver_after_revocation_or_observer_failure(self):
+        def observe(*args):
+            self.store.cancel(self.identity)
+        def attempt():
+            with self.assertRaises(PermissionError):
+                self.proxies[0].handler('attachment_read', {'file_id': 'F1'}, 'observer-revoke')
+        self.runtime.first_poll = attempt
+        result = self.make_worker(attachment_tools=lambda *args: {'file_id': 'F1'},
+                                  read_observer=observe).run(self.identity, self.job_id)
+        self.assertEqual(result['status'], 'cancelled')
+
+    def test_observer_error_does_not_replace_read_result_with_success(self):
+        def attempt():
+            with self.assertRaises(RuntimeError):
+                self.proxies[0].handler('attachment_read', {'file_id': 'F1'}, 'observer-error')
+        self.runtime.first_poll = attempt
+        observer = MagicMock(side_effect=RuntimeError('private observer failure'))
+        self.make_worker(attachment_tools=lambda *args: {'file_id': 'F1'},
+                         read_observer=observer).run(self.identity, self.job_id)
+        observer.assert_called_once()
+        self.assertNotIn('private observer failure', str(self.public()))
+
+    def test_read_observer_does_not_instrument_other_business_tools(self):
+        observer = MagicMock()
+        self.runtime.first_poll = lambda: self.proxies[0].handler(
+            'classroom_read', {'group': 'G1', 'day': '2026-09-16'}, 'ordinary-read')
+        self.make_worker(read_observer=observer).run(self.identity, self.job_id)
+        observer.assert_not_called()
+
     def test_duplicate_queue_delivery_never_restarts_or_resumes_model(self):
         self.run_worker()
         result = self.run_worker()
@@ -315,10 +392,12 @@ class WorkerTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 self.proxies[0].handler('recipe_save', {}, 'recipe-write-1')
         self.runtime.first_poll = tool
-        result = self.make_worker(recipe_tools=reader.dispatch).run(self.identity, self.job_id)
+        observer = MagicMock(return_value={'recipe': 'forged'})
+        result = self.make_worker(recipe_tools=reader.dispatch, read_observer=observer).run(self.identity, self.job_id)
         self.assertEqual(result['status'], 'completed')
         self.assertEqual(calls, [(self.runtime.claim, 'recipe_read', args)])
         self.assertEqual(replies, [{'recipe': 'R1', 'complete': False}])
+        observer.assert_called_once_with(self.runtime.claim, 'recipe_read', args, {'recipe': 'R1', 'complete': False})
         self.read.assert_not_called()
         prompt = self.runtime.inputs['prompt'].decode()
         self.assertIn('recipe_read', prompt)

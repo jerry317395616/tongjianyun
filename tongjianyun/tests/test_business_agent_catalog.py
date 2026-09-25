@@ -364,6 +364,30 @@ class CatalogTests(unittest.TestCase):
 
 
 class SchemaTests(unittest.TestCase):
+    def test_received_inbox_is_exact_navigation_not_a_native_data_view(self):
+        choice = {'view': 'business_proposal_inbox', 'folder': 'received'}
+        clean = catalog._arguments('business_view', {'selection': choice})['selection']
+        self.assertEqual(clean, dict(choice, state='pending'))
+        self.assertNotIn('state', choice)
+        self.assertNotIn('business_proposal_inbox', catalog.NATIVE_VIEWS)
+        page = dict(choice, state='all', cursor=str(uuid.uuid4()))
+        self.assertEqual(catalog._arguments('business_view', {'selection': page})['selection'], page)
+        self.assertIn('business_proposal_inbox', catalog.TOOL_INSTRUCTIONS['business_view'])
+
+    def test_received_inbox_does_not_admit_identity_actions_or_other_proposal_views(self):
+        choice = {'view': 'business_proposal_inbox', 'folder': 'received'}
+        invalid = [dict(choice, **{name: value}) for name, value in (
+            ('owner', 'Administrator'), ('site', 'other.localhost'), ('recipient', 'other@example.invalid'),
+            ('actor', 'Administrator'), ('method', 'accept_handoff'), ('activate', True),
+            ('day', '2026-09-21'), ('meal', 'lunch'), ('cursor', 'not-a-canonical-uuid'),
+            ('state', 'accepted'), ('folder', 'sent'))]
+        invalid += [{'view': 'business_proposal_inbox'},
+                    {'view': 'business_proposal_handoff', 'handoff_id': str(uuid.uuid4())},
+                    {'view': 'business_blueprint', 'proposal_id': 'FILE-1'}]
+        for selection in invalid:
+            with self.subTest(selection=selection), self.assertRaises(ValueError):
+                catalog._arguments('business_view', {'selection': selection})
+
     def test_no_actor_execution_schema_upload_or_arbitrary_view(self):
         for args in ({'owner':'Administrator'},{'site':'elsewhere'},{'kind':'report'},
                      {'page_size':True},{'page_size':31},{'cursor':'0-0'},{'keyword':'   '}):

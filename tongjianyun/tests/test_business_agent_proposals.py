@@ -794,6 +794,138 @@ class ProposalTests(unittest.TestCase):
         self.bp.propose.assert_not_called()
         self.bp.activate.assert_not_called()
 
+    def inbox_catalog(self, *, authority=None):
+        from tongjianyun import business_agent_catalog as catalog
+        # Only the native scene gate is doubled. The actual proposal authority,
+        # full-union registration, SQLite task/event store and view schema run.
+        def check(scope):
+            if scope == self.gates._capability(self.gates.SCENE):
+                return
+            self.check_scope(scope)
+        self.stack.enter_context(patch.object(self.gates, '_check_scope', check))
+        self.stack.enter_context(patch.object(catalog, '_services',
+            return_value=(self.frappe, self.gates, SimpleNamespace())))
+        return catalog.BusinessCatalog(authority or self.authority, self.store)
+
+    def open_inbox(self, reader, claim, **fields):
+        return reader.dispatch(claim, 'business_view', {'selection': {
+            'view': 'business_proposal_inbox', 'folder': 'received', **fields}})
+
+    def test_catalog_received_inbox_persists_exact_scope_without_reading_private_rows(self):
+        reader, claim = self.inbox_catalog(), self.make_claim(self.manager)
+        with (patch.object(self.repository, 'handoff_page', side_effect=AssertionError('No page data in model')),
+                patch.object(self.repository, 'read', side_effect=AssertionError('No draft data in model')),
+                patch.object(self.repository, 'grant', side_effect=AssertionError('No individual grant read')),
+                patch.object(self.base, 'capture_viewer', side_effect=AssertionError('No fake Viewer'))):
+            result = self.open_inbox(reader, claim)
+            self.assertEqual(result['selection'], {'view': 'business_proposal_inbox', 'folder': 'received', 'state': 'pending'})
+            self.assertEqual(set(result), {'available', 'selection', 'display_requested', 'data_read',
+                                          'executed_business_operation', 'display_note'})
+            self.assertTrue(result['display_requested'])
+            self.assertIs(result['data_read'], False)
+            self.assertIs(result['executed_business_operation'], False)
+            self.assertCountEqual(self.store.required_scopes(claim.identity), [
+                self.gates._capability(self.gates.SCENE), {'kind': 'view', 'selection': result['selection']}])
+            view = [event for event in self.store.events(claim.identity) if event['kind'] == 'view']
+            self.assertEqual(len(view), 1)
+            self.assertEqual(set(view[0]), {'id', 'kind', 'version', 'selection', 'title'})
+            self.assertEqual(view[0]['selection'], result['selection'])
+        self.bp.propose.assert_not_called()
+        self.bp.activate.assert_not_called()
+        self.bp._load.assert_not_called()
+        self.frappe.db.commit.assert_not_called()
+        self.assertEqual(self.actor.get(), 'outer')
+
+    def test_catalog_received_inbox_browser_get_uses_only_its_real_recipient(self):
+        from tongjianyun import business_proposal_views as views
+        first = self.create()
+        self.agent.handoff(self.viewer, first['proposal_id'], first['revision'], self.manager)
+        other = 'other@example.invalid'
+        self.managers.add(other)
+        second = self.create(spec=dict(SPEC, key='another_log', title='只交给其他负责人'), call='second')
+        self.agent.handoff(self.viewer, second['proposal_id'], second['revision'], other)
+        result = self.open_inbox(self.inbox_catalog(), self.make_claim(self.manager))
+        with patch.object(views, '_application', return_value=(self.agent, self.manager_viewer)):
+            page = views.get_view(result['selection'])
+        rows = page['components'][0]['rows']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['cells'][0], first['spec']['title'])
+        self.assertNotIn(second['spec']['title'], str(page))
+        self.assertNotIn(first['spec']['title'], str(result))
+        self.assertEqual(self.count('handoffs'), 2)
+        self.assertEqual(self.files, {})
+        self.bp.activate.assert_not_called()
+
+    def test_catalog_received_inbox_original_manager_and_structure_gates_remain_required(self):
+        reader = self.inbox_catalog()
+        with self.assertRaises(self.frappe.PermissionError):
+            self.open_inbox(reader, self.claim)
+        claim = self.make_claim(self.manager)
+        with patch.object(self.frappe, 'has_permission', return_value=False), self.assertRaises(PermissionError):
+            self.open_inbox(reader, claim)
+        self.assertFalse(any(event['kind'] == 'view' for event in self.store.events(claim.identity)))
+
+    def test_catalog_received_inbox_no_proposal_wrapper_fails_without_generic_whitelist(self):
+        reader = self.inbox_catalog(authority=self.base)
+        self.assertNotIn('business_proposal_inbox', self.tools.VIEW_FIELDS)
+        # The base resolves this import before validating its finite tool
+        # schema. Its native canonicalizer must never be reached for inbox.
+        native_views = ModuleType('tongjianyun.meal_views')
+        native_views.selection = MagicMock(side_effect=AssertionError('No generic view fallback'))
+        with patch.dict(sys.modules, {'tongjianyun.meal_views': native_views}), self.assertRaises(ValueError):
+            self.open_inbox(reader, self.make_claim(self.manager))
+        native_views.selection.assert_not_called()
+        self.assertNotIn('business_blueprint', self.tools.VIEW_FIELDS)
+
+    def test_catalog_received_inbox_replay_rechecks_manager_and_old_source_union(self):
+        reader, claim = self.inbox_catalog(), self.make_claim(self.manager)
+        self.store.register_authority(claim, {'kind': 'doctype', 'doctype': 'Supplier', 'actions': ['read']})
+        self.open_inbox(reader, claim)
+        self.managers.remove(self.manager)
+        with self.assertRaises(PermissionError):
+            self.store.events(claim.identity)
+        with self.assertRaises(PermissionError):
+            self.store.history(self.manager)
+        self.managers.add(self.manager)
+        self.assertTrue(self.store.events(claim.identity))
+        self.assertEqual(self.store.history(self.manager)['tasks'][0]['task_id'], claim.identity.task_id)
+        self.links.remove('Supplier')
+        with self.assertRaises(PermissionError):
+            self.store.events(claim.identity)
+        with self.assertRaises(PermissionError):
+            self.open_inbox(reader, claim, state='all')
+
+    def test_catalog_received_inbox_cross_identity_and_cancelled_claim_refused(self):
+        reader, claim = self.inbox_catalog(), self.make_claim(self.manager)
+        for identity in (replace(claim.identity, owner='other@example.invalid'),
+                         replace(claim.identity, site='other.localhost')):
+            with self.subTest(identity=identity), self.assertRaises(PermissionError):
+                self.open_inbox(reader, replace(claim, identity=identity))
+        self.store.cancel(claim.identity)
+        with self.assertRaises(PermissionError):
+            self.open_inbox(reader, claim)
+
+    def test_catalog_received_inbox_budget_refusal_is_not_empty_inbox(self):
+        from tongjianyun import business_agent_catalog as catalog
+        reader, claim = self.inbox_catalog(), self.make_claim(self.manager)
+        with patch.object(catalog, 'MAX_SCOPES', 1):
+            result = self.open_inbox(reader, claim)
+        self.assertEqual(result['error'], 'scope_budget_exhausted')
+        self.assertFalse(result['available'])
+        self.assertNotIn('page_count', result)
+        self.assertFalse(any(event['kind'] == 'view' for event in self.store.events(claim.identity)))
+
+    def test_catalog_received_inbox_revoke_before_publish_never_emits_view(self):
+        reader, claim = self.inbox_catalog(), self.make_claim(self.manager)
+        original = self.authority.register_read
+        def revoke(*args):
+            original(*args)
+            self.managers.remove(self.manager)
+        with patch.object(self.authority, 'register_read', side_effect=revoke), self.assertRaises(PermissionError):
+            self.open_inbox(reader, claim)
+        self.managers.add(self.manager)
+        self.assertFalse(any(event['kind'] == 'view' for event in self.store.events(claim.identity)))
+
 
 if __name__ == '__main__':
     unittest.main()

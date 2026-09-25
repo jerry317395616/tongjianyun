@@ -302,6 +302,26 @@ class BusinessChatHttpTests(unittest.TestCase):
         http.get_conversation()
         self.factory.assert_called_with(require_ready=False)
 
+    def test_service_outage_is_503_not_auth_failure_or_never_accepted_claim(self):
+        self.factory.side_effect = service.BusinessServiceUnavailable('/private/key internal details')
+        with patch.object(frappe.local, 'response', frappe._dict()):
+            with self.assertRaises(service.BusinessServiceUnavailable) as error:
+                http.send_message(message='read', file_name='FILE-1', request_id=self.id, stream=1)
+            self.assertEqual(error.exception.http_status_code, 503)
+            self.assertEqual(frappe.local.response['business_error_code'], 'service_unavailable')
+            self.assertNotIn('business_request_not_accepted', frappe.local.response)
+            self.assertNotIn('/private', str(error.exception))
+            self.assertNotIn('登录', str(error.exception))
+        self.app.submit.assert_not_called()
+
+    def test_actual_viewer_permission_denial_is_not_service_outage(self):
+        self.app.viewer.side_effect = PermissionError('private session detail')
+        with patch.object(frappe.local, 'response', frappe._dict()):
+            with self.assertRaises(frappe.PermissionError):
+                http.send_message(message='read', stream=1)
+            self.assertNotIn('business_error_code', frappe.local.response)
+        self.app.submit.assert_not_called()
+
     def test_no_actor_site_command_or_path_arguments(self):
         for kwargs in ({'owner':'Administrator'}, {'site':'other'}, {'mode':'admin'}, {'command':'whoami'}, {'directory':'/'}):
             with self.subTest(kwargs=kwargs), self.assertRaises(TypeError):
@@ -415,13 +435,43 @@ class BusinessQueueTests(unittest.TestCase):
         worker = MagicMock(last_heartbeat=datetime.now(timezone.utc)-timedelta(seconds=2))
         worker.get_state.return_value = 'idle'
         worker.queue_names.return_value = ['bench:business_codex']
+        connection = MagicMock()
+        connection.ttl.return_value = 83
         with patch('rq.Worker.all', return_value=[worker]), patch('frappe.utils.background_jobs.get_queue',
-                return_value=SimpleNamespace(name='bench:business_codex')):
+                return_value=SimpleNamespace(name='bench:business_codex', connection=connection)):
             self.assertTrue(self.queue.ready())
             worker.queue_names.return_value = ['bench:meal_chat']
             self.assertFalse(self.queue.ready())
             worker.queue_names.return_value = ['bench:business_codex']
-            worker.last_heartbeat = datetime.now(timezone.utc)-timedelta(hours=1)
+            # Real native idle cycle: heartbeat 397 seconds ago, live lease 83.
+            worker.last_heartbeat = datetime.now(timezone.utc)-timedelta(seconds=397)
+            self.assertTrue(self.queue.ready())
+            connection.ttl.assert_called_with(worker.key)
+            connection.ttl.return_value = -2
+            self.assertFalse(self.queue.ready())
+
+    def test_expired_nonexpiring_unknown_and_wrong_state_workers_are_not_ready(self):
+        worker = MagicMock(last_heartbeat=datetime.now(timezone.utc)-timedelta(seconds=397))
+        worker.get_state.return_value = 'idle'
+        worker.queue_names.return_value = ['bench:business_codex']
+        connection = MagicMock()
+        with patch('rq.Worker.all', return_value=[worker]), patch('frappe.utils.background_jobs.get_queue',
+                return_value=SimpleNamespace(name='bench:business_codex', connection=connection)):
+            for ttl in (-2, -1, 0, None, True, '83'):
+                connection.ttl.return_value = ttl
+                self.assertFalse(self.queue.ready())
+            connection.ttl.return_value = 83
+            for state in ('starting', 'suspended', 'stopped', 'unknown'):
+                worker.get_state.return_value = state
+                self.assertFalse(self.queue.ready())
+            worker.get_state.return_value = 'busy'
+            self.assertTrue(self.queue.ready())
+            worker.last_heartbeat = datetime.now(timezone.utc)+timedelta(minutes=1)
+            self.assertFalse(self.queue.ready())
+            worker.last_heartbeat = None
+            self.assertFalse(self.queue.ready())
+            worker.last_heartbeat = datetime.now(timezone.utc)
+            connection.ttl.side_effect = ConnectionError('private redis endpoint')
             self.assertFalse(self.queue.ready())
 
     def test_switch_alone_cannot_enable_chat(self):
@@ -542,6 +592,37 @@ class BusinessDeploymentGateTests(unittest.TestCase):
                 service.application(require_ready=True)
             runtime.assert_not_called()
             key.assert_not_called()
+
+    def test_unready_runtime_and_key_fail_before_new_task_store(self):
+        with patch.object(frappe, 'conf', {'business_codex_enabled': 1}), \
+                patch.object(service, '_configured_runtime') as runtime, \
+                patch.object(service, '_model_key') as key, \
+                patch.object(service, 'BusinessTaskStore') as store:
+            runtime.return_value.ready.return_value = False
+            with self.assertRaises(service.BusinessServiceUnavailable):
+                service.application(require_ready=True)
+            key.assert_not_called()
+            runtime.return_value.ready.side_effect = ConnectionError('private launcher path')
+            with self.assertRaises(service.BusinessServiceUnavailable):
+                service.application(require_ready=True)
+            runtime.return_value.ready.side_effect = None
+            runtime.return_value.ready.return_value = True
+            key.side_effect = OSError('private credential path')
+            with self.assertRaises(service.BusinessServiceUnavailable) as error:
+                service.application(require_ready=True)
+            self.assertNotIn('private', str(error.exception))
+            store.assert_not_called()
+
+    def test_unready_queue_is_service_failure_before_task_store(self):
+        with patch.object(frappe, 'conf', {'business_codex_enabled': 1}), \
+                patch.object(service, '_configured_runtime') as runtime, \
+                patch.object(service, '_model_key'), \
+                patch.object(service.FrappeBusinessQueue, 'ready', return_value=False), \
+                patch.object(service, 'BusinessTaskStore') as store:
+            runtime.return_value.ready.return_value = True
+            with self.assertRaises(service.BusinessServiceUnavailable):
+                service.application(require_ready=True)
+            store.assert_not_called()
 
     def test_world_readable_store_is_not_advertised(self):
         self.provision_store()

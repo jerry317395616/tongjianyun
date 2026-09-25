@@ -1,10 +1,12 @@
-import {STEPS,MEALS,SLOTS,stepFor,professionalRoute,mealDraft,draftTotals,mealContext,setMealContext,esc as h,number as n} from './state.js?v=meal-header-20260925-1';
-import {getSceneBootstrap} from './scene_bootstrap.js?v=teacher-scene-20260925-1';
+import {STEPS,MEALS,SLOTS,stepFor,professionalRoute,mealDraft,draftTotals,mealContext,setMealContext,registerRecipeCalendarReader,esc as h,number as n} from './state.js?v=meal-calendar-read-20260926-2';
+import {getSceneBootstrap} from './scene_bootstrap.js?v=meal-calendar-read-20260926-2';
 
 const $=id=>document.getElementById(id),panel=$('panel'),chatMode=!!$('meal-chat');
 let data=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
 let ingredientSelection=null,weekReadError='';
 let sceneBootstrap=null,sceneTimer=null;
+let pendingCalendarRead=null;
+const sameMealContext=(left,right)=>left.day===right.day&&left.meal===right.meal;
 const notify=(text,error=false)=>{clearTimeout(toastTimer);$('toast').textContent=text;$('toast').hidden=false;$('toast').style.background=error?'#a56554':'';toastTimer=setTimeout(()=>$('toast').hidden=true,error?10000:5000);};
 const note=(text,kind='')=>`<div class="note ${kind}">${h(text)}</div>`;
 const empty=text=>`<div class="empty">${h(text)}</div>`;
@@ -34,38 +36,60 @@ function leaveDraft(){if(writing)return false;if((dirty||embedded)&&!window.conf
 function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panelBody(empty('请选择周历餐次或下方其他业务。'));return true;}
 function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').scrollTop=0;}
 function revealPanel(){if(window.matchMedia('(max-width:950px)').matches)panel.scrollIntoView({behavior:'smooth',block:'start'});}
-async function load(automatic=false){
+function load(automatic=false,expected=null){
+  const requested=expected?{day:expected.day,meal:expected.meal}:mealContext();
+  // A view request always starts a post-request read, never reuses a possibly
+  // pre-save snapshot. Finish/periodic refreshes join that read while in flight.
+  if(!expected&&pendingCalendarRead&&sameMealContext(pendingCalendarRead.context,requested))return pendingCalendarRead.promise;
+  const pending={context:requested,promise:null},ticket=++loadSequence;
+  pendingCalendarRead=pending;
+  pending.promise=loadCalendar(automatic,requested,ticket).finally(()=>{if(pendingCalendarRead===pending)pendingCalendarRead=null;});
+  return pending.promise;
+}
+async function loadCalendar(automatic,requested,ticket){
+  const result=(status,message='')=>({status,...requested,...(message?{message}:{})});
+  const live=()=>ticket===loadSequence&&sameMealContext(requested,mealContext());
   if(!sceneBootstrap){
     try{
       sceneBootstrap=await getSceneBootstrap();
-      setMealContext({day:sceneBootstrap.day,meal:sceneBootstrap.meal});
+      if(ticket!==loadSequence)return result('superseded');
+      if(!requested.day){Object.assign(requested,{day:sceneBootstrap.day,meal:sceneBootstrap.meal});setMealContext(requested);}
       $('user-label').textContent=sceneBootstrap.user_label;
       document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{...mealContext(),group:sceneBootstrap.scope?.selected_group}}));
-      if(!sceneBootstrap.recipe_calendar){$('recipe-workspace').hidden=true;return;}
-      if(sceneTimer===null)sceneTimer=setInterval(()=>load(true),60000);
-    }catch(error){$('recipe-workspace').hidden=true;message(failure(error),true);return;}
+      if(sceneBootstrap.recipe_calendar&&sceneTimer===null)sceneTimer=setInterval(()=>load(true),60000);
+    }catch(error){if(ticket!==loadSequence)return result('superseded');$('recipe-workspace').hidden=true;message(failure(error),true);return result('failed',failure(error));}
   }
-  if(!sceneBootstrap.recipe_calendar)return;
-  if(writing||(automatic&&((panel.open&&!chatMode)||document.hidden)))return;
-  const ticket=++loadSequence;ready=false;weekReadError='';
+  if(!live())return result('superseded');
+  if(!sceneBootstrap.recipe_calendar){$('recipe-workspace').hidden=true;return result('blocked','当前账号没有食谱读取权限。');}
+  if(writing||(automatic&&((panel.open&&!chatMode)||document.hidden)))return result('blocked','当前操作尚未完成，周历未重新读取。');
+  ready=false;weekReadError='';
   if(ingredientSelection&&(ingredientSelection.day!==mealContext().day||ingredientSelection.meal!==mealContext().meal))closeMealIngredients(false);
   renderMealIngredients();if(!automatic)message('正在读取所选日期与餐次的业务记录…');
   try{
-    const result=await api('get_overview',mealContext());if(ticket!==loadSequence)return;
-    data=result;setMealContext(getContext());$('user-label').textContent=data.user_label;
+    const overview=await api('get_overview',requested);if(!live())return result('superseded');
+    if(!overview||!sameMealContext(overview,requested))throw Error('周历读取结果与所选日期或餐次不一致，请重试。');
+    if(chatMode&&(!overview.week_recipes||!Array.isArray(overview.week_recipes.rows)))throw Error('周历数据接口尚未更新，请刷新或联系管理员后重试。');
+    if(chatMode&&overview.week_recipes.available!==true)throw Error('当前账号没有读取本周食谱的权限，请重新核对权限后重试。');
+    data=overview;$('user-label').textContent=data.user_label;
     if(chatMode){
       weekPayload=null;selectedRecipe=null;
-      if(data.recipes?.rows?.length===1){
-        const recipe=data.recipes.rows[0].name;
-        try{const detail=await api('get_recipe',{recipe});if(ticket!==loadSequence)return;selectedRecipe=recipe;weekPayload={name:recipe,payload:detail.payload};}
-        catch(error){if(ticket!==loadSequence)return;weekPayload=null;weekReadError=failure(error);}
+      if(data.week_recipes.rows.length===1){
+        const recipe=data.week_recipes.rows[0].name;
+        try{
+          const detail=await api('get_recipe',{recipe});if(!live())return result('superseded');
+          if(!detail?.payload?.recipe||!Array.isArray(detail.payload.days))throw Error('食谱明细返回不完整，请重试。');
+          selectedRecipe=recipe;weekPayload={name:recipe,payload:detail.payload};
+        }
+        catch(error){if(!live())return result('superseded');weekPayload=null;weekReadError=failure(error);}
       }
     }
-    ready=true;renderWeekOverview();message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
+    ready=true;renderWeekOverview();message(weekReadError,!!weekReadError);history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
     document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:getContext()}));
     if(!chatMode&&!active)await openStep('recipe');
-  }catch(error){if(ticket!==loadSequence)return;weekReadError=failure(error);renderMealIngredients();message(weekReadError,true);}
+    return result(weekReadError?'failed':'rendered',weekReadError);
+  }catch(error){if(!live())return result('superseded');weekReadError=failure(error);renderMealIngredients();message(weekReadError,true);return result('failed',weekReadError);}
 }
+registerRecipeCalendarReader(choice=>sceneBootstrap?load(false,choice):Promise.resolve({status:'failed',...choice,message:'周历尚未初始化，请刷新后重试。'}));
 async function openStep(id){
   const step=stepFor(id);if(!step||!ready){notify('请先等待读取成功，或刷新后再操作。');return false;}if(!leaveDraft())return false;
   const ticket=++sequence;active=id;$('panel-title').textContent=step.title;$('panel-number').textContent=step.number;$('panel-subtitle').textContent=step.subtitle;
@@ -97,15 +121,21 @@ async function recipesView(ticket,offset=0,all=false){
   const page=start=>{const next=++sequence;recipesView(next,start,true).catch(e=>live(next)&&panelBody(note(failure(e),'error')));};
   $('all-recipes').onclick=()=>page(0);if($('more-recipes'))$('more-recipes').onclick=()=>page(offset+20);if($('previous-recipes'))$('previous-recipes').onclick=()=>page(Math.max(0,offset-20));
 }
-function businessWeekDates(day){
+function businessWeekDates(day,payload=null){
   const date=new Date(`${day}T00:00:00Z`),oneDay=86400000,weekday=date.getUTCDay(),monday=date.getTime()-((weekday+6)%7)*oneDay;
-  return Array.from({length:5},(_,index)=>new Date(monday+index*oneDay).toISOString().slice(0,10));
+  const week=Array.from({length:7},(_,index)=>new Date(monday+index*oneDay).toISOString().slice(0,10));
+  // Blank weekend placeholders are not meal arrangements. Only content in
+  // this same natural week expands the simple weekday calendar to seven days.
+  const weekendContent=Array.isArray(payload?.days)&&payload.days.some(row=>week.slice(5).includes(row.date)&&
+    Array.isArray(row.portions)&&row.portions.some(portion=>(portion.dishes||[]).some(dish=>String(dish||'').trim())||
+      Array.isArray(portion.dishIngredientRows)&&portion.dishIngredientRows.length>0));
+  return weekendContent?week:week.slice(0,5);
 }
 function renderWeekOverview(){
   if(!data)return;
   const editing=draftState?.kind==='draft';
   const payload=editing?draftState.payload:weekPayload?.payload||null,recipe=payload?.recipe;
-  const dates=editing?recipeWeekDates(recipe,payload.days):businessWeekDates(data.day);
+  const dates=editing?recipeWeekDates(recipe,payload.days):businessWeekDates(data.day,payload);
   const covering=editing||!!payload&&dates.some(date=>payload.days.some(day=>day.date===date));
   if(!mobileWeekDay||!dates.includes(mobileWeekDay))mobileWeekDay=dates.includes(data.day)?data.day:dates[0];
   $('week-title').textContent=`${dates[0]} — ${dates.at(-1)}`;
@@ -153,7 +183,7 @@ function renderMealIngredients(){
   if(weekReadError){content.innerHTML=`<p class="meal-ingredients-empty">${h(weekReadError)}</p>`;return;}
   if(!ready||day!==data?.day||meal!==data?.meal){content.innerHTML='<p class="meal-ingredients-empty">正在读取该餐次的食材…</p>';return;}
   if(!weekPayload?.payload){
-    const explanation=!data.capabilities?.recipe?'当前账号没有读取食谱明细的权限。':data.recipes?.rows?.length>1?'请先选择本周食谱，再查看食材。':'本周尚未选定食谱，暂无可显示的食材。';
+    const explanation=!data.capabilities?.recipe?'当前账号没有读取食谱明细的权限。':data.week_recipes?.rows?.length>1?'请先选择本周食谱，再查看食材。':'本周尚未选定食谱，暂无可显示的食材。';
     content.innerHTML=`<p class="meal-ingredients-empty">${h(explanation)}</p>`;return;
   }
   const payload=weekPayload.payload,recipeStatus=payload.recipe?.workflowStatus||'状态待核';

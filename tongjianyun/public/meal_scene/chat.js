@@ -1,6 +1,6 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=business-handoffs-20260926-1';
-import {mealContext as context,refreshMealData} from './state.js?v=meal-header-20260925-1';
-import {getSceneBootstrap} from './scene_bootstrap.js?v=teacher-scene-20260925-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-calendar-read-20260926-2';
+import {mealContext as context,refreshMealData} from './state.js?v=meal-calendar-read-20260926-2';
+import {getSceneBootstrap} from './scene_bootstrap.js?v=meal-calendar-read-20260926-2';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
 const messages=$('chat-messages'),chip=$('chat-file-chip'),fileName=$('chat-file-name');
@@ -54,6 +54,7 @@ function controls(){
   send.title=stopping?'正在停止':activeTask?'停止处理':'发送消息';
 }
 function errorText(body,status){
+  if(status===503&&body.business_error_code==='service_unavailable')return '业务助手服务暂不可用。请保留当前页面，核对已有任务后稍后重试，无需重新登录或重新上传。已有任务仍可查看或停止。';
   try{
     const row=JSON.parse(body._server_messages||'[]')[0];
     const item=typeof row==='string'?JSON.parse(row):row;
@@ -65,7 +66,13 @@ async function request(path,options={}){
   const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,
     headers:{Accept:'application/json',...(options.method==='POST'?{'X-Frappe-CSRF-Token':document.querySelector('meta[name="csrf-token"]').content}:{}),...options.headers}});
   const body=await response.json().catch(()=>({}));
-  if(!response.ok||body.exc){const error=Error(errorText(body,response.status));error.status=response.status;error.notAccepted=body.business_request_not_accepted===true;throw error;}
+  if(!response.ok||body.exc){
+    const error=Error(errorText(body,response.status));error.status=response.status;
+    error.serviceUnavailable=response.status===503&&body.business_error_code==='service_unavailable';
+    // Readiness can fail on a retry of an ALREADY accepted request. It is never
+    // evidence that the request id is unused, even if an invalid marker appears.
+    error.notAccepted=!error.serviceUnavailable&&body.business_request_not_accepted===true;throw error;
+  }
   return body.message;
 }
 function clearFile(){fileInput.value='';chip.hidden=true;fileName.textContent='';}
@@ -308,7 +315,7 @@ async function submitMessage(event){
     // an explicit same-text retry reuses its original business request_id.
     try{await loadConversation();}catch(_){}
     if(epoch!==generation)return;
-    if(error.notAccepted===true||error.status===400||error.status===422)pendingSend=null;
+    if(error.notAccepted===true||mode!=='business'&&(error.status===400||error.status===422))pendingSend=null;
     showFailure(error);
     if(activeTask&&allowed){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{if(epoch===generation)loadConversation().catch(showFailure);},5000);}
   }finally{sending.remove();if(epoch===generation){submitting=false;controls();}}

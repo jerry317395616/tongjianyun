@@ -300,6 +300,73 @@ test('business upload is private and lost send response retries the same file an
   assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);assert.equal(posts[0].file_name,'FILE-BOUND');
 });
 
+test('upload then typed service 503 preserves the same file and request for manual retry only',async()=>{
+  const {run,nodes,context,timers}=setup({mode:'business'}),calls=[],posts=[];let attempts=0;
+  const file={name:'recipe.csv',size:100};nodes.get('chat-input').value='保存这份食谱';nodes.get('chat-file').files=[file];
+  context.fetch=async(url,options)=>{
+    calls.push(url);assert.doesNotMatch(url,/meal_chat\./);
+    if(url.endsWith('upload_file'))return {ok:true,status:200,json:async()=>({message:{name:'FILE-RETAINED'}})};
+    if(url.endsWith('send_message')){
+      posts.push(JSON.parse(options.body));attempts++;
+      if(attempts===1)return {ok:false,status:503,json:async()=>({business_error_code:'service_unavailable',_server_messages:'["internal-path-or-key"]'})};
+      return {ok:true,status:200,json:async()=>({message:{accepted:true,task_id:businessTask,status:'running'}})};
+    }
+    return {ok:true,status:200,json:async()=>({message:{mode:'business',tasks:[]}})};
+  };
+  await run('submitMessage({preventDefault(){}})');await flush();
+  assert.equal(run('allowed'),true);assert.equal(nodes.get('chat-send').disabled,false);assert.equal(nodes.get('chat-input').disabled,false);
+  assert.equal(nodes.get('chat-input').value,'保存这份食谱');assert.equal(nodes.get('chat-file').files[0],file);
+  assert.equal(run('pendingSend.payload.request_id'),businessTask);assert.equal(run('pendingSend.payload.file_name'),'FILE-RETAINED');
+  const text=nodes.get('chat-messages').children.at(-1).textContent;assert.match(text,/服务暂不可用/);assert.match(text,/无需重新登录或重新上传/);assert.doesNotMatch(text,/internal-path-or-key|没有此操作权限/);
+  assert.equal(posts.length,1);assert.equal(timers.filter(timer=>!timer.cleared).length,0);
+  await run('loadConversation()');assert.equal(posts.length,1);assert.equal(run('pendingSend.payload.request_id'),businessTask);
+  await run('submitMessage({preventDefault(){}})');
+  assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);assert.equal(calls.filter(url=>url.endsWith('upload_file')).length,1);
+});
+
+test('typed service 503 can recover an already persisted request and still cancel it without resending',async()=>{
+  const {run,nodes,context,streams}=setup({mode:'business'}),calls=[];let cancelled=false;
+  nodes.get('chat-input').value='保存这份食谱';nodes.get('chat-file').files=[{name:'recipe.csv',size:100}];
+  context.fetch=async(url)=>{
+    calls.push(url);assert.doesNotMatch(url,/meal_chat\./);
+    if(url.endsWith('upload_file'))return {ok:true,status:200,json:async()=>({message:{name:'FILE-EXISTING'}})};
+    if(url.endsWith('send_message'))return {ok:false,status:503,json:async()=>({business_error_code:'service_unavailable'})};
+    if(url.endsWith('cancel_task')){cancelled=true;return {ok:true,status:200,json:async()=>({message:{task_id:businessTask,status:'cancelled'}})};}
+    return {ok:true,status:200,json:async()=>({message:{mode:'business',tasks:[{task_id:businessTask,message:'保存这份食谱',status:cancelled?'cancelled':'running',events:[],next_after:null}]}})};
+  };
+  await run('submitMessage({preventDefault(){}})');
+  assert.equal(run('allowed'),true);assert.equal(run('pendingSend'),null);assert.equal(run('activeTask'),businessTask);assert.equal(nodes.get('chat-send').disabled,false);
+  assert.equal(streams.length,1);assert.equal(streams[0].closed,false);assert.equal(nodes.get('chat-send').attributes['aria-label'],'停止处理');
+  await run('submitMessage({preventDefault(){}})');
+  assert.equal(calls.filter(url=>url.endsWith('send_message')).length,1);assert.equal(calls.filter(url=>url.endsWith('upload_file')).length,1);assert.equal(calls.filter(url=>url.endsWith('cancel_task')).length,1);
+  assert.equal(run('activeTask'),null);
+});
+
+test('typed readiness failure never certifies an unused id even with a contradictory not-accepted marker',async()=>{
+  const {run,nodes,context}=setup({mode:'business'});nodes.get('chat-input').value='办理业务';
+  context.fetch=async url=>({ok:!url.endsWith('send_message'),status:503,json:async()=>url.endsWith('send_message')?
+    {business_error_code:'service_unavailable',business_request_not_accepted:true}:{message:{mode:'business',tasks:[]}}});
+  await run('submitMessage({preventDefault(){}})');assert.equal(run('pendingSend.payload.request_id'),businessTask);assert.equal(run('allowed'),true);
+});
+
+test('generic 400 and 422 preserve unresolved business identity instead of proving not accepted',async()=>{
+  for(const status of [400,422]){
+    const {run,nodes,context}=setup({mode:'business'}),posts=[];nodes.get('chat-input').value='办理业务';
+    context.fetch=async(url,options)=>{if(url.endsWith('send_message'))posts.push(JSON.parse(options.body));return {ok:!url.endsWith('send_message'),status,json:async()=>url.endsWith('send_message')?{}:{message:{mode:'business',tasks:[]}}};};
+    await run('submitMessage({preventDefault(){}})');assert.equal(run('pendingSend.payload.request_id'),businessTask);
+    await run('submitMessage({preventDefault(){}})');assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);
+  }
+});
+
+test('actual 401 and 403 remain denied even if the body claims service unavailable',async()=>{
+  for(const status of [401,403]){
+    const {run,nodes,context}=setup({mode:'business'}),calls=[];nodes.get('chat-input').value='办理业务';
+    context.fetch=async url=>{calls.push(url);assert.doesNotMatch(url,/meal_chat\./);return {ok:!url.endsWith('send_message'),status,json:async()=>url.endsWith('send_message')?{business_error_code:'service_unavailable'}:{message:{mode:'business',tasks:[]}}};};
+    await run('submitMessage({preventDefault(){}})');assert.equal(run('allowed'),false);assert.equal(nodes.get('chat-send').disabled,true);
+    assert.equal(run('pendingSend.payload.request_id'),businessTask);await run('submitMessage({preventDefault(){}})');assert.equal(calls.filter(url=>url.endsWith('send_message')).length,1);
+  }
+});
+
 test('replacing an unresolved business attachment cannot create a new request',async()=>{
   const {run,nodes,context}=setup({mode:'business'}),calls=[];
   nodes.get('chat-input').value='分析文件';nodes.get('chat-file').files=[{name:'changed.csv',size:20}];

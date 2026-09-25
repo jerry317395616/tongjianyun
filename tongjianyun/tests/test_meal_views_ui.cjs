@@ -90,12 +90,25 @@ test('registered business views render data and safe clickable details',async()=
   button.listeners.click();await Promise.resolve();
   assert.equal(context.requests[2].view,'business_record');assert.equal(context.requests[2].record,'PO1');
 });
-test('calendar result updates shared conversation context without a refresh button',()=>{
-  const {run,context}=setup();context.refreshes=0;
-  run("document.addEventListener('meal-scene:refresh',()=>refreshes++);showCalendar({day:'2026-10-01',meal:'dinner'})");
-  assert.equal(run('refreshes'),1);
+test('calendar result reads through its controller without duplicate refresh events',async()=>{
+  const {run,context}=setup();context.refreshes=0;context.reads=[];
+  run("registerRecipeCalendarReader(async choice=>{reads.push(choice);return {status:'rendered',...choice};});document.addEventListener('meal-scene:refresh',()=>refreshes++)");
+  const result=await run("showCalendar({day:'2026-10-01',meal:'dinner'})");
+  assert.equal(result.status,'rendered');assert.equal(run('refreshes'),0);assert.equal(context.reads.length,1);
   assert.deepEqual(JSON.parse(run('JSON.stringify(currentViewContext())')),{view:'recipe_week',day:'2026-10-01',meal:'dinner'});
-  run("calendarContext({day:'2026-10-01',meal:'dinner'})");assert.equal(run('refreshes'),1);
+  run("calendarContext({day:'2026-10-01',meal:'dinner'})");assert.equal(run('refreshes'),0);
+});
+
+test('recipe view fails explicitly without an initialized calendar controller',async()=>{
+  const {run,context,nodes}=setup();context.fetcher=async()=>({...data,selection:{view:'recipe_week',day:'2026-09-21',meal:'lunch'}});
+  await run('initializeViews({request:fetcher})');
+  const result=await run("showBusinessView({view:'recipe_week',day:'2026-09-21',meal:'lunch'})");
+  assert.equal(result.status,'failed');assert.match(result.message,/尚未初始化/);assert.match(nodes.get('view-status').textContent,/尚未初始化/);
+});
+
+test('calendar controller cannot acknowledge another date as rendered',async()=>{
+  const {run}=setup();run("registerRecipeCalendarReader(async choice=>({status:'rendered',...choice,day:'2026-09-22'}))");
+  const result=await run("showCalendar({day:'2026-09-21',meal:'lunch'})");assert.equal(result.status,'failed');assert.match(result.message,/不一致/);
 });
 test('catalog, stock, classroom and ingredient views accept registered safe components',()=>{
   const {run,context}=setup();

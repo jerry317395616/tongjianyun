@@ -1,5 +1,5 @@
 // Registered components only. Model messages, HTML and executable code are never rendered here.
-import {mealContext,setMealContext,refreshMealData} from './state.js?v=meal-header-20260925-1';
+import {mealContext,setMealContext,refreshMealData,readRecipeCalendar} from './state.js?v=meal-calendar-read-20260926-2';
 const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
   'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
@@ -104,21 +104,26 @@ function buildSceneNavigation(actions){
   date.addEventListener('change',change);meal.addEventListener('change',change);
   $('business-canvas').insertBefore(bar,$('view-status'));syncSceneNavigation();
 }
-function calendarContext(choice){
+function calendarContext(choice,{refresh=true}={}){
   if(!choice?.day||!choice?.meal)return;
   const changed=setMealContext(choice);if(choice.group)sceneGroup=choice.group;
   document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{...mealContext(),group:sceneGroup}}));
-  syncSceneNavigation();if(changed&&sceneRecipeAllowed)refreshMealData({calendarOnly:true});
+  syncSceneNavigation();if(refresh&&changed&&sceneRecipeAllowed)refreshMealData({calendarOnly:true});
 }
 function showCalendar(choice,options={}){
   if(!sceneRecipeAllowed)return outcome('blocked',currentViewContext(),'当前账号没有食谱读取权限，请使用场景首页中的可用业务。');
   if(!options.checked&&!mayLeaveNative(options.origin))return outcome('blocked',currentViewContext(),'当前业务有未保存的修改，已保留原页面。');
-  ++ticket;loadingTicket=0;disposeNative();registerSession=null;current=null;notice('');$('business-view').hidden=true;$('recipe-workspace').hidden=false;
+  const turn=++ticket;loadingTicket=turn;disposeNative();registerSession=null;current=null;notice('正在读取周历…');$('business-view').hidden=true;$('recipe-workspace').hidden=false;
   $('business-view').classList.toggle('has-native',false);
   $('business-canvas').setAttribute('aria-label','本周膳食总览');
   document.dispatchEvent(new CustomEvent('meal-scene:view-change',{detail:{view:'recipe_week'}}));
-  calendarContext(choice);
-  return outcome('rendered',currentViewContext());
+  calendarContext(choice,{refresh:false});
+  const context=mealContext(),selection={view:'recipe_week',...context};
+  return readRecipeCalendar(context).then(result=>{
+    if(turn!==ticket||mealContext().day!==context.day||mealContext().meal!==context.meal)return outcome('superseded');
+    if(result.status!=='rendered'){const text=result.message||'周历尚未读取完成，请重试。';notice(text,true);return outcome(result.status,selection,text);}
+    notice('');return outcome('rendered',selection);
+  }).finally(()=>{if(loadingTicket===turn)loadingTicket=0;});
 }
 function actionButton(action){
   const button=node('button',action.label,'view-action');button.type='button';

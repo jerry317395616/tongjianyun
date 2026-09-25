@@ -1,6 +1,7 @@
 """Read-model, state semantics and write boundaries, no production facts written."""
 import unittest
 from unittest.mock import patch, MagicMock
+from contextlib import ExitStack
 from datetime import date, datetime
 from pathlib import Path
 import ast
@@ -70,6 +71,106 @@ class MealSceneTests(unittest.TestCase):
         with patch.object(service,'can',return_value=True),patch.object(service.frappe,'get_list',return_value=[_dict(name=str(i)) for i in range(21)]) as read:
             result=service.visible_rows('Purchase Order',['name'],offset=20)
             self.assertEqual(len(result['rows']),20);self.assertTrue(result['has_more']);self.assertEqual(read.call_args.kwargs['limit_start'],20)
+
+    def overview(self, day, rows=(), *, recipe_allowed=True, meal='lunch'):
+        """Exercise real visible_rows while the original permission query is mocked."""
+        def permitted_rows(doctype, *, filters, fields, order_by, limit_start, limit_page_length):
+            self.assertEqual(doctype, service.RECIPE)
+            self.assertEqual(set(filters), {'is_deleted', 'workflow_status', 'week_start', 'week_end'})
+            self.assertEqual(filters['is_deleted'], 0)
+            self.assertEqual(filters['workflow_status'], ['!=', '已归档'])
+            self.assertEqual(filters['week_start'][0], '<=')
+            self.assertEqual(filters['week_end'][0], '>=')
+            selected = [row for row in rows if row.get('visible', True)
+                        and not row.get('is_deleted', 0) and row.get('workflow_status') != '已归档'
+                        and row['week_start'] <= filters['week_start'][1]
+                        and row['week_end'] >= filters['week_end'][1]]
+            return [_dict({field: row.get(field) for field in fields})
+                    for row in selected[limit_start:limit_start + limit_page_length]]
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(service, 'require_access'))
+            stack.enter_context(patch.object(service, 'today', return_value='2026-09-25'))
+            stack.enter_context(patch.object(service, 'can', side_effect=lambda dt, action='read':
+                                             recipe_allowed if dt == service.RECIPE else False))
+            plans = stack.enter_context(patch.object(service, 'class_plans', return_value={'rows': []}))
+            stack.enter_context(patch.object(service, 'purchase_rows', return_value={'rows': []}))
+            stack.enter_context(patch.object(service.frappe.db, 'get_value', return_value='Synthetic user'))
+            query = stack.enter_context(patch.object(service.frappe, 'get_list', side_effect=permitted_rows))
+            unscoped = stack.enter_context(patch.object(service.frappe, 'get_all'))
+            sql = stack.enter_context(patch.object(service.frappe.db, 'sql'))
+            result = service.get_overview(day, meal)
+            plans.assert_called_once_with(date.fromisoformat(day), meal)
+            unscoped.assert_not_called(); sql.assert_not_called()
+            return result, query.call_args_list
+
+    def test_sunday_discovers_weekday_recipe_without_claiming_sunday_supply(self):
+        row = {'name': 'WEEKDAY', 'week_start': '2026-09-21', 'week_end': '2026-09-25', 'workflow_status': '草稿'}
+        result, calls = self.overview('2026-09-27', [row], meal='breakfast')
+        self.assertEqual(result['day'], '2026-09-27'); self.assertEqual(result['meal'], 'breakfast')
+        self.assertEqual(result['recipes'], {'available': True, 'rows': [], 'has_more': False})
+        self.assertEqual([r['name'] for r in result['week_recipes']['rows']], ['WEEKDAY'])
+        self.assertEqual((result['week_recipes']['start'], result['week_recipes']['end']), ('2026-09-21', '2026-09-27'))
+        self.assertEqual(calls[0].kwargs['filters']['week_end'], ['>=', '2026-09-27'])
+        self.assertEqual(calls[1].kwargs['filters']['week_end'], ['>=', '2026-09-21'])
+
+    def test_natural_week_intersection_handles_new_year_without_switching_date(self):
+        rows = [{'name': 'DECEMBER', 'week_start': '2025-12-29', 'week_end': '2025-12-31'},
+                {'name': 'JANUARY', 'week_start': '2026-01-01', 'week_end': '2026-01-02'},
+                {'name': 'PRIOR', 'week_start': '2025-12-22', 'week_end': '2025-12-28'},
+                {'name': 'NEXT', 'week_start': '2026-01-05', 'week_end': '2026-01-09'}]
+        result, _ = self.overview('2026-01-04', rows)
+        self.assertEqual(result['day'], '2026-01-04')
+        self.assertEqual((result['week_recipes']['start'], result['week_recipes']['end']), ('2025-12-29', '2026-01-04'))
+        self.assertEqual([r['name'] for r in result['week_recipes']['rows']], ['DECEMBER', 'JANUARY'])
+        self.assertEqual(result['recipes']['rows'], [])
+
+    def test_empty_week_is_visible_empty_not_unavailable(self):
+        result, calls = self.overview('2026-09-27')
+        self.assertEqual(result['week_recipes'], {'available': True, 'rows': [], 'has_more': False,
+                                                 'start': '2026-09-21', 'end': '2026-09-27'})
+        self.assertEqual(len(calls), 2)
+
+    def test_week_multiple_recipes_and_paging_do_not_silently_choose_one(self):
+        rows = [{'name': 'R' + str(i), 'week_start': '2026-09-21', 'week_end': '2026-09-25'} for i in range(21)]
+        result, calls = self.overview('2026-09-27', rows)
+        self.assertEqual(len(result['week_recipes']['rows']), 20)
+        self.assertTrue(result['week_recipes']['has_more'])
+        self.assertEqual(calls[1].kwargs['limit_page_length'], 21)
+        self.assertNotIn('selected_recipe', result)
+
+    def test_week_query_retains_account_rows_and_lifecycle_filters(self):
+        normal = {'name': 'VISIBLE', 'week_start': '2026-09-21', 'week_end': '2026-09-25'}
+        rows = [normal, {**normal, 'name': 'HIDDEN', 'visible': False},
+                {**normal, 'name': 'DELETED', 'is_deleted': 1},
+                {**normal, 'name': 'ARCHIVED', 'workflow_status': '已归档'}]
+        result, calls = self.overview('2026-09-27', rows)
+        self.assertEqual([r['name'] for r in result['week_recipes']['rows']], ['VISIBLE'])
+        self.assertEqual(len(calls), 2)
+        for call in calls:
+            self.assertNotIn('ignore_permissions', call.kwargs)
+
+    def test_week_without_recipe_permission_never_queries_recipe_rows(self):
+        result, calls = self.overview('2026-09-27', recipe_allowed=False)
+        self.assertEqual(calls, [])
+        self.assertFalse(result['recipes']['available']); self.assertFalse(result['week_recipes']['available'])
+        self.assertEqual(result['week_recipes']['rows'], [])
+
+    def test_daily_coverage_is_unchanged_when_week_has_other_visible_dates(self):
+        rows = [{'name': 'TODAY', 'week_start': '2026-09-23', 'week_end': '2026-09-23'},
+                {'name': 'MONDAY', 'week_start': '2026-09-21', 'week_end': '2026-09-21'},
+                {'name': 'FRIDAY', 'week_start': '2026-09-25', 'week_end': '2026-09-25'}]
+        result, calls = self.overview('2026-09-23', rows)
+        self.assertEqual([r['name'] for r in result['recipes']['rows']], ['TODAY'])
+        self.assertEqual([r['name'] for r in result['week_recipes']['rows']], ['TODAY', 'MONDAY', 'FRIDAY'])
+        self.assertEqual(calls[0].kwargs['filters'], {'is_deleted': 0, 'workflow_status': ['!=', '已归档'],
+            'week_start': ['<=', '2026-09-23'], 'week_end': ['>=', '2026-09-23']})
+
+    def test_overview_entry_denial_precedes_both_recipe_queries(self):
+        with patch.object(service, 'require_access', side_effect=frappe.PermissionError), \
+                patch.object(service, 'visible_rows') as query:
+            with self.assertRaises(frappe.PermissionError):
+                service.get_overview('2026-09-27')
+            query.assert_not_called()
 
     def test_unknown_document_kind_rejected(self):
         with patch.object(service.frappe,'throw',side_effect=ValueError),self.assertRaises(ValueError):service.purchase_rows(date(2026,9,23),'User')

@@ -12,8 +12,8 @@ function setup(search=''){
   run(read('../public/meal_scene/state.js').replace(/export /g,''));
   run('const h=esc,n=number;');
   run(read('../public/meal_scene/app.js').replace(/^import .*;\r?\n/gm,'').replace(/load\(\);\s*$/,''));
-  run('sceneBootstrap={recipe_calendar:true};'); // Existing calendar tests run after authorized bootstrap.
-  run("api=async(method,args)=>{requests.push({method,...args});return {day:args.day||'2026-09-25',meal:args.meal,user_label:'老师',recipes:{rows:[]}}};renderWeekOverview=()=>{};");
+  run("getSceneBootstrap=async()=>({recipe_calendar:true,day:mealContext().day||'2026-09-25',meal:mealContext().meal,user_label:'老师'});");
+  run("api=async(method,args)=>{requests.push({method,...args});return {day:args.day,meal:args.meal,user_label:'老师',recipes:{rows:[]},week_recipes:{available:true,rows:[],has_more:false}}};renderWeekOverview=()=>{};");
   return {run,requests,document};
 }
 test('header contains brand and account but no date, meal or refresh controls',()=>{
@@ -23,6 +23,18 @@ test('header contains brand and account but no date, meal or refresh controls',(
   assert.doesNotMatch(html,/id="(?:day|meal|refresh)"/);
   assert.doesNotMatch(header,/<(?:input|select|button)\b|class="filters"/);
 });
+
+test('calendar ESM entrypoints share one cache generation and one state instance',()=>{
+  const generation='meal-calendar-read-20260926-2';
+  const html=read('../www/tongjianyun-meal-scene.html');
+  for(const entry of ['app','chat'])assert(html.includes(`/meal_scene/${entry}.js?v=${generation}`));
+  for(const entry of ['app','chat','views','scene_bootstrap']){
+    const source=read(`../public/meal_scene/${entry}.js`);
+    const imports=[...source.matchAll(/from '\.\/(state|views|scene_bootstrap)\.js\?v=([^']+)'/g)];
+    assert(imports.some(match=>match[1]==='state'),entry+' must import shared state');
+    for(const match of imports)assert.equal(match[2],generation,entry+' has a stale or split ESM dependency');
+  }
+});
 test('deep link date and meal still initialize the workspace without controls',async()=>{
   const {run,requests}=setup('?day=2026-09-24&meal=dinner');await run('load()');
   assert.deepEqual(JSON.parse(JSON.stringify(requests[0])),{method:'get_overview',day:'2026-09-24',meal:'dinner'});
@@ -31,7 +43,7 @@ test('deep link date and meal still initialize the workspace without controls',a
 test('missing or invalid URL values keep server-date and lunch defaults',async()=>{
   for(const search of ['','?day=bad&meal=bad']){
     const {run,requests}=setup(search);await run('load()');
-    assert.equal(requests[0].day,'');assert.equal(requests[0].meal,'lunch');
+    assert.equal(requests[0].day,'2026-09-25');assert.equal(requests[0].meal,'lunch');
     assert.equal(run('mealContext().day'),'2026-09-25');
   }
 });
@@ -39,8 +51,8 @@ test('weekly cell selection and completion refresh do not need header DOM',async
   const {run,requests,document}=setup('?day=2026-09-24&meal=lunch');await run('load()');
   const selected={dataset:{workbenchDate:'2026-09-22',workbenchMeal:'morning_snack'}};
   document.dispatchEvent({type:'click',target:{closest:selector=>selector==='[data-workbench-date][data-workbench-meal]'?selected:null}});
-  await Promise.resolve();
+  await run('load()');
   assert.equal(run('mealContext().day'),'2026-09-22');assert.equal(run('mealContext().meal'),'morning_snack');
-  run('refreshMealData()');await Promise.resolve();
+  run('refreshMealData()');await run('load()');
   assert.equal(requests.length,3);assert.equal(requests[2].day,'2026-09-22');
 });

@@ -177,7 +177,8 @@ class BusinessWorker:
     """
     def __init__(self, store, runtime: Runtime, *, read_attendance: Callable,
                  model_key: Callable, proxy_factory=TaskProxy, poll_seconds=0.2, read_tools=None,
-                 write_tools=None, catalog_tools=None, attachment_tools=None, proposal_tools=None, recipe_tools=None, tool_guard=None):
+                 write_tools=None, catalog_tools=None, attachment_tools=None, proposal_tools=None, recipe_tools=None, tool_guard=None,
+                 read_observer=None):
         required = ('ready', 'bind', 'start', 'poll', 'stop', 'record_projection', 'observe', 'close')
         if any(not callable(getattr(runtime, method, None)) for method in required):
             raise ValueError('A complete trusted native runtime connector is required')
@@ -208,6 +209,8 @@ class BusinessWorker:
                 raise ValueError('Draft writes require the same durable gate in worker and web observation')
         if tool_guard is not None and not callable(tool_guard):
             raise ValueError('An additional trusted tool restriction must be callable')
+        if read_observer is not None and not callable(read_observer):
+            raise ValueError('A trusted read observer must be callable')
         if write_tools is not None:
             from tongjianyun.business_agent_writes import BusinessWrites
             if (not isinstance(write_tools, BusinessWrites)
@@ -229,6 +232,9 @@ class BusinessWorker:
         # Trusted deployment/QA may only add restrictions. No HTTP/model
         # payload configures this callback, and it never replaces authorization.
         self.tool_guard = tool_guard
+        # Construction-only evidence sink, never selected by HTTP or the model.
+        # Observes successful source callbacks, not model/browser consumption.
+        self.read_observer = read_observer
 
     def run(self, identity, job_id):
         if os.name == 'posix' and os.geteuid() == 0:
@@ -269,6 +275,16 @@ class BusinessWorker:
                 if proxy is not None:
                     proxy.close()
 
+        def observed_read(tool, arguments, result):
+            if self.read_observer is not None:
+                # Isolated JSON values prevent instrumentation from replacing
+                # or mutating the authoritative adapter result delivered below.
+                observed = json.loads(json.dumps({'arguments': arguments, 'result': result}, allow_nan=False))
+                self.read_observer(claim, tool, observed['arguments'], observed['result'])
+                if not authorize():
+                    raise PermissionError('Business authority changed during read observation')
+            return result
+
         def read_tool(tool, arguments, call_id):
             if not authorize():
                 raise PermissionError('Business task no longer accepts tools')
@@ -280,12 +296,12 @@ class BusinessWorker:
                 result = self.attachment_tools(claim, tool, arguments)
                 if not authorize():
                     raise PermissionError('Attachment authority changed before delivery')
-                return result
+                return observed_read(tool, arguments, result)
             if tool == 'recipe_read' and self.recipe_tools is not None:
                 result = self.recipe_tools(claim, tool, arguments)
                 if not authorize():
                     raise PermissionError('Recipe authority changed before delivery')
-                return result
+                return observed_read(tool, arguments, result)
             if tool in {'proposal_create', 'proposal_read', 'proposal_update', 'proposal_list'} and self.proposal_tools is not None:
                 result = self.proposal_tools(claim, tool, arguments, call_id)
                 if not authorize():

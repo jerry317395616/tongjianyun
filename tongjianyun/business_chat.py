@@ -4,7 +4,7 @@ import uuid
 import frappe
 from werkzeug.wrappers import Response
 
-from tongjianyun.business_agent_service import application
+from tongjianyun.business_agent_service import application, BusinessServiceUnavailable
 from tongjianyun.business_agent_tasks import _uuid, _selection
 from tongjianyun.business_agent_transport import strict_json
 from tongjianyun.workspace_entry import require_account, mark_private_response
@@ -16,6 +16,11 @@ def _request(*, require_ready=False):
     try:
         app, _ = application(require_ready=require_ready)
         return app, app.viewer()
+    except BusinessServiceUnavailable:
+        # Do not claim this request never existed: it may be a user retry of an
+        # already accepted ID. Preserve the client's ID/File for reconciliation.
+        frappe.local.response['business_error_code'] = 'service_unavailable'
+        raise BusinessServiceUnavailable('助手服务暂不可用，请稍后恢复进度；不要重复上传或重复办理。') from None
     except Exception:
         raise frappe.PermissionError('业务对话当前不可用，请核对账号或联系管理员。') from None
 

@@ -2,6 +2,8 @@
 
 Read-only bootstrap is a UI hint. Each business view and original write service
 must still check the current actor's document and row permissions on every call.
+The server-only business_codex_scene_mode='business' selects the ordinary
+business chat for every scene account, without changing project permissions.
 """
 import frappe
 
@@ -47,6 +49,21 @@ def can_use_admin_chat():
     return bool(can_manage_projects() and has_access())
 
 
+def _business_scene_mode():
+    """Deployment routing policy, never a request value or a permission grant.
+
+    None preserves unconfigured/legacy sites. An invalid explicit setting fails
+    closed instead of silently selecting the administrator execution route.
+    This does not enable/provision an executor or change any native actor role.
+    """
+    mode = frappe.conf.get('business_codex_scene_mode')
+    if mode is None:
+        return False
+    if type(mode) is not str or mode != 'business':
+        raise frappe.PermissionError('站点业务对话模式配置无效，请联系管理员核对。')
+    return True
+
+
 def require_view_access(view):
     require_scene_account()
     if view == 'project_catalog':
@@ -66,6 +83,7 @@ def get_bootstrap(day=None, meal='lunch', group=None):
     from tongjianyun.meal_scene import business_day, meal_key, can, CLASS_MEAL
     from tongjianyun.attendance_scope import allowed_groups
 
+    business_mode = _business_scene_mode()
     day, meal = str(business_day(day)), meal_key(meal)
     context = {'day': day, 'meal': meal}
     roster = all(can(dt) for dt in ('Student', 'Student Group'))
@@ -78,7 +96,7 @@ def get_bootstrap(day=None, meal='lunch', group=None):
     calendar = can_read_calendar()
     attendance = roster and bool(groups) and all(can(dt) for dt in ('Student Attendance', 'Student Leave Application'))
     meals = roster and bool(groups) and can(CLASS_MEAL)
-    chat = can_use_admin_chat()
+    chat = not business_mode and can_use_admin_chat()
     from tongjianyun.business_agent_service import chat_access as business_chat_access
     business_access = business_chat_access() if not chat else {}
     business_chat = business_access.get('allowed', False)
@@ -98,7 +116,10 @@ def get_bootstrap(day=None, meal='lunch', group=None):
         **context, 'recipe_calendar': calendar,
         'chat': {'allowed': chat or business_chat,
                  'can_submit': chat or business_access.get('can_submit', False),
-                 'mode': 'admin_project' if chat else 'business' if business_chat else 'unavailable',
+                 # Keep the business route even when unprovisioned/offline:
+                 # "unavailable" is a legacy client state, not a fallback to
+                 # a stronger runner. Permission/readiness remain independent.
+                 'mode': 'business' if business_mode else 'admin_project' if chat else 'business' if business_chat else 'unavailable',
                  'reason': '' if chat else business_access['reason']},
         'default_view': navigation[0]['selection'], 'navigation': navigation,
         'scope': {'group_count': len(groups), 'selected_group': selected},
