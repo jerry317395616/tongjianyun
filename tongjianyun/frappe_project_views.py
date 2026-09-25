@@ -10,7 +10,7 @@ import frappe
 
 ROOT = Path('/home/zyd/frappe')
 VIEWS = {'project_catalog': '项目总览', 'frappe_catalog': '全部 Frappe 业务',
-         'frappe_doctype': '业务单据', 'frappe_document': '业务详情',
+         'frappe_doctype': '业务单据', 'frappe_document': '业务详情', 'frappe_new': '新建业务单据',
          'frappe_report': '业务报表', 'frappe_page': '业务页面', 'frappe_workspace': '业务工作区'}
 FIELDS = {'app', 'module', 'doctype', 'document', 'report', 'page', 'workspace', 'kind'}
 KINDS = {'doctype': '单据与资料', 'report': '报表', 'page': '业务页面', 'workspace': '工作区'}
@@ -27,7 +27,7 @@ def selection(value, default_day=None, default_meal='lunch'):
     from tongjianyun.meal_scene import business_day, meal_key
     allowed = {'view', 'day', 'meal', 'components'} | {
         'project_catalog': set(), 'frappe_catalog': {'app', 'module', 'kind', 'keyword', 'offset'},
-        'frappe_doctype': {'doctype'}, 'frappe_document': {'doctype', 'document'},
+        'frappe_doctype': {'doctype'}, 'frappe_document': {'doctype', 'document'}, 'frappe_new': {'doctype'},
         'frappe_report': {'report'}, 'frappe_page': {'page'}, 'frappe_workspace': {'workspace'},
     }[value['view']]
     if set(value) - allowed:
@@ -36,7 +36,7 @@ def selection(value, default_day=None, default_meal='lunch'):
     for key in allowed - {'view', 'day', 'meal', 'components', 'offset'}:
         if key in value:
             clean[key] = text_arg(value, key)
-    for key in {'frappe_doctype': ('doctype',), 'frappe_document': ('doctype', 'document'),
+    for key in {'frappe_doctype': ('doctype',), 'frappe_document': ('doctype', 'document'), 'frappe_new': ('doctype',),
                 'frappe_report': ('report',), 'frappe_page': ('page',), 'frappe_workspace': ('workspace',)}.get(value['view'], ()):
         if key not in clean:
             frappe.throw('请从业务目录选择目标，不要猜测业务编号。')
@@ -208,17 +208,140 @@ def slug(name):
     return quote(name.lower().replace(' ', '-'), safe='')
 
 
+def _workflow_capability(doctype, record=None):
+    """Use Frappe's current workflow, never guess an approval from role names."""
+    from frappe.model.workflow import get_workflow_name, get_transitions, has_approval_access
+    name = get_workflow_name(doctype)
+    if not name:
+        return {'configured': False, 'actions': [], 'reason': '未启用审批工作流。'}
+    if record is None:
+        return {'configured': True, 'actions': [], 'reason': '选择单据后核验当前审批步骤。'}
+    try:
+        transitions = get_transitions(record)
+        actions = sorted({row['action'] for row in transitions
+                          if has_approval_access(frappe.session.user, record, row)})
+    except (frappe.PermissionError, frappe.ValidationError):
+        return {'configured': True, 'actions': [], 'reason': '当前单据的工作流状态或权限需要在原表单核对。'}
+    return {'configured': True, 'actions': actions,
+            'reason': '原工作流将再次校验条件与审批权限。' if actions else '当前状态没有可执行的审批动作。'}
+
+
+def operation_capabilities(meta, record=None):
+    """Actor-scoped entry/state checks, not a promise that a write will succeed.
+
+    This does not execute a mutation, serialize record values, or introduce a
+    generic save API. Domain hooks, mandatory fields, links, accounting periods,
+    workflow conditions and concurrent changes remain the native form's job.
+    """
+    doctype = meta.name
+    single = bool(getattr(meta, 'issingle', False))
+    submittable = bool(getattr(meta, 'is_submittable', False))
+    recipe = doctype == 'Tongjianyun Recipe'
+    state = int(record.docstatus or 0) if record is not None else None
+    workflow = _workflow_capability(doctype, record)
+    operations = []
+
+    def add(key, title, supported=True, requires_record=False, state_ok=True, reason=''):
+        permission = bool(frappe.has_permission(doctype, key, doc=record)) if key != 'workflow' else bool(workflow['actions'])
+        available = bool(supported and permission and state_ok and (record is not None or not requires_record))
+        if not reason:
+            reason = ('原表单将再次校验业务规则。' if available else
+                      '此业务类型不支持。' if not supported else
+                      '当前账号没有此操作权限。' if not permission else
+                      '请选择具体单据后办理。' if requires_record and record is None else
+                      '当前单据状态不允许此操作。')
+        operations.append({'key': key, 'label': title, 'supported': bool(supported),
+                           'permission': permission, 'available': available,
+                           'requires_record': requires_record, 'reason': reason})
+
+    add('read', '查看')
+    add('create', '新建', not single and not recipe,
+        reason='每周食谱使用既有编排/导入服务，编辑更新原记录，不在这里另建副本。' if recipe else '')
+    submitted_edit = state == 1 and not any(getattr(field, 'allow_on_submit', False) for field in getattr(meta, 'fields', []))
+    add('write', '编辑', requires_record=not single, state_ok=state != 2 and not submitted_edit)
+    add('submit', '提交', submittable and not workflow['configured'], True, state == 0,
+        '请通过当前审批流程提交，不能绕过工作流。' if workflow['configured'] else '')
+    add('cancel', '取消', submittable and not workflow['configured'], True, state == 1,
+        '请通过当前审批流程取消，不能绕过工作流。' if workflow['configured'] else '')
+    add('amend', '修订', submittable and not single and not recipe, True, state == 2)
+    add('delete', '删除', not single and not recipe, True, state != 1,
+        '食谱保留修订及归档记录，不通过通用删除移除。' if recipe else '')
+    add('workflow', '审批', workflow['configured'], True, bool(workflow['actions']), workflow['reason'])
+    return {'version': 1, 'scope': 'record' if record is not None else 'entry',
+            'doctype': doctype, 'operations': operations, 'workflow_actions': workflow['actions'],
+            'final_validation_required': True,
+            'basis': '当前账号原 Frappe 权限、单据状态及工作流初检；未执行任何业务写入。'}
+
+
+def native_actions(doctype, choice, record=None):
+    """Add in-canvas native operations to a permission-checked business projection."""
+    try:
+        meta = _doctype(doctype, module_apps())
+    except (frappe.PermissionError, frappe.DoesNotExistError):
+        return []
+    ctx = _context(choice)
+    if record is not None:
+        record.check_permission('read')
+        capabilities = operation_capabilities(meta, record)
+        can_act = any(row['available'] for row in capabilities['operations'] if row['key'] not in {'read', 'create'})
+        return [_action('办理 / 编辑' if can_act else '原业务详情',
+                        {'view': 'frappe_document', 'doctype': doctype, 'document': record.name, **ctx})]
+    # A generic Recipe list exposes a new-record button; keep its entry on the
+    # existing weekly service instead, so editing does not create another week.
+    if doctype == 'Tongjianyun Recipe':
+        return []
+    actions = [_action('办理此业务', {'view': 'frappe_doctype', 'doctype': doctype, **ctx})]
+    if not meta.issingle and frappe.has_permission(doctype, 'create'):
+        actions.append(_action('新建', {'view': 'frappe_new', 'doctype': doctype, **ctx}))
+    return actions
+
+
+def capability_inventory():
+    """Read-only coverage evidence for every visible installed entry.
+
+    Available native routes are integration coverage, not end-to-end acceptance
+    of every possible business scenario. No document records are enumerated.
+    """
+    modules = module_apps()
+    entries = catalog_entries({}, modules)
+    result = []
+    for entry in entries:
+        row = {key: entry[key] for key in ('kind', 'name', 'module', 'title')}
+        row.update(app=modules[entry['module']], integration='native_in_scene', scenario_tested=False)
+        if entry['kind'] == 'doctype':
+            row['capabilities'] = operation_capabilities(_doctype(entry['name'], modules))
+        else:
+            row['capabilities'] = {'version': 1, 'scope': 'entry', 'operations': [
+                {'key': 'open', 'label': '打开', 'supported': True, 'permission': True,
+                 'available': True, 'requires_record': False,
+                 'reason': '保留原页面功能及权限；具体业务场景尚需逐项验收。'}],
+                'final_validation_required': True}
+        result.append(row)
+    return {'version': 1, 'site': frappe.local.site, 'installed_apps': frappe.get_installed_apps(),
+            'entries': result, 'entry_count': len(result),
+            'basis': '当前站点、当前账号可见的业务入口与原生办理能力；不是全场景测试通过声明。'}
+
+
 def native_view(choice):
     modules = module_apps()
     view = choice['view']
-    if view in {'frappe_doctype', 'frappe_document'}:
+    capabilities = None
+    if view in {'frappe_doctype', 'frappe_document', 'frappe_new'}:
         doc = _doctype(choice['doctype'], modules)
         route = '/desk/' + slug(doc.name)
+        record = None
         if view == 'frappe_document':
             record = frappe.get_doc(doc.name, choice['document'])
             record.check_permission('read')
             route += '/' + quote(record.name, safe='')
-        title = label(doc.name)
+        if view == 'frappe_new':
+            if doc.issingle or doc.name == 'Tongjianyun Recipe':
+                frappe.throw('此业务请使用原设置表单或已有周食谱编排服务，不另外创建副本。')
+            if not frappe.has_permission(doc.name, 'create'):
+                raise frappe.PermissionError('当前账号没有新建此业务的权限。')
+            route += '/new'
+        capabilities = operation_capabilities(doc, record)
+        title = ('新建 · ' if view == 'frappe_new' else '') + label(doc.name)
         module = doc.module
     elif view == 'frappe_report':
         doc = _report(choice['report'], modules)
@@ -235,13 +358,18 @@ def native_view(choice):
         doc = matches[0]
         route = '/desk/' + ('' if doc.public else 'private/') + slug(doc.name)
         title, module = label(doc.name), doc.module
+    actions = [_action('返回模块', {'view': 'frappe_catalog', 'app': modules[module], 'module': module, **_context(choice)})]
+    if view == 'frappe_doctype' and capabilities:
+        if any(row['key'] == 'create' and row['available'] for row in capabilities['operations']):
+            actions.insert(0, _action('新建', {'view': 'frappe_new', 'doctype': doc.name, **_context(choice)}))
     return {'title': title, 'subtitle': f'{frappe.local.site} · {modules[module]} · {label(module)}',
             'components': [_notice('原生业务界面：新建、编辑、审批等继续使用原系统权限与校验。顶部膳食日期不自动作为此业务的筛选条件。'),
                            {'type': 'frappe_frame', 'route': route, 'title': title}],
-            'actions': [_action('返回模块', {'view': 'frappe_catalog', 'app': modules[module], 'module': module, **_context(choice)})],
+            'actions': actions, 'capabilities': capabilities,
             'source': '原 Frappe 应用页面；只打开页面，不代表已经查询完毕或执行任何业务操作',
-            'summary': {'opened': True, 'app': modules[module], 'module': module, 'title': title,
-                        'answer': '已打开原生业务页面；未自动新建、编辑、审批或执行查询。'}}
+            'summary': {'route_verified': True, 'app': modules[module], 'module': module, 'title': title,
+                        'capabilities': capabilities,
+                        'answer': '已核验业务入口，正在左侧打开；未自动新建、编辑、审批或执行查询。'}}
 
 
 def project_directories(root=ROOT):
@@ -286,6 +414,8 @@ def tool_instruction():
             '[--module 模块原名] [--kind doctype|report|page|workspace] [--keyword 关键词] [--offset 0]。'
             '目录会回传原始名称，找不到中文名称时可用英文业务术语搜索；不能只因不在童健云52项清单就说不支持。'
             '打开现有业务：--view frappe_doctype --doctype 原始类型名；--view frappe_document --doctype 类型 --document 精确编号；'
+            '新建单据：--view frappe_new --doctype 已核实类型；这是在左侧打开原生新建表单，打开不等于已经保存。'
+            '食谱不走通用新建，每周唯一食谱必须使用既有编排服务更新原记录。'
             '--view frappe_report --report 报表原名；--view frappe_page --page 页面名；--view frappe_workspace --workspace 工作区原名。'
             '名称必须从实际元数据确认；报表需用户/代理填原生筛选，不把页面打开误说为数据已统计或操作已完成。'
             '已有童健云专用视图仍优先使用；其他业务使用原生模块，不临时拼假报表。'

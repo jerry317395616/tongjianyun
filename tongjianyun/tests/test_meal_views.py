@@ -94,7 +94,8 @@ class MealViewsTests(unittest.TestCase):
         self.assertEqual(set_user.call_args_list[0].args, ('actual-owner',))
         self.assertEqual(set_user.call_args_list[-1].args, ('Administrator',))
         self.assertNotIn('private', str(store.emit.call_args))
-        self.assertTrue(result['displayed'])
+        self.assertTrue(result['display_requested'])
+        self.assertNotIn('displayed', result)
 
     def test_cancelled_task_cannot_publish(self):
         from tongjianyun import meal_chat

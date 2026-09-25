@@ -48,12 +48,130 @@ class FrappeProjectTests(unittest.TestCase):
         choice = self.select(view='frappe_document', doctype='Sales Invoice', document='INV/0001')
         with patch.object(project, 'module_apps', return_value={'Accounts': 'erpnext'}), \
              patch.object(project, '_doctype', return_value=meta), patch.object(frappe, 'get_doc', return_value=record), \
+             patch.object(project, 'operation_capabilities', return_value={'operations': []}), \
              patch.object(frappe, '_', side_effect=lambda s, **kw: s), patch.object(frappe, 'local', SimpleNamespace(site='test')):
             result = project.native_view(choice)
         record.check_permission.assert_called_once_with('read')
         self.assertEqual(result['components'][1]['route'], '/desk/sales-invoice/INV%2F0001')
         self.assertEqual(set(result['components'][1]), {'type', 'title', 'route'})
         self.assertNotIn('amount', str(result))
+
+    def test_new_route_checks_create_and_never_creates_a_record(self):
+        meta = SimpleNamespace(name='Purchase Order', module='Buying', issingle=0, is_submittable=1)
+        choice = self.select(view='frappe_new', doctype='Purchase Order')
+        with patch.object(project, 'module_apps', return_value={'Buying': 'erpnext'}), \
+             patch.object(project, '_doctype', return_value=meta), \
+             patch.object(project, 'operation_capabilities', return_value={'operations': []}), \
+             patch.object(frappe, 'has_permission', return_value=True) as permission, \
+             patch.object(frappe, 'get_doc') as get_doc, \
+             patch.object(frappe, '_', side_effect=lambda s, **kw: s), \
+             patch.object(frappe, 'local', SimpleNamespace(site='test')):
+            result = project.native_view(choice)
+            permission.assert_called_once_with('Purchase Order', 'create')
+            get_doc.assert_not_called()
+            self.assertEqual(result['components'][1]['route'], '/desk/purchase-order/new')
+            permission.return_value = False
+            with self.assertRaises(frappe.PermissionError):
+                project.native_view(choice)
+
+    def test_new_route_rejects_single_recipe_and_extra_document(self):
+        with patch.object(frappe, 'throw', side_effect=ValueError):
+            for doctype, single in [('Company Settings', 1), ('Tongjianyun Recipe', 0)]:
+                meta = SimpleNamespace(name=doctype, module='Test', issingle=single)
+                with patch.object(project, 'module_apps', return_value={'Test': 'test'}), \
+                     patch.object(project, '_doctype', return_value=meta):
+                    with self.subTest(doctype=doctype), self.assertRaises(ValueError):
+                        project.native_view(self.select(view='frappe_new', doctype=doctype))
+            for extra in ({'document': 'existing'}, {'values': {'title': 'unsafe'}}, {'site': 'other'}):
+                with self.subTest(extra=extra), self.assertRaises(ValueError):
+                    self.select(view='frappe_new', doctype='Purchase Order', **extra)
+
+    def test_capabilities_keep_state_permissions_and_final_validation_separate(self):
+        meta = SimpleNamespace(name='Purchase Order', issingle=0, is_submittable=1, fields=[])
+        record = SimpleNamespace(docstatus=1, secret='never in response')
+        no_workflow = {'configured': False, 'actions': [], 'reason': '未启用审批工作流。'}
+        with patch.object(project, '_workflow_capability', return_value=no_workflow), \
+             patch.object(frappe, 'has_permission', side_effect=lambda dt, p, **kw: p != 'delete'):
+            data = project.operation_capabilities(meta, record)
+            rows = {row['key']: row for row in data['operations']}
+            self.assertFalse(rows['write']['available'])
+            self.assertFalse(rows['submit']['available'])
+            self.assertTrue(rows['cancel']['available'])
+            self.assertFalse(rows['delete']['permission'])
+            self.assertFalse(rows['amend']['available'])
+            self.assertTrue(data['final_validation_required'])
+            self.assertNotIn('secret', str(data))
+            record.docstatus = 2
+            rows = {row['key']: row for row in project.operation_capabilities(meta, record)['operations']}
+            self.assertTrue(rows['amend']['available'])
+            self.assertFalse(rows['write']['available'])
+            self.assertFalse(rows['cancel']['available'])
+
+    def test_entry_capabilities_do_not_claim_record_actions_are_executable(self):
+        meta = SimpleNamespace(name='Purchase Order', issingle=0, is_submittable=1, fields=[])
+        with patch.object(project, '_workflow_capability', return_value={'configured': False, 'actions': [], 'reason': 'none'}), \
+             patch.object(frappe, 'has_permission', return_value=True):
+            result = project.operation_capabilities(meta)
+        self.assertEqual(result['scope'], 'entry')
+        rows = {row['key']: row for row in result['operations']}
+        self.assertTrue(rows['create']['available'])
+        self.assertTrue(rows['submit']['supported'])
+        self.assertTrue(rows['submit']['permission'])
+        self.assertTrue(rows['submit']['requires_record'])
+        self.assertFalse(rows['submit']['available'])
+
+    def test_workflow_disables_direct_submit_and_returns_only_action_names(self):
+        meta = SimpleNamespace(name='Purchase Order', issingle=0, is_submittable=1, fields=[])
+        record = SimpleNamespace(docstatus=0)
+        with patch.object(project, '_workflow_capability', return_value={'configured': True, 'actions': ['Approve'], 'reason': 'checked'}), \
+             patch.object(frappe, 'has_permission', return_value=True):
+            result = project.operation_capabilities(meta, record)
+        rows = {row['key']: row for row in result['operations']}
+        self.assertFalse(rows['submit']['supported'])
+        self.assertFalse(rows['cancel']['available'])
+        self.assertTrue(rows['workflow']['available'])
+        self.assertEqual(result['workflow_actions'], ['Approve'])
+
+    def test_native_actions_keep_recipe_identity_and_deny_generic_new(self):
+        meta = SimpleNamespace(name='Tongjianyun Recipe', module='Tongjianyun', issingle=0)
+        record = MagicMock()
+        record.name = 'ORIGINAL-WEEK'
+        with patch.object(project, 'module_apps', return_value={'Tongjianyun': 'tongjianyun'}), \
+             patch.object(project, '_doctype', return_value=meta), \
+             patch.object(project, 'operation_capabilities', return_value={'operations': [{'key': 'write', 'available': True}]}):
+            self.assertEqual(project.native_actions(meta.name, {}), [])
+            result = project.native_actions(meta.name, {}, record)
+        self.assertEqual(result[0]['selection'], {'view': 'frappe_document', 'doctype': meta.name, 'document': 'ORIGINAL-WEEK'})
+        record.check_permission.assert_called_once_with('read')
+
+    def test_list_actions_only_offer_new_for_create_permission(self):
+        meta = SimpleNamespace(name='Supplier', module='Buying', issingle=0)
+        context = {'day': '2026-09-25', 'meal': 'lunch'}
+        with patch.object(project, 'module_apps', return_value={'Buying': 'erpnext'}), \
+             patch.object(project, '_doctype', return_value=meta), \
+             patch.object(frappe, 'has_permission', return_value=True) as permission:
+            actions = project.native_actions(meta.name, context)
+            self.assertEqual([row['selection']['view'] for row in actions], ['frappe_doctype', 'frappe_new'])
+            self.assertEqual(actions[1]['selection']['day'], context['day'])
+            permission.return_value = False
+            actions = project.native_actions(meta.name, context)
+            self.assertEqual([row['selection']['view'] for row in actions], ['frappe_doctype'])
+        with patch.object(project, 'module_apps', return_value={}), \
+             patch.object(project, '_doctype', side_effect=frappe.PermissionError):
+            self.assertEqual(project.native_actions(meta.name, context), [])
+
+    def test_inventory_distinguishes_native_coverage_from_scenario_acceptance(self):
+        entries = [{'kind': 'doctype', 'name': 'Student', 'module': 'Education', 'title': '学生'},
+                   {'kind': 'report', 'name': 'Enrollment', 'module': 'Education', 'title': '注册报表'}]
+        with patch.object(project, 'module_apps', return_value={'Education': 'education'}), \
+             patch.object(project, 'catalog_entries', return_value=entries), patch.object(project, '_doctype'), \
+             patch.object(project, 'operation_capabilities', return_value={'operations': []}), \
+             patch.object(frappe, 'get_installed_apps', return_value=['education']), \
+             patch.object(frappe, 'local', SimpleNamespace(site='test')):
+            result = project.capability_inventory()
+        self.assertEqual(result['entry_count'], 2)
+        self.assertTrue(all(row['integration'] == 'native_in_scene' for row in result['entries']))
+        self.assertTrue(all(row['scenario_tested'] is False for row in result['entries']))
 
     def test_denied_report_cannot_be_opened(self):
         doc = MagicMock(disabled=0, module='Accounts')

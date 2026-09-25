@@ -92,6 +92,7 @@ class BusinessViewsTests(unittest.TestCase):
         meta.get_field.return_value = SimpleNamespace(fieldtype='Data')
         fields = {c[0] for c in entry.columns} | {'docstatus'}
         with patch.object(business, 'guard'), patch.object(business, 'visible_fields', return_value=fields), \
+             patch.object(business, 'native_actions', return_value=[]), \
              patch.object(business, 'query_filters', return_value=([], [])), patch.object(frappe, 'get_meta', return_value=meta), \
              patch.object(frappe, 'get_list', side_effect=[rows, [frappe._dict(total=40)]]):
             result = business.records_view(self.select())
@@ -126,6 +127,7 @@ class BusinessViewsTests(unittest.TestCase):
         values = {'name': 'PO1', 'items': [frappe._dict(item_name='食材', qty=2, uom='Kg')]}
         doc.get.side_effect = lambda key: values.get(key)
         with patch.object(business, 'guard'), patch.object(business, 'visible_fields', return_value={'name'}), \
+             patch.object(business, 'native_actions', return_value=[]), \
              patch.object(business, 'scope_filters', return_value=[]), patch.object(frappe, 'get_list', return_value=['PO1']), \
              patch.object(frappe, 'get_doc', return_value=doc), \
              patch.object(frappe, 'get_meta', side_effect=lambda dt: parentmeta if dt == 'Purchase Order' else childmeta), \

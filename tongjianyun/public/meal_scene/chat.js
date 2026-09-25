@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-ingredients-20260925-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=unified-business-20260925-1';
 import {mealContext as context,refreshMealData} from './state.js?v=meal-header-20260925-1';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
@@ -64,6 +64,18 @@ function finish(view,event){
   for(const row of view.items.values()){if(row.dataset.state==='running'){row.dataset.state='stopped';row.textContent='· '+row.dataset.label+'（已结束）';}}
   if(activeTask===view.id){activeTask=null;source?.close();source=null;clearTimeout(recoveryTimer);controls();refreshMealData();input.focus();}
 }
+async function openViewResult(button,event,origin='user'){
+  if(button.disabled)return;
+  button.disabled=true;button.dataset.state='loading';button.textContent='正在显示：'+event.title;
+  try{
+    const result=await showBusinessView(event.selection,{origin});
+    const status=result?.status||'failed';button.dataset.state=status;
+    const native=['frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace'].includes(result?.selection?.view);
+    button.textContent=({rendered:native?'已打开业务窗口：':'已显示：',blocked:'未切换，可重试：',superseded:'已切换其他内容，查看：',failed:'未显示，点击重试：'}[status]||'查看：')+event.title;
+    button.title=result?.message||(status==='rendered'?'已显示业务视图，不代表已执行保存、审批等操作。':'业务视图未能显示。');
+  }catch(error){button.dataset.state='failed';button.textContent='未显示，点击重试：'+event.title;button.title=error.message||'业务视图未能显示。';}
+  finally{button.disabled=false;scrollMessages();}
+}
 function applyEvent(view,event,id,replay=false){
   if(id){if(view.seen.has(id))return;view.seen.add(id);view.cursor=id;}
   if(event.kind==='status'){view.status.textContent=event.text;}
@@ -82,8 +94,8 @@ function applyEvent(view,event,id,replay=false){
   }
   if(event.kind==='view'&&event.version===1){
     const button=document.createElement('button');button.type='button';button.className='chat-view-result';
-    button.textContent='查看：'+event.title+' ↗';button.addEventListener('click',()=>showBusinessView(event.selection));
-    view.root.insertBefore(button,view.status);if(!replay)showBusinessView(event.selection);
+    button.textContent='查看：'+event.title;button.addEventListener('click',()=>openViewResult(button,event));
+    view.root.insertBefore(button,view.status);if(!replay)openViewResult(button,event,'assistant');
   }
   if(event.kind==='terminal')finish(view,event);
   scrollMessages();

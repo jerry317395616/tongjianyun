@@ -20,7 +20,7 @@ NON_STRUCTURAL_CHANGE_KINDS = frozenset(
 		"workspace",
 	}
 )
-STRUCTURAL_CHANGE_KINDS = frozenset({"add-field", "modify-field"})
+STRUCTURAL_CHANGE_KINDS = frozenset({"add-field", "modify-field", "add-custom-business"})
 FORBIDDEN_CHANGE_KINDS = frozenset({"add-doctype", "modify-upstream-doctype-json", "database-ddl"})
 
 
@@ -53,6 +53,13 @@ def evaluate_extension_change(change_kind: str, *, explicitly_confirmed: bool = 
 		)
 
 	if change_kind in STRUCTURAL_CHANGE_KINDS:
+		if change_kind == "add-custom-business":
+			return ExtensionDecision(
+				change_kind=change_kind, owner_app=EXTENSION_APP, structural_change=True,
+				requires_explicit_confirmation=True, allowed=explicitly_confirmed,
+				reason=("仅允许已预览并确认的独立自定义业务；不得覆盖已有结构或注入代码。"
+				        if explicitly_confirmed else "先核对业务字段、权限和结构影响，再在业务视图确认启用。"),
+			)
 		return ExtensionDecision(
 			change_kind=change_kind,
 			owner_app=EXTENSION_APP,

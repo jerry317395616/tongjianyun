@@ -27,6 +27,13 @@ class TestExtensionPolicy(unittest.TestCase):
 				self.assertFalse(decision.allowed)
 				self.assertFalse(decision.requires_explicit_confirmation)
 
+	def test_independent_custom_business_requires_preview_confirmation(self):
+		self.assertFalse(evaluate_extension_change("add-custom-business").allowed)
+		decision = evaluate_extension_change("add-custom-business", explicitly_confirmed=True)
+		self.assertTrue(decision.allowed)
+		self.assertTrue(decision.structural_change)
+		self.assertTrue(decision.requires_explicit_confirmation)
+
 	def test_unknown_change_kind_is_rejected(self):
 		with self.assertRaisesRegex(ValueError, "未知的扩展变更类型"):
 			evaluate_extension_change("invented-change")

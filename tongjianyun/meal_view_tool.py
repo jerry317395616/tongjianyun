@@ -1,4 +1,4 @@
-"""Installed Codex's local read-only display tool; deliberately not HTTP exposed."""
+"""Task-bound view tool; blueprint proposals do not activate database schemas."""
 import argparse
 import json
 import os
@@ -9,9 +9,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--site', required=True)
     parser.add_argument('--task', required=True)
-    parser.add_argument('--view', required=True, choices=['students', 'class_students', 'meal_counts', 'recipe_week', 'recipe_nutrition',
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--propose-business', help='Absolute path to a data-only business proposal JSON')
+    mode.add_argument('--view', choices=['students', 'class_students', 'meal_counts', 'recipe_week', 'recipe_nutrition',
                         'business_catalog', 'business_list', 'business_record', 'stock', 'ingredient_nutrition', 'classroom_day', 'weekly_orders',
-                        'project_catalog', 'frappe_catalog', 'frappe_doctype', 'frappe_document', 'frappe_report', 'frappe_page', 'frappe_workspace'])
+                        'project_catalog', 'frappe_catalog', 'frappe_doctype', 'frappe_new', 'frappe_document', 'frappe_report', 'frappe_page', 'frappe_workspace', 'business_blueprint'])
+    parser.add_argument('--proposal-id', dest='proposal_id')
     parser.add_argument('--presentation', choices=['table', 'bars'])
     parser.add_argument('--components', nargs='+', choices=['stats', 'table', 'bars', 'notice', 'recipe_week'])
     parser.add_argument('--group')
@@ -39,10 +42,18 @@ def main():
     frappe.connect()
     try:
         from tongjianyun.meal_views import publish_for_task
-        requested = {k: v for k, v in vars(args).items() if k not in {'site', 'task'} and v is not None}
-        print(json.dumps(publish_for_task(args.task, requested), ensure_ascii=False, default=str))
+        if args.propose_business:
+            from tongjianyun.business_blueprints import propose_for_task, MAX_BYTES
+            path = Path(args.propose_business)
+            if not path.is_absolute() or not path.is_file() or path.stat().st_size > MAX_BYTES:
+                raise ValueError('方案必须是本机绝对路径的有限大小 JSON 文件')
+            result = propose_for_task(args.task, path.read_text(encoding='utf-8'))
+        else:
+            requested = {k: v for k, v in vars(args).items() if k not in {'site', 'task', 'propose_business'} and v is not None}
+            result = publish_for_task(args.task, requested)
+        print(json.dumps(result, ensure_ascii=False, default=str))
     except Exception as error:
-        print(json.dumps({'displayed': False, 'error': str(error)[:400]}, ensure_ascii=False))
+        print(json.dumps({'display_requested': False, 'error': str(error)[:400]}, ensure_ascii=False))
         raise SystemExit(1)
     finally:
         frappe.db.rollback()

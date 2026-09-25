@@ -1,4 +1,4 @@
-"""Read-only, permission-scoped projections for all audited project domains."""
+"""Permission-scoped projections with in-scene original business operation forms."""
 from calendar import monthrange
 from datetime import date, timedelta
 from math import isfinite
@@ -8,6 +8,7 @@ from frappe.model import get_permitted_fields
 
 from tongjianyun.business_view_registry import REGISTRY, DOMAINS
 from tongjianyun.meal_scene import business_day, meal_key
+from tongjianyun.frappe_project_views import native_actions
 
 VIEWS = {'business_catalog': '童健云常用业务', 'business_list': '业务记录',
          'business_record': '业务明细', 'stock': '当前库存', 'ingredient_nutrition': '食材营养统计',
@@ -259,7 +260,7 @@ def records_view(choice):
         blocks.append(notice('部分字段按当前账号权限隐藏。'))
     if choice['offset'] and not rows:
         blocks.append(notice('记录或筛选已变化，请回到第一页。', True))
-    actions = pager(choice, more)
+    actions = native_actions(entry.doctype, choice) + pager(choice, more)
     if period:
         unbounded = {k: v for k, v in choice.items() if k not in {'start_date', 'end_date'}}
         actions.append(action('查看全部日期', {**unbounded, 'period': 'all', 'offset': 0}))
@@ -278,6 +279,7 @@ def record_view(choice):
         raise frappe.PermissionError('单据不存在或不在当前可见范围。')
     doc = frappe.get_doc(entry.doctype, choice['record'])
     doc.check_permission('read')
+    operation_actions = native_actions(entry.doctype, choice, doc)
     doc.apply_fieldlevel_read_permissions()
     columns = columns_for(entry, fields)
     components = [table('单据资料', ['项目', '内容'], [
@@ -313,7 +315,7 @@ def record_view(choice):
         components.append(notice(f'可见明细共 {len(rows)} 条，本页 {len(page)} 条；不跨单位或币种求和。'))
     if entry.note:
         components.append(notice(entry.note))
-    actions = [action('返回列表（全部日期）', {'view': 'business_list', 'entity': choice['entity'], 'day': choice['day'], 'meal': choice['meal'], 'period': 'all'})]
+    actions = operation_actions + [action('返回列表（全部日期）', {'view': 'business_list', 'entity': choice['entity'], 'day': choice['day'], 'meal': choice['meal'], 'period': 'all'})]
     actions += pager(choice, choice['offset'] + PAGE_SIZE < max_children)
     if choice['entity'] == 'recipes':
         actions += [action('周营养分析', {'view': 'recipe_nutrition', 'recipe': doc.name, 'day': choice['day'], 'meal': choice['meal']}),
@@ -344,9 +346,9 @@ def catalog_view(choice):
             available += 1
             row['action'] = action('查看', {'view': 'business_list', 'entity': key, 'day': choice['day'], 'meal': choice['meal']})
         groups[entry.domain].append(row)
-    blocks = [notice('直接在右侧说要看什么，也可以点下面的业务名称。所有视图只读；没有数据与无权限会分别提示。')]
+    blocks = [notice('直接在右侧说要办理什么，也可以点业务名称。列表与统计为只读；通过“办理 / 编辑”“新建”在本场景内使用原业务表单，权限及校验不变。')]
     blocks.extend(table(domain, ['业务', '当前权限', '说明'], rows, collapsed=domain == '基础资料') for domain, rows in groups.items())
-    blocks.append(notice('尚未接入：独立的厨房加工执行、配送签收、食品留样、体格生长测量与过敏配餐流程。库存单或健康登记不能替代这些业务记录。', True))
+    blocks.append(notice('这里是常用业务摘要，不是全部能力清单。厨房加工、配送签收、食品留样、体格测量或过敏配餐等需求，先由助手检索全部已安装业务；确实缺少时再创建新业务。库存单或健康登记不能代替这些专门记录。'))
     return {'title': '童健云常用业务', 'subtitle': '童健云及已使用的教育、采购、库存、人事模块', 'components': blocks,
             'actions': [action('在园学生', {'view': 'students'}), action('用餐人数', {'view': 'meal_counts', 'day': choice['day'], 'meal': choice['meal']}),
                         action('班级当日出勤', {'view': 'classroom_day', 'day': choice['day'], 'meal': choice['meal']}),

@@ -5,17 +5,18 @@ class Element{
   replaceChildren(...nodes){this.children=nodes;}
   setAttribute(k,v){this.attrs[k]=v;}
   addEventListener(k,v){this.listeners[k]=v;}
-  click(){}
+  removeEventListener(k){delete this.listeners[k];}
+  click(){return this.listeners.click?.();}
 }
 function setup(){
   const nodes=new Map(),storage=new Map();
-  const events=new Map();
-  const document={getElementById(id){assert(!['day','meal','refresh'].includes(id),'removed header control requested: '+id);if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement:tag=>Object.assign(new Element(),{tag}),createDocumentFragment:()=>new Element(),addEventListener:(type,handler)=>events.set(type,handler),dispatchEvent:event=>events.get(event.type)?.(event)};
-  const context=vm.createContext({document,URLSearchParams,CustomEvent:class{constructor(type,options={}){this.type=type;this.detail=options.detail;}},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
+  const events=new Map(),windowEvents=new Map(),emitted=[];
+  const document={getElementById(id){assert(!['day','meal','refresh'].includes(id),'removed header control requested: '+id);if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement:tag=>Object.assign(new Element(),{tag}),createDocumentFragment:()=>new Element(),addEventListener:(type,handler)=>events.set(type,handler),dispatchEvent:event=>{emitted.push(event);return events.get(event.type)?.(event);}};
+  const context=vm.createContext({document,URL,URLSearchParams,location:{origin:'https://test.local'},window:{confirm:()=>true,addEventListener:(type,handler)=>windowEvents.set(type,handler)},CustomEvent:class{constructor(type,options={}){this.type=type;this.detail=options.detail;}},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../public/meal_scene/state.js'),'utf8').replace(/export /g,''),context);
   const source=fs.readFileSync(path.join(__dirname,'../public/meal_scene/views.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/export /g,'');
   vm.runInContext(source,context);
-  return {nodes,context,storage,run:code=>vm.runInContext(code,context)};
+  return {nodes,context,storage,emitted,windowEvents,run:code=>vm.runInContext(code,context)};
 }
 const data={version:1,selection:{view:'students'},title:'在园学生',subtitle:'scope',source:'Student',generated_at:'now',components:[{type:'stats',items:[{label:'人数',value:12,unit:'人'}]}]};
 test('view uses text nodes instead of executing model or record HTML',()=>{
@@ -112,4 +113,148 @@ test('native Frappe frame accepts only internal Desk routes and uses text labels
   for(const route of ['https://evil.test','//evil.test','javascript:alert(1)','/desk/../api','/desk/x?code=1','/desk/\\evil']){
     context.data.components[0].route=route;assert.throws(()=>run('buildComponents(data)'),/地址无效/);
   }
+});
+
+const nativeData={...data,selection:{view:'frappe_doctype',doctype:'Sales Invoice',day:'2026-09-24',meal:'lunch'},components:[{type:'frappe_frame',route:'/desk/sales-invoice',title:'销售发票'}]};
+async function nativeSetup(){
+  const fixture=setup();fixture.context.nativeData=nativeData;fixture.context.requestCount=0;
+  fixture.run('initializeViews({request:async()=>{requestCount++;return nativeData;}})');
+  await fixture.run('showBusinessView(nativeData.selection)');
+  return fixture;
+}
+const blueprint={type:'business_blueprint',proposal_id:'BP-1',revision:'a'.repeat(64),title:'新业务',description:'预览',fields:[{fieldname:'subject',label:'标题<script>',fieldtype:'Data',reqd:1},{fieldname:'status',label:'状态',fieldtype:'Select',reqd:0,options:'待处理\n已完成'}],state:'proposed',warnings:['尚未建立业务数据表'],can_activate:true};
+
+test('view promise reports actual rendering and failures without replacing old content',async()=>{
+  const {run,context,nodes,emitted}=setup();context.data=data;
+  run('initializeViews({request:async()=>data})');assert.equal((await run('showBusinessView({view:"students"})')).status,'rendered');
+  const original=nodes.get('view-content').children;
+  run('request=async()=>{throw Error("无权限")};');
+  assert.equal((await run('showBusinessView({view:"class_students",group:"secret"})')).status,'failed');
+  assert.equal(nodes.get('view-content').children,original);assert.equal(emitted.at(-1).detail.message,'无权限');
+  assert.equal((await run('showBusinessView({view:"not_registered"})')).status,'failed');
+});
+
+test('superseded views report superseded and task refresh cannot steal a pending selection',async()=>{
+  const {run,context,nodes}=setup();context.data=data;let resolve;
+  context.fetcher=()=>new Promise(r=>resolve=r);run('initializeViews({request:fetcher})');
+  const pending=run('showBusinessView({view:"students"})');
+  assert.equal((await run('showBusinessView({view:"recipe_week"},{origin:"refresh"})')).status,'blocked');
+  resolve(data);assert.equal((await pending).status,'rendered');assert.equal(nodes.get('view-title').textContent,data.title);
+  const old=run('showBusinessView({view:"students"})');run('showCalendar()');resolve(data);
+  assert.equal((await old).status,'superseded');
+});
+
+test('terminal refresh preserves the exact native iframe without another request',async()=>{
+  const {run}=await nativeSetup();const frame=run('nativeSession.frame');
+  const result=await run('showBusinessView(current,{origin:"refresh"})');
+  assert.equal(result.status,'rendered');assert.match(result.message,/未自动重载/);assert.equal(run('requestCount'),1);assert.equal(run('nativeSession.frame'),frame);
+  run('refreshMealData()');assert.equal(run('nativeSession.frame'),frame);assert.equal(run('requestCount'),1);
+});
+
+test('unsaved native form blocks both assistant switches and return-to-calendar',async()=>{
+  const {run,nodes}=await nativeSetup();run('nativeSession.frame.contentWindow={cur_frm:{is_dirty:()=>true}};window.confirm=()=>false;');
+  const frame=run('nativeSession.frame');
+  assert.equal((await run('showBusinessView({view:"students"},{origin:"assistant"})')).status,'blocked');
+  assert.equal(run('showCalendar().status'),'blocked');assert.equal(run('nativeSession.frame'),frame);assert.equal(run('requestCount'),1);
+  assert.equal(nodes.get('business-view').hidden,false);
+});
+
+test('confirmed native switch prompts once, and a failed target keeps the unsaved page',async()=>{
+  const {run}=await nativeSetup();run('nativeSession.frame.contentWindow={cur_frm:{is_dirty:()=>true}};globalThis.prompts=0;window.confirm=()=>{prompts++;return true};request=async()=>{throw Error("目标不可用")};');
+  const frame=run('nativeSession.frame');assert.equal((await run('showBusinessView({view:"students"})')).status,'failed');
+  assert.equal(run('prompts'),1);assert.equal(run('nativeSession.frame'),frame);assert.equal(run('nativeDirty()'),true);
+  run('request=async()=>nativeData');assert.equal((await run('showBusinessView({view:"frappe_doctype",doctype:"Sales Invoice"})')).status,'rendered');
+  assert.equal(run('prompts'),2);
+});
+
+test('edits made while a different view is loading are protected before replacement',async()=>{
+  const {run,context}=await nativeSetup();let resolve;context.fetcher=()=>new Promise(r=>resolve=r);context.data=data;run('request=fetcher;window.confirm=()=>false;');
+  const frame=run('nativeSession.frame'),pending=run('showBusinessView({view:"students"})');
+  run('nativeSession.dirty=true;nativeSession.revision++;');resolve(data);
+  assert.equal((await pending).status,'blocked');assert.equal(run('nativeSession.frame'),frame);
+});
+
+test('native load status does not claim saved or completed business actions',async()=>{
+  const {run}=await nativeSetup();const initial=run('nativeSession.status.textContent');assert.match(initial,/等待.*加载/);
+  run('nativeSession.frame.contentWindow={location:{origin:"https://test.local",pathname:"/desk/sales-invoice"}}');
+  run('nativeSession.frame.listeners.load()');assert.match(run('nativeSession.status.textContent'),/载入不代表保存、审批或查询已完成/);
+  run('nativeSession.frame.listeners.error()');assert.match(run('nativeSession.status.textContent'),/加载失败/);
+});
+
+test('native route context follows only canonical allowed selection keys',async()=>{
+  const {run}=await nativeSetup();
+  run('nativeSession.frame.contentWindow={frappe:{get_route:()=>["Form","Sales Invoice","INV/0001"]},cur_frm:{doc:{__islocal:0}}};');
+  assert.deepEqual(JSON.parse(run('JSON.stringify(currentViewContext())')),{view:'frappe_document',doctype:'Sales Invoice',document:'INV/0001',day:'2026-09-24',meal:'lunch'});
+  run('nativeSession.frame.contentWindow.cur_frm.doc.__islocal=1');assert.equal(run('currentViewContext().view'),'frappe_new');assert.equal(run('currentViewContext().document'),undefined);
+  run('nativeSession.frame.contentWindow.frappe.get_route=()=>["query-report","Stock Balance"];');assert.equal(run('currentViewContext().report'),'Stock Balance');assert.equal(run('currentViewContext().doctype'),undefined);
+  run('nativeSession.frame.contentWindow.frappe.get_route=()=>["https://evil.test", "token"];');assert.equal(run('currentViewContext().view'),'frappe_report');
+  assert.equal(run('currentViewContext().dirty'),undefined);assert.equal(run('currentViewContext().native_context'),undefined);
+});
+
+test('same-site Desk links stay in the frame and listeners are disposed on leaving',async()=>{
+  const {run,context}=await nativeSetup();const doc=new Element();context.innerDoc=doc;
+  run('nativeSession.frame.contentDocument=innerDoc;nativeSession.frame.contentWindow={location:{origin:"https://test.local",pathname:"/desk/sales-invoice"}};nativeSession.frame.src="https://test.local/desk/sales-invoice";nativeSession.frame.listeners.load();');
+  const anchor={href:'https://test.local/desk/customer',target:'_blank'};
+  doc.listeners.click({target:{closest:()=>anchor}});assert.equal(anchor.target,'_self');
+  doc.listeners.input();assert.equal(run('nativeDirty()'),true);
+  run('showCalendar()');assert.equal(Object.keys(doc.listeners).length,0);
+});
+
+test('parent unload warns for a dirty native form',async()=>{
+  const {run,windowEvents}=await nativeSetup();run('nativeSession.dirty=true');let prevented=false;
+  const event={preventDefault(){prevented=true;}};windowEvents.get('beforeunload')(event);
+  assert.equal(prevented,true);assert.equal(event.returnValue,'');
+});
+
+test('blueprint is an escaped preview and activation is never automatic',()=>{
+  const {run,context}=setup();context.block=blueprint;context.calls=[];run('request=(...args)=>calls.push(args)');
+  const section=run('renderBlueprint(block)');assert.equal(context.calls.length,0);
+  const table=section.children[2].children[1].children[0],rows=table.children[1].children;
+  assert.equal(rows[0].children[0].textContent,'标题<script>');assert.equal(rows[1].children[3].textContent,'待处理\n已完成');
+  for(const block of [{...blueprint,state:'conflict',can_activate:false},{...blueprint,can_activate:false},{...blueprint,state:'active',can_activate:false}]){
+    context.block=block;assert(!run('renderBlueprint(block)').children.some(child=>child.tag==='button'));
+  }
+  context.block={...blueprint,revision:'bad'};assert.throws(()=>run('renderBlueprint(block)'),/版本无效/);
+});
+
+test('blueprint activation requires explicit second confirmation and binds the preview revision',async()=>{
+  const {run,context}=setup();context.block=blueprint;context.calls=[];context.nativeData=nativeData;
+  run('request=async(...args)=>{calls.push(args);return args[1]?.method==="POST"?{doctype:"Sales Invoice"}:nativeData};window.confirm=()=>false;');
+  const section=run('renderBlueprint(block)'),button=section.children.at(-1);
+  await button.click();assert.equal(context.calls.length,0);
+  run('window.confirm=()=>true');await button.click();
+  assert.equal(context.calls.length,2);assert.match(context.calls[0][0],/business_blueprints.activate$/);
+  assert.equal(context.calls[0][1].method,'POST');assert.deepEqual(JSON.parse(context.calls[0][1].body),{proposal_id:'BP-1',revision:'a'.repeat(64)});
+  assert.equal(run('current.view'),'frappe_doctype');await button.click();assert.equal(context.calls.length,2);
+});
+
+test('uncertain activation does not offer a blind duplicate submission',async()=>{
+  const {run,context}=setup();context.block=blueprint;run('request=async()=>{throw Error("网络中断，结果需核对")};');
+  const section=run('renderBlueprint(block)'),button=section.children.at(-1);await button.click();
+  assert.equal(button.disabled,true);assert.match(section.children.at(-2).textContent,/结果需核对/);
+});
+
+test('activation completion does not steal a different business view',async()=>{
+  const {run,context}=setup();let resolve;context.block=blueprint;context.fetcher=()=>new Promise(r=>resolve=r);run('request=fetcher');
+  const button=run('renderBlueprint(block)').children.at(-1),pending=button.click();run('showCalendar()');resolve({doctype:'Sales Invoice'});await pending;
+  assert.equal(run('current'),null);
+});
+
+test('new-document and blueprint views are registered and native size uses remaining space',()=>{
+  const {run,context}=setup();context.data={...nativeData,selection:{view:'frappe_new'},components:[{type:'notice',text:'新建'}]};assert.equal(run('buildComponents(data)').children.length,1);
+  context.data={...data,selection:{view:'business_blueprint'},components:[blueprint]};assert.equal(run('buildComponents(data)').children.length,1);
+  const css=fs.readFileSync(path.join(__dirname,'../public/meal_scene/views.css'),'utf8');assert.doesNotMatch(css,/min-height:620px|100vh - 280px/);assert.match(css,/#business-view\.has-native/);
+});
+
+test('login, forbidden, blank and cross-origin frames do not claim a usable business page',async()=>{
+  const {run,context}=await nativeSetup();
+  for(const actual of [{origin:'https://test.local',pathname:'/login'},{origin:'https://other.test',pathname:'/desk/customer'},{origin:'null',pathname:'blank'},{origin:'https://test.local',pathname:'/desk/customer',title:'403 Forbidden'}]){
+    context.actual=actual;run('nativeSession.frame.contentWindow={location:actual};nativeSession.frame.contentDocument={title:actual.title||""};nativeSession.frame.listeners.load();');
+    assert.match(run('nativeSession.status.textContent'),/核对登录与权限/);assert.doesNotMatch(run('nativeSession.status.textContent'),/^页面已载入/);
+  }
+});
+
+test('custom page edits use local dirty tracking rather than a stale saved cur_frm',async()=>{
+  const {run}=await nativeSetup();run('nativeSession.dirty=true;nativeSession.frame.contentWindow={frappe:{pages:{"custom-page":{}},get_route:()=>["custom-page"]},cur_frm:{is_dirty:()=>false}};');
+  assert.equal(run('nativeDirty()'),true);assert.equal(run('currentViewContext().view'),'frappe_page');assert.equal(run('currentViewContext().page'),'custom-page');assert.equal(run('currentViewContext().doctype'),undefined);
 });

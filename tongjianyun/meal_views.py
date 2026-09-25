@@ -18,7 +18,8 @@ from tongjianyun.business_views import VIEWS as BUSINESS_VIEWS, FIELDS as BUSINE
 from tongjianyun.frappe_project_views import VIEWS as PROJECT_VIEWS, FIELDS as PROJECT_FIELDS, selection as project_selection, get_view as project_view
 
 VIEWS = {'students': '在园学生', 'class_students': '班级学生',
-         'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析', **BUSINESS_VIEWS, **PROJECT_VIEWS}
+         'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析',
+         'business_blueprint': '新业务方案', **BUSINESS_VIEWS, **PROJECT_VIEWS}
 LABELS = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                   ('早餐', '早点', '午餐', '午点', '晚餐')))
 PAGE_SIZE = 50
@@ -37,12 +38,19 @@ def selection(value, default_day=None, default_meal='lunch'):
         except (TypeError, ValueError):
             frappe.throw('展示指令格式无效。')
     from tongjianyun.meal_nutrition_view import FIELDS, nutrition_selection
-    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS):
+    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components', 'proposal_id'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS):
         frappe.throw('展示指令含不支持的内容。')
     view = value.get('view')
     if not isinstance(view, str) or view not in VIEWS:
         frappe.throw('暂不支持这种业务视图。')
     clean = {'view': view}
+    if view == 'business_blueprint':
+        from tongjianyun.business_views import text_arg
+        if set(value) - {'view', 'proposal_id', 'day', 'meal'} or not value.get('proposal_id'):
+            frappe.throw('请指定已保存的业务方案；不支持临时脚本或组件。')
+        return {**clean, 'proposal_id': text_arg(value, 'proposal_id')}
+    if 'proposal_id' in value:
+        frappe.throw('业务方案编号仅用于新业务方案视图。')
     if view in PROJECT_VIEWS:
         if 'components' in value:
             frappe.throw('原生业务保持完整页面，不支持裁剪权限提示或操作组件。')
@@ -233,6 +241,9 @@ def get_view(selection_json):
                   'components': [{'type': 'recipe_week'}],
                   'source': '当前工作台周历；保留原食谱权限和读取规则',
                   'summary': {'day': choice['day'], 'meal': LABELS[choice['meal']]}}
+    elif choice['view'] == 'business_blueprint':
+        from tongjianyun.business_blueprints import preview
+        result = preview(choice['proposal_id'])
     else:
         result = project_view(choice) if choice['view'] in PROJECT_VIEWS else get_business_view(choice) if choice['view'] in BUSINESS_VIEWS else {
             'students': students_view, 'class_students': class_students_view,
@@ -266,7 +277,8 @@ def publish_for_task(task_id, requested):
             raise ValueError('Task is no longer active')
         store.emit(task_id, {'kind': 'view', 'version': 1, 'selection': result['selection'],
                              'title': result['title']})
-        return {'displayed': True, 'title': result['title'], 'summary': result['summary']}
+        return {'display_requested': True, 'title': result['title'], 'summary': result['summary'],
+                'delivery': '已发送视图指令；浏览器会报告实际加载结果，不代表业务操作完成。'}
     finally:
         frappe.set_user(original_user)
 
@@ -279,7 +291,7 @@ def tool_instruction(task_id, site, context=None):
                f' --site {shlex.quote(site)} --task {shlex.quote(task_id)}')
     return ('\n【左侧业务视图】询问学生、班级、考勤、健康登记、膳食、采购、库存、财务、教职工或以下目录中的业务时，必须调用下面的只读展示工具，'
             '它按当前网页用户权限查真实数据并通过 SSE 切换左侧。不要临时改页面代码、不要只口头声称已切换。'
-            '工具回传 displayed=true 才能说已展示；失败则说明原因，不能编造数字。'
+            '工具回传 display_requested=true 只表示已发送展示指令，不表示浏览器已加载；请说“已查询，正在左侧打开”，失败则说明原因，不能编造数字。'
             '给用户的答复只说简短结论、范围和是否已展示；不要输出 displayed=true、内部 view 名、'
             '工具参数或代码，不要在聊天中重复整张班级表格。'
             '用餐结果含 summary.answer 时应沿用这个事实表述：null 表示未知而不是 0；'
@@ -315,6 +327,18 @@ def tool_instruction(task_id, site, context=None):
             '业务键目录：' + catalog_instruction() + '。'
             '所有展示只读；不能把展示成功说成已创建、确认、发布、付款或已完成业务。'
             '统计记录数不是去重人数、人次、金额或物料总量。没有记录不能推断没发生业务；无权限不能报0。'
-            '厨房加工、配送签收、食品留样、生长测量、过敏配餐尚未接入，不得假装有数据或临时改生产代码生成业务。'
+            '目录里没有的业务先检索全部已安装应用，不得假装已有记录。确需新业务时使用下面的新业务方案工具；复杂业务通过源码扩展、测试、部署实现，不在浏览器执行模型代码。'
             '后续沿用左侧筛选，除非用户要求调整。其他写操作仍使用原有业务服务与审批。'
-            + project_instruction() + '\n工具命令：' + command + '\n当前左侧选择：' + json.dumps(context or {'view': 'recipe_week'}, ensure_ascii=False))
+            + project_instruction()
+            + '\n【未知业务创建】用户明确要求新增业务而当前目录没有合适类型时，可生成数据方案 JSON，'
+            '再使用同一命令 --propose-business /绝对路径/方案.json（不要同时传 --view）。'
+            'JSON 仅含 key(小写英文业务键)、title(中文名)、description(用途)、fields 数组；'
+            '字段仅接受 fieldname、label、fieldtype、reqd、options。'
+            'fieldtype 支持 Data、Small Text、Date、Datetime、Int、Float、Currency、Check、Select、Link；'
+            'Select.options 是换行选项；Link.options 必须是已核实的现有类型。自动加入必填名称字段 title，无需重复提供。'
+            '方案将作为私有文件保存并展示；用户在左侧点击“确认启用”后才创建独立自定义类型、启用历史记录并进入全站目录。'
+            '初始只有 System Manager 可访问，不开放删除权限；不是完整专业审批、库存或会计模块。'
+            '不得替用户调用 activate、伪造确认、直接修改元数据或将方案状态说成启用成功。'
+            '复杂计算、子表、工作流、外部集成继续以 Tongjianyun 源码扩展实现：先复用原服务，补测试、验证权限与回滚，再发布到左侧。'
+            '优先复用已有类型；不能借新业务复制每周食谱、绕过原审批或创建敏感权限表。'
+            '\n工具命令：' + command + '\n当前左侧选择：' + json.dumps(context or {'view': 'recipe_week'}, ensure_ascii=False))

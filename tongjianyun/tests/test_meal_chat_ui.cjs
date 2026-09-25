@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const flush=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 
 class Element {
   constructor() { this.children=[]; this.dataset={}; this.style={}; this.textContent=''; this.classList={toggle(){}}; this.listeners={}; }
@@ -11,7 +12,7 @@ class Element {
   insertBefore(node,anchor) { this.children=this.children.filter(item=>item!==node); this.children.splice(this.children.indexOf(anchor),0,node); }
   setAttribute() {}
   addEventListener(type,handler) { this.listeners[type]=handler; }
-  click() { this.listeners.click?.(); }
+  click() { return this.listeners.click?.(); }
   focus() {}
 }
 
@@ -24,7 +25,7 @@ function setup() {
   };
   const opened=[];
   const refreshed=[];
-  const context = vm.createContext({document,clearTimeout,setTimeout,URLSearchParams,opened,context:()=>({day:'2026-09-24',meal:'lunch'}),refreshMealData:()=>refreshed.push(true),showBusinessView:value=>opened.push(value)});
+  const context = vm.createContext({document,clearTimeout,setTimeout,URLSearchParams,opened,context:()=>({day:'2026-09-24',meal:'lunch'}),refreshMealData:()=>refreshed.push(true),showBusinessView:value=>{opened.push(value);return {status:'rendered',selection:value};}});
   const source = fs.readFileSync(path.join(__dirname,'../public/meal_scene/chat.js'),'utf8');
   vm.runInContext(source.replace(/^import .*;\r?\n/gm,'').split("fileInput.addEventListener('change'")[0],context);
   vm.runInContext("const view=taskView({task_id:'test',message:'测试',status:'running'});",context);
@@ -99,4 +100,33 @@ test('new view received during conversation recovery still switches the canvas',
   run("request=async()=>({tasks:[{task_id:'test',status:'completed',events:[{id:'1-0',kind:'view',version:1,title:'学生',selection:{view:'students'}},{id:'2-0',kind:'view',version:1,title:'人数',selection:{view:'meal_counts'}}]}]})");
   await run('loadConversation()');
   assert.equal(run('opened.length'),1);assert.equal(run('opened[0].view'),'meal_counts');
+});
+
+test('chat waits for the frontend rendering result before showing success',async()=>{
+  const {run,context}=setup();let resolve;context.showBusinessView=()=>new Promise(r=>resolve=r);
+  run('applyEvent(view,{kind:"view",version:1,title:"学生",selection:{view:"students"}},"1-0")');
+  const button=run('view.root.children.find(node=>node.className==="chat-view-result")');
+  assert.equal(button.textContent,'正在显示：学生');assert.equal(button.disabled,true);
+  resolve({status:'rendered',selection:{view:'students'}});await flush();
+  assert.equal(button.textContent,'已显示：学生');assert.equal(button.disabled,false);assert.match(button.title,/不代表已执行/);
+});
+
+test('failed and blocked views provide retry without claiming they appeared',async()=>{
+  for(const status of ['failed','blocked','superseded']){
+    const {run,context}=setup();context.showBusinessView=async()=>({status,message:'未保存原单已保留'});
+    run('applyEvent(view,{kind:"view",version:1,title:"发票",selection:{view:"frappe_doctype",doctype:"Sales Invoice"}},"1-0")');
+    await flush();
+    const button=run('view.root.children.find(node=>node.className==="chat-view-result")');
+    assert.equal(button.dataset.state,status);assert.doesNotMatch(button.textContent,/^已显示|^已打开/);assert.equal(button.title,'未保存原单已保留');assert.equal(button.disabled,false);
+    context.showBusinessView=async()=>({status:'rendered',selection:{view:'frappe_doctype'},message:'已打开业务容器，等待原生页面加载'});
+    await button.click();assert.equal(button.textContent,'已打开业务窗口：发票');assert.match(button.title,/等待原生页面加载/);
+  }
+});
+
+test('unexpected view errors are shown as failure and allow a later retry',async()=>{
+  const {run,context}=setup();context.showBusinessView=async()=>{throw Error('显示失败')};
+  run('applyEvent(view,{kind:"view",version:1,title:"学生",selection:{view:"students"}},"1-0")');
+  await flush();
+  const button=run('view.root.children.find(node=>node.className==="chat-view-result")');
+  assert.equal(button.dataset.state,'failed');assert.equal(button.disabled,false);assert.equal(button.title,'显示失败');
 });

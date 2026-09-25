@@ -35,8 +35,16 @@ Native Bench 中所有应用都可以作为只读事实来源；所有客户化�
 
 ## 明确禁止
 
-- 新增 DocType。
+- 直接新增标准 DocType、任意数据库 DDL 或绕过预览修改现有结构。
 - 修改上游应用文件或上游 DocType JSON。
 - 仅凭中文标题或相似文件名决定目标。
 - 用任意 SQL 或动态 Python 绕过 Frappe ORM、权限、钩子和校验。
 - 未经字段级预览与确认创建 Custom Field、Property Setter 或迁移补丁。
+
+## 统一业务场景的新业务例外（2026-09-25）
+
+依据用户“能创建未知业务”的明确要求，允许 `add-custom-business`：
+由 `business_blueprints` 保存数据方案、按当前用户展示字段与权限影响，在用户点击确认后
+创建 `Tongjianyun Extension <key>` 独立自定义类型。默认仅 System Manager，启用修改历史，
+不提供删除权限；不覆盖任何已有类型。此例外不允许 Server Script、动态 SQL、任意前端代码、
+自动授予角色或跳过审批。复杂业务仍通过可审查源码与测试实现。
