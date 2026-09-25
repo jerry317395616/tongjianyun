@@ -6,6 +6,7 @@ No privilege escalation, database schema change or global queue reset is used.
 import os
 import signal
 import subprocess
+import sys
 from pathlib import Path
 
 import frappe
@@ -23,6 +24,9 @@ try:
             active += 1
     if active:
         raise SystemExit(f'Not reloading: {active} active conversations; wait for completion.')
+    if '--check-only' in sys.argv:
+        print('No active conversations; safe to deploy this batch.')
+        raise SystemExit(0)
     units = ['frappe-native-web.service', 'frappe-native-meal-sse.service', 'frappe-native-worker-meal-chat.service']
     processes = []
     for unit in units:
