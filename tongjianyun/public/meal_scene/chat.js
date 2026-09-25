@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=business-proposals-20260926-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=business-handoffs-20260926-1';
 import {mealContext as context,refreshMealData} from './state.js?v=meal-header-20260925-1';
 import {getSceneBootstrap} from './scene_bootstrap.js?v=teacher-scene-20260925-1';
 const $=id=>document.getElementById(id);

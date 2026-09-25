@@ -3,7 +3,7 @@ import {mealContext,setMealContext,refreshMealData} from './state.js?v=meal-head
 const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
   'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
-  'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint','business_proposal','stock_reconciliation']);
+  'project_catalog','frappe_catalog','frappe_doctype','frappe_document','frappe_new','frappe_report','frappe_page','frappe_workspace','business_blueprint','business_proposal','business_proposal_inbox','business_proposal_handoff','stock_reconciliation']);
 let request,current=null,ticket=0,nativeSession=null,registerSession=null,loadingTicket=0;
 let sceneHome={view:'recipe_week'},sceneRecipeAllowed=true,sceneGroup=null,sceneNavigation=null;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
@@ -52,6 +52,7 @@ export function initializeViews(options){
   return showSceneHome();
 }
 function sceneChoice(choice){
+  if(['business_proposal','business_proposal_inbox','business_proposal_handoff','stock_reconciliation'].includes(choice?.view))return {...choice};
   const selected={...choice,...mealContext()};
   if(sceneGroup&&['classroom_day','meal_counts','class_students'].includes(selected.view))selected.group=sceneGroup;
   return selected;
@@ -89,7 +90,8 @@ function buildSceneNavigation(actions){
     const previous=mealContext();
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date.value)){date.value=previous.day;return;}
     const desired={day:date.value,meal:meal.value};
-    const result=await showBusinessView({...sceneChoice(current||sceneHome),...desired});
+    const timeless=['business_proposal','business_proposal_inbox','business_proposal_handoff','stock_reconciliation'].includes((current||sceneHome).view);
+    const result=await showBusinessView(timeless?sceneChoice(current||sceneHome):{...sceneChoice(current||sceneHome),...desired});
     if(result.status==='rendered'){
       // Students are all-date master data and their canonical server selection
       // intentionally drops day/meal. Keep the user's chosen scene context for
@@ -306,6 +308,79 @@ function renderProposal(block){
   if(block.state!=='proposed'||typeof block.proposal_id!=='string'||!/^[a-f0-9]{64}$/.test(block.revision||''))throw Error('个人业务方案版本不完整。');
   const section=renderBlueprint({...block,can_activate:false});
   section.append(node('p','需要修改时，直接在右侧说明，例如“增加数量字段”。当前是方案草稿，不代表业务已经启用。','view-note'));
+  if(block.can_handoff===true){
+    if(!proposalUUID(block.proposal_id))throw Error('个人业务方案版本不完整。');
+    const session={dirty:false,state:'ready',editRevision:0,kind:'proposal-handoff'};section.registerSession=session;
+    const box=node('div',undefined,'view-proposal-handoff'),label=node('label','交给负责人'),recipient=node('input'),button=node('button','交给负责人','view-register-save');
+    recipient.type='text';recipient.maxLength=140;recipient.autocomplete='off';recipient.placeholder='填写负责人完整账号';recipient.setAttribute('aria-label','负责人完整账号');button.type='button';button.disabled=true;
+    const status=node('p','仅交接当前版本，不会自动启用业务。','view-register-status'),verify=node('button','查看交接记录核对','view-action');status.setAttribute('role','status');verify.type='button';verify.hidden=true;
+    label.append(recipient);box.append(label,button,status,verify);section.append(box);
+    Object.assign(session,{recipient,button,status,verify});
+    const validRecipient=()=>typeof recipient.value==='string'&&recipient.value.trim().length>0&&recipient.value.trim().length<=140&&!/[\x00-\x1f]/.test(recipient.value)&&recipient.value.trim()!=='Guest';
+    recipient.addEventListener('input',()=>{if(session.state!=='ready')return;session.editRevision++;session.dirty=!!recipient.value;button.disabled=!validRecipient();});
+    const target={view:'business_proposal_inbox',folder:'sent',state:'all'};
+    async function readBack(origin){
+      verify.disabled=true;const result=await showBusinessView(target,{origin});
+      if(result.status!=='rendered'&&registerSession===session){status.textContent='交接记录尚未读取成功，请重新查询核对，不要重复交接。';verify.hidden=false;verify.disabled=false;}
+    }
+    verify.addEventListener('click',()=>{if(registerSession===session&&!verify.disabled&&['saved','uncertain'].includes(session.state))return readBack('verify');});
+    button.addEventListener('click',async()=>{
+      if(registerSession!==session||session.state!=='ready'||button.disabled||!validRecipient())return;
+      const body={proposal_id:block.proposal_id,revision:block.revision,recipient:recipient.value.trim()};
+      session.state='saving';button.disabled=recipient.disabled=true;status.textContent='正在核对负责人和方案版本…';let submitted=false;
+      const post=method=>request('/api/method/tongjianyun.business_proposal_api.'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      try{
+        const check=await post('check_recipient');
+        if(registerSession!==session)return;
+        if(check?.eligible!==true||check.recipient!==body.recipient||check.proposal_id!==body.proposal_id||check.revision!==body.revision){
+          session.state='ready';recipient.disabled=false;button.disabled=!validRecipient();status.textContent='未交接。请核对负责人完整账号及接收权限。';return;
+        }
+        submitted=true;status.textContent='正在交接当前方案，请勿重复提交…';const result=await post('handoff');
+        if(!proposalUUID(result?.handoff_id)||result.proposal_id!==body.proposal_id||result.revision!==body.revision||result.enabled!==false||!['pending','copying','uncertain','accepted'].includes(result.state))throw Error('交接回执与当前方案不一致。');
+        if(registerSession!==session)return;
+        session.state='saved';session.dirty=false;status.textContent='已收到交接记录回执，正在读取记录；不代表业务已启用。';verify.hidden=false;
+        await readBack('saved');
+      }catch(error){
+        if(registerSession!==session)return;
+        if(!submitted){session.state='ready';recipient.disabled=false;button.disabled=!validRecipient();status.textContent='未交接，暂时无法核对负责人。请稍后重新核对。';return;}
+        session.state='uncertain';status.textContent='交接结果暂未确认。请查看交接记录，不要重复提交。';verify.hidden=false;verify.disabled=false;
+      }
+    });
+  }
+  return section;
+}
+function proposalUUID(value){return typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);}
+function renderProposalHandoff(block){
+  const state=block.handoff_state;
+  if(!proposalUUID(block.handoff_id)||!proposalUUID(block.proposal_id)||!/^[a-f0-9]{64}$/.test(block.revision||'')||!['pending','copying','uncertain','accepted','stale'].includes(state)||typeof block.sender!=='string'||!block.sender||block.sender.length>140)throw Error('交接方案版本不完整。');
+  const section=renderBlueprint({...block,can_activate:false});
+  section.append(node('p','提出人：'+block.sender,'view-note'));
+  const status=Array.from(section.children).find(child=>child.className==='view-blueprint-status');
+  status.textContent=state==='pending'?'以上为交接的固定版本；接收后再核对是否启用。':state==='accepted'?'已接收方案。业务是否已启用，需要打开负责人方案重新核验。':state==='stale'?'方案已修改，本次交接已失效，请提出人重新交接。':'接收结果尚待核实，请勿再次接收或要求重复交接。';
+  if(state==='accepted'){
+    const target=block.accepted_selection;
+    if(target?.view!=='business_blueprint'||typeof target.proposal_id!=='string'||!target.proposal_id||target.proposal_id.length>140||/[\x00-\x1f]/.test(target.proposal_id)||Object.keys(target).length!==2)throw Error('接收结果尚未核实。');
+    section.append(actionButton({label:'查看并核验负责人方案',selection:target}));return section;
+  }
+  if(state==='stale')return section;
+  const session={dirty:false,state:state==='pending'?'ready':'uncertain',editRevision:0,kind:'proposal-accept'};section.registerSession=session;
+  const button=node('button','接收方案','view-register-save'),verify=node('button','重新读取接收结果','view-action');button.type=verify.type='button';button.disabled=state!=='pending'||block.can_accept!==true;button.hidden=state!=='pending';verify.hidden=state==='pending';section.append(button,verify);Object.assign(session,{button,status,verify});
+  const target={view:'business_proposal_handoff',handoff_id:block.handoff_id};
+  async function readBack(origin){
+    verify.disabled=true;const result=await showBusinessView(target,{origin});
+    if(result.status!=='rendered'&&registerSession===session){status.textContent='接收结果未完成核对。请重新查询，不要再次接收。';verify.hidden=false;verify.disabled=false;}
+  }
+  verify.addEventListener('click',()=>{if(registerSession===session&&!verify.disabled&&['saved','uncertain'].includes(session.state))return readBack('verify');});
+  button.addEventListener('click',async()=>{
+    if(registerSession!==session||session.state!=='ready'||button.disabled)return;
+    session.state='saving';button.disabled=true;status.textContent='正在接收方案；此操作不会启用业务…';
+    try{
+      const result=await request('/api/method/tongjianyun.business_proposal_api.accept_handoff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({handoff_id:block.handoff_id})});
+      if(result?.state!=='accepted'||result.enabled!==false||result.revision!==block.revision||typeof result.proposal_id!=='string'||!result.proposal_id||result.proposal_id.length>140||result.selection?.view!=='business_blueprint'||result.selection.proposal_id!==result.proposal_id)throw Error('接收回执尚未核实。');
+      if(registerSession!==session)return;
+      session.state='saved';status.textContent='接收回执已收到，正在重新读取核对…';verify.hidden=false;await readBack('saved');
+    }catch(error){if(registerSession!==session)return;session.state='uncertain';status.textContent='接收结果暂未确认，请重新查询；不要重复接收。';verify.hidden=false;verify.disabled=false;}
+  });
   return section;
 }
 function renderAttendance(block){
@@ -426,7 +501,7 @@ function renderStockRepair(block){
   });
   return section;
 }
-const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,business_proposal:renderProposal,attendance_register:renderAttendance,meal_register:renderMealRegister,stock_repair:renderStockRepair};
+const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,business_proposal:renderProposal,business_proposal_handoff:renderProposalHandoff,attendance_register:renderAttendance,meal_register:renderMealRegister,stock_repair:renderStockRepair};
 export function buildComponents(data){
   if(data?.version!==1||!validViews.has(data.selection?.view)||!Array.isArray(data.components)||data.components.length>12)throw Error('展示结果格式不受支持，已保留当前页面。');
   const content=document.createDocumentFragment();

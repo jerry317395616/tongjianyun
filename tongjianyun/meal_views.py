@@ -16,11 +16,12 @@ from tongjianyun.classroom import _scope, _roster
 from tongjianyun.meal_scene import business_day, meal_key, class_plans
 from tongjianyun.business_views import VIEWS as BUSINESS_VIEWS, FIELDS as BUSINESS_FIELDS, clean_selection, get_business_view
 from tongjianyun.frappe_project_views import VIEWS as PROJECT_VIEWS, FIELDS as PROJECT_FIELDS, selection as project_selection, get_view as project_view
+from tongjianyun.business_proposal_views import VIEWS as PROPOSAL_VIEWS, FIELDS as PROPOSAL_FIELDS
 
 VIEWS = {'students': '在园学生', 'class_students': '班级学生',
          'meal_counts': '用餐人数', 'recipe_week': '本周食谱', 'recipe_nutrition': '周食谱营养分析',
          'business_blueprint': '新业务方案', 'business_proposal': '我的新业务方案',
-         'stock_reconciliation': '库存核对', **BUSINESS_VIEWS, **PROJECT_VIEWS}
+         'stock_reconciliation': '库存核对', **BUSINESS_VIEWS, **PROJECT_VIEWS, **PROPOSAL_VIEWS}
 LABELS = dict(zip(('breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'),
                   ('早餐', '早点', '午餐', '午点', '晚餐')))
 PAGE_SIZE = 50
@@ -40,12 +41,17 @@ def selection(value, default_day=None, default_meal='lunch'):
             frappe.throw('展示指令格式无效。')
     from tongjianyun.meal_nutrition_view import FIELDS, nutrition_selection
     from tongjianyun.stock_reconciliation import FIELDS as STOCK_FIELDS, selection as stock_selection
-    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components', 'proposal_id', 'revision'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS | STOCK_FIELDS):
+    if not isinstance(value, dict) or set(value) - ({'view', 'presentation', 'group', 'day', 'meal', 'offset', 'components', 'proposal_id', 'revision'} | FIELDS | BUSINESS_FIELDS | PROJECT_FIELDS | STOCK_FIELDS | PROPOSAL_FIELDS):
         frappe.throw('展示指令含不支持的内容。')
     view = value.get('view')
     if not isinstance(view, str) or view not in VIEWS:
         frappe.throw('暂不支持这种业务视图。')
     clean = {'view': view}
+    if view in PROPOSAL_VIEWS:
+        from tongjianyun.business_proposal_views import selection as proposal_selection
+        return proposal_selection(value)
+    if set(value) & PROPOSAL_FIELDS:
+        frappe.throw('交接筛选仅用于方案交接视图。')
     if view == 'business_proposal':
         from tongjianyun.business_agent_proposals import canonical_selection
         return canonical_selection(value)
@@ -298,10 +304,15 @@ def get_view(selection_json):
         result = preview(choice['proposal_id'])
     elif choice['view'] == 'business_proposal':
         from tongjianyun.business_agent_service import application
-        app, _ = application()
+        app, _ = application(require_ready=False)
         if app.proposals is None:
             raise frappe.PermissionError('新业务方案存储尚未配置，未启用任何业务结构。')
         result = app.proposals.preview_owned(app.viewer(), choice['proposal_id'], choice['revision'])
+        result['actions'] = [_action('查看交接记录', {'view': 'business_proposal_inbox', 'folder': 'sent', 'state': 'all'})]
+        result['summary'] = {'answer': '已读取当前账号的指定方案版本；草稿未代表业务已启用。'}
+    elif choice['view'] in PROPOSAL_VIEWS:
+        from tongjianyun.business_proposal_views import get_view as proposal_view
+        result = proposal_view(choice)
     elif choice['view'] == 'stock_reconciliation':
         from tongjianyun.stock_reconciliation import get_view as stock_view
         result = stock_view(choice)
@@ -335,7 +346,16 @@ def publish_for_task(task_id, requested):
         # to ordinary accounts must not make a revoked/root task publishable.
         require_chat_access()
         choice = selection(requested, task['day'], task['meal'])
-        result = get_view(choice)
+        if choice['view'] in PROPOSAL_VIEWS:
+            # A CLI task identity is not a live browser Viewer. Never invent a
+            # session or hand its SID to Codex to query private handoffs. Emit
+            # only the exact navigation choice; the user's actual GET performs
+            # recipient/owner checks and reads the records in the browser.
+            result = {'selection': choice, 'title': VIEWS[choice['view']],
+                      'summary': {'data_read': False, 'activation_verified': False,
+                                  'answer': '正在请求左侧打开方案交接；浏览器将按当前账号核权读取，尚未查询记录或执行接收。'}}
+        else:
+            result = get_view(choice)
         # Cancellation while the query was running must not publish a late view.
         current = store.read(task_id)
         if current.get('status') not in ACTIVE or current.get('cancel_requested') == '1':
@@ -357,12 +377,17 @@ def tool_instruction(task_id, site, context=None):
     return ('\n【左侧业务视图】询问学生、班级、考勤、健康登记、膳食、采购、库存、财务、教职工或以下目录中的业务时，必须调用下面的只读展示工具，'
             '它按当前网页用户权限查真实数据并通过 SSE 切换左侧。不要临时改页面代码、不要只口头声称已切换。'
             '工具回传 display_requested=true 只表示已发送展示指令，不表示浏览器已加载；请说“已查询，正在左侧打开”，失败则说明原因，不能编造数字。'
+            '例外：summary.data_read=false 时尚未读取记录，只能说“正在请求左侧打开”，不能说已查询、已接收或已启用。'
             '给用户的答复只说简短结论、范围和是否已展示；不要输出 displayed=true、内部 view 名、'
             '工具参数或代码，不要在聊天中重复整张班级表格。'
             '用餐结果含 summary.answer 时应沿用这个事实表述：null 表示未知而不是 0；'
             '已确认班级为 0 个也不能说已确认人数为 0 人。只有真实已确认记录中的数字 0 才能说 0 人。'
             '查询学生人数不要自行 SQL 或以班级人数之和当去重总数。名单不需要重复在对话中输出。'
             '支持 --view students [--presentation table|bars]；--view class_students --group 班级编号或唯一名称；'
+            '--view business_proposal_inbox --folder received 查看明确交给当前账号的待处理新业务方案，'
+            '可用 --state all 查看全部接收记录；--folder sent 查看自己交出的方案。'
+            '具体交接用 --view business_proposal_handoff --handoff-id 已读取的交接编号 展示。'
+            '用户在左侧明确接收，再核对启用；只读展示不表示接受、启用或授予权限。'
             '--view meal_counts [--day YYYY-MM-DD --meal lunch]；--view recipe_week [--day YYYY-MM-DD --meal lunch]；'
             '--view recipe_nutrition [--day YYYY-MM-DD] [--recipe 食谱编号] [--garden-ratio 80]。'
             '周营养分析自动选择覆盖业务日期的唯一可见食谱；有多份时展示可点击选择，不要猜编号。'

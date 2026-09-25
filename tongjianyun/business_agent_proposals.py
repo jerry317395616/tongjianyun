@@ -26,6 +26,7 @@ from tongjianyun.business_agent_tasks import TaskIdentity, WorkerClaim, MAX_SCOP
 from tongjianyun.business_agent_transport import private_directory, strict_json
 
 CAP_PREFIX = 'proposal:v1:'
+HANDOFF_CAP_PREFIX = 'proposal-handoff:v1:'
 MAX_BYTES = 40000
 TOOL_INSTRUCTIONS = {
     'proposal_create': ('proposal_create 参数仅 {spec:对象}。先发现已有业务；确实缺少时保存自己的数据型草稿，不创建类型、业务记录或权限。'
@@ -98,6 +99,17 @@ def _choice(record):
 
 def _capability(proposal_id, revision):
     return {'kind': 'capability', 'name': CAP_PREFIX + _id(proposal_id) + ':' + _revision(revision)}
+
+
+def _handoff_capability(handoff_id, revision):
+    return {'kind': 'capability', 'name': HANDOFF_CAP_PREFIX + _id(handoff_id) + ':' + _revision(revision)}
+
+
+def _handoff_selection(value):
+    # Runtime import avoids a module cycle: views uses this module's canonical
+    # identifiers. Share its exact schema, not the model business_view registry.
+    from tongjianyun.business_proposal_views import selection
+    return selection(value)
 
 
 def _links(spec):
@@ -356,12 +368,15 @@ class ProposalRepository:
             record = self._record(db, owner, proposal_id, revision)
             if not record['is_current']:
                 raise ProposalConflict('Only the current exact draft may be handed off')
-            row = db.execute("SELECT id FROM handoffs WHERE proposal_id=? AND revision=? AND recipient=? AND state='pending'", (proposal_id, revision, recipient)).fetchone()
+            # Reposting the same explicit transfer MUST NOT mint a new grant
+            # around a copying/uncertain fence or duplicate an accepted File.
+            row = db.execute("SELECT id,state FROM handoffs WHERE proposal_id=? AND revision=? AND recipient=? AND state!='stale' ORDER BY id LIMIT 1", (proposal_id, revision, recipient)).fetchone()
             grant = row[0] if row else str(uuid.uuid4())
+            state = row[1] if row else 'pending'
             if not row:
                 db.execute('INSERT INTO handoffs VALUES (?,?,?,?,?,?,?,NULL)', (grant, proposal_id, revision, owner, recipient, 'review_and_activate', 'pending'))
             authorize()
-        return {'handoff_id': grant, 'proposal_id': proposal_id, 'revision': revision, 'state': 'pending', 'enabled': False}
+        return {'handoff_id': grant, 'proposal_id': proposal_id, 'revision': revision, 'state': state, 'enabled': False}
 
     def grant(self, recipient, grant_id):
         _id(grant_id)
@@ -374,6 +389,36 @@ class ProposalRepository:
                 raise PermissionError('Proposal handoff is stale')
             return {'handoff_id': grant_id, 'sender': row[2], 'recipient': row[3], 'state': row[5],
                     'record': record, 'receipt': strict_json(row[6]) if row[6] else None}
+
+    def handoff_page(self, owner, *, incoming, cursor=None, size=10, state='pending'):
+        """Private bounded source rows; trusted service authorizes before delivery.
+
+        No administrator-wide listing or arbitrary actor/column/filter. Outgoing
+        includes stale history. Incoming pending includes uncertain/copying work
+        requiring attention, but neither permits another blind acceptance.
+        """
+        _owner(owner)
+        if type(incoming) is not bool or not isinstance(state, str) or state not in {'pending', 'all'}:
+            raise ValueError('Invalid private handoff list')
+        if cursor is not None:
+            _id(cursor)
+        if type(size) is not int or not 1 <= size <= 20:
+            raise ValueError('Invalid handoff page size')
+        column = 'recipient' if incoming else 'sender'  # Fixed identifiers only.
+        clause = " AND state IN ('pending','copying','uncertain')" if incoming and state == 'pending' else " AND state != 'stale'" if incoming else ''
+        with self._connection() as db:
+            rows = db.execute('SELECT id,proposal_id,revision,sender,recipient,purpose,state FROM handoffs '
+                'WHERE ' + column + '=? AND id>?' + clause + ' ORDER BY id LIMIT ?', (owner, cursor or '', size + 1)).fetchall()
+            results = []
+            for row in rows:
+                if row[5] != 'review_and_activate' or row[6] not in {'pending', 'copying', 'accepted', 'uncertain', 'stale'}:
+                    raise PermissionError('Unknown handoff state')
+                record = self._record(db, row[3], row[1], row[2])
+                if incoming and row[6] == 'pending' and not record['is_current']:
+                    raise PermissionError('Handoff changed during the read')
+                results.append({'handoff_id': row[0], 'sender': row[3], 'recipient': row[4],
+                                'state': row[6], 'record': record})
+            return results
 
     def transition(self, recipient, grant_id, before, after, *, receipt=None):
         # Trusted browser bridge only. States do not accept a model assertion of
@@ -413,12 +458,52 @@ class ProposalAuthority:
         return (_capability(record['proposal_id'], record['revision']),
                 *({'kind': 'doctype', 'doctype': name, 'actions': ['read']} for name in _links(record['spec'])))
 
+    def validate_manager(self, owner, spec=None):
+        """Same original native gate for browser recipients and task contexts.
+
+        A TaskIdentity is NOT a browser Viewer. This only rechecks the bound
+        account's native permissions; no SID capture, handoff or File creation.
+        """
+        frappe, gates, bp, _ = _services()
+        def check():
+            gates._account(owner, self.site)
+            bp._access()
+            types = ['DocType']
+            if spec and spec.get('version') == 2 and spec.get('workflow'):
+                types += ['Workflow', 'Workflow State', 'Workflow Action Master']
+            if not all(frappe.has_permission(name, 'create') for name in types):
+                raise PermissionError('Recipient lacks original structure permissions')
+            if spec is not None:
+                bp._validate_links(spec)
+                for name in _links(spec):
+                    gates._doctype(name, ['read'])
+        self.run_check(owner, check)
+
+    def _handoff_context(self, identity, choice, *, revision=None):
+        """Check navigation identity; never deliver a browser's rows to a model.
+
+        Inbox context is navigation metadata only, NOT a read of its current
+        page. An exact handoff binds the recipient's immutable granted version
+        and Link dependencies. Native File verification remains the live GET's
+        responsibility; no File receipt or selection enters this task context.
+        """
+        if choice['view'] == 'business_proposal_inbox':
+            if choice['folder'] == 'received':
+                self.validate_manager(identity.owner)
+            return None
+        grant = self.repository.grant(identity.owner, choice['handoff_id'])
+        record = grant['record']
+        if revision is not None and revision != record['revision']:
+            raise PermissionError('Handoff version changed')
+        self.validate_manager(identity.owner, record['spec'])
+        return record
+
     def __call__(self, identity, scopes):
         try:
             self.repository._identity(identity)
             if not isinstance(scopes, (tuple, list)) or len(scopes) > MAX_SCOPES:
                 return False
-            native, proposals = [], []
+            native, proposals, handoffs, navigation = [], [], [], []
             for raw in scopes:
                 scope = authority_scope(raw)
                 if scope['kind'] == 'capability' and scope['name'].startswith(CAP_PREFIX):
@@ -429,6 +514,13 @@ class ProposalAuthority:
                 elif scope['kind'] == 'view' and scope['selection'].get('view') == 'business_proposal':
                     choice = canonical_selection(scope['selection'])
                     proposals.append((choice['proposal_id'], choice['revision']))
+                elif scope['kind'] == 'capability' and scope['name'].startswith(HANDOFF_CAP_PREFIX):
+                    suffix = scope['name'][len(HANDOFF_CAP_PREFIX):]
+                    if len(suffix) != 101 or suffix[36] != ':':
+                        return False
+                    handoffs.append((_id(suffix[:36]), _revision(suffix[37:])))
+                elif scope['kind'] == 'view' and scope['selection'].get('view') in {'business_proposal_inbox', 'business_proposal_handoff'}:
+                    navigation.append(_handoff_selection(scope['selection']))
                 else:
                     native.append(scope)
             if self.base(identity, tuple(native)) is not True:
@@ -436,11 +528,28 @@ class ProposalAuthority:
             for proposal_id, revision in set(proposals):
                 record = self.repository.read(identity.owner, proposal_id, revision)
                 self.validate_spec(identity.owner, record['spec'])
+            for choice in navigation:
+                self._handoff_context(identity, choice)
+            for handoff_id, revision in set(handoffs):
+                self._handoff_context(identity, {'view': 'business_proposal_handoff', 'handoff_id': handoff_id}, revision=revision)
             return True
         except Exception:
             return False
 
     def view_scopes(self, identity, selection):
+        if type(selection) is dict and selection.get('view') in {'business_proposal_inbox', 'business_proposal_handoff'}:
+            self.repository._identity(identity)
+            choice = _handoff_selection(selection)
+            if self.base(identity, ()) is not True:
+                raise PermissionError('Proposal context account is unavailable')
+            record = self._handoff_context(identity, choice)
+            scopes = ({'kind': 'view', 'selection': choice},)
+            if record is not None:
+                scopes += (_handoff_capability(choice['handoff_id'], record['revision']),
+                           *({'kind': 'doctype', 'doctype': name, 'actions': ['read']} for name in _links(record['spec'])))
+            if not self(identity, scopes):
+                raise PermissionError('Proposal handoff access was revoked')
+            return scopes
         if type(selection) is not dict or selection.get('view') != 'business_proposal':
             return self.base.view_scopes(identity, selection)
         self.repository._identity(identity)
@@ -472,6 +581,8 @@ def _preview(record):
         component['warnings'].append('当前展示历史版本，不是最新草稿。')
     return {'view': 'business_proposal', 'title': spec['title'], 'subtitle': '个人方案草稿 · 版本 ' + str(record['version']),
             'selection': _choice(record), 'components': [component], 'actions': [],
+            'summary': {'proposal_id': record['proposal_id'], 'revision': record['revision'],
+                        'title': spec['title'], 'state': 'draft', 'enabled': False, 'can_activate': False},
             'source': '当前用户私有版本化方案；未创建、启用结构或更改业务数据'}
 
 
@@ -557,23 +668,72 @@ class BusinessProposals:
         record = self.repository.read(viewer.owner, _id(proposal_id), _revision(revision))
         self.authority.validate_spec(viewer.owner, record['spec'])
         result = _preview(record)
+        result['components'][0]['can_handoff'] = record['is_current']
         self._viewer(viewer)
         return result
 
-    def _manager(self, owner, spec):
-        frappe, gates, bp, _ = _services()
-        def check():
-            gates._account(owner, self.authority.site)
-            bp._access()  # Original native manager gate, never relaxed.
-            types = ['DocType']
-            if spec.get('version') == 2 and spec.get('workflow'):
-                types += ['Workflow', 'Workflow State', 'Workflow Action Master']
-            if not all(frappe.has_permission(name, 'create') for name in types):
-                raise PermissionError('Recipient lacks original structure permissions')
-            bp._validate_links(spec)
-            for name in _links(spec):
-                gates._doctype(name, ['read'])
-        self.authority.run_check(owner, check)
+    def _manager(self, owner, spec=None):
+        self.authority.validate_manager(owner, spec)
+
+    def check_recipient(self, viewer, proposal_id, revision, recipient):
+        """Exact name only: no account search, suggested users or role listing."""
+        self._viewer(viewer)
+        record = self.repository.read(viewer.owner, _id(proposal_id), _revision(revision))
+        if not record['is_current']:
+            raise ProposalConflict('Only the current exact draft may be handed off')
+        self.authority.validate_spec(viewer.owner, record['spec'])
+        _owner(recipient)
+        eligible = False
+        if recipient != viewer.owner:
+            try:
+                self._manager(recipient, record['spec'])
+                eligible = True
+            except Exception:
+                # Unknown, disabled, non-manager and missing Link/workflow
+                # permissions have the SAME response. No account facts leak.
+                pass
+        self.authority.validate_spec(viewer.owner, record['spec'])
+        self._viewer(viewer)
+        return {'eligible': eligible, 'recipient': recipient if eligible else None,
+                'proposal_id': proposal_id, 'revision': revision, 'enabled': False,
+                'note': '该账号具备此方案的原接收权限；交接不会自动启用业务。' if eligible
+                        else '无法交接给该账号，请核对完整用户名并由管理者确认原权限。'}
+
+    def _handoff_list(self, viewer, *, incoming, cursor=None, size=10, state='pending'):
+        self._viewer(viewer)
+        if incoming:
+            self._manager(viewer.owner)
+        rows = self.repository.handoff_page(viewer.owner, incoming=incoming, cursor=cursor, size=size, state=state)
+        # Authorize the complete page including the has_more lookahead. A lost
+        # Link/manager permission does not silently become an empty inbox.
+        for row in rows:
+            if incoming:
+                self._manager(viewer.owner, row['record']['spec'])
+                self.repository.grant(viewer.owner, row['handoff_id'])
+            else:
+                self.authority.validate_spec(viewer.owner, row['record']['spec'])
+        page = rows[:size]
+        entries = []
+        for row in page:
+            record = row['record']
+            entries.append({'handoff_id': row['handoff_id'], 'proposal_id': record['proposal_id'],
+                'revision': record['revision'], 'title': record['spec']['title'], 'state': row['state'],
+                'sender' if incoming else 'recipient': row['sender'] if incoming else row['recipient'],
+                'enabled': False, 'can_accept': incoming and row['state'] == 'pending',
+                'retry_allowed': False})
+        self._viewer(viewer)
+        if incoming:
+            self._manager(viewer.owner)
+        return {'entries': entries, 'page_count': len(entries), 'has_more': len(rows) > len(page),
+                'next_cursor': page[-1]['handoff_id'] if len(rows) > len(page) else None,
+                'scope': '仅明确交给当前管理者的方案' if incoming else '仅当前用户自己发出的交接记录',
+                'note': '实时交接列表；接受仅复制私有方案，未启用业务。copying/uncertain 不允许自动重试。'}
+
+    def list_sent(self, viewer, *, cursor=None, size=10):
+        return self._handoff_list(viewer, incoming=False, cursor=cursor, size=size, state='all')
+
+    def list_received(self, viewer, *, cursor=None, size=10, state='pending'):
+        return self._handoff_list(viewer, incoming=True, cursor=cursor, size=size, state=state)
 
     def handoff(self, viewer, proposal_id, revision, recipient):
         """Trusted authenticated POST only; explicit exact-version recipient grant.
@@ -597,9 +757,40 @@ class BusinessProposals:
         # A recipient cannot use owner-only business_proposal navigation.
         result.pop('selection')
         result['handoff_id'], result['handoff_state'] = handoff_id, grant['state']
-        result['source'] = '提案者明确授权给当前管理者的固定版本；未启用结构'
+        result['sender'] = grant['sender']
+        result['summary'].update(handoff_id=handoff_id, handoff_state=grant['state'])
+        result['source'] = '提案者明确授权给当前管理者的固定版本；交接不执行结构启用'
+        if grant['state'] == 'accepted':
+            result['accepted_selection'] = self._accepted_receipt(viewer, grant)['selection']
         self._viewer(viewer)
         return result
+
+    def _accepted_receipt(self, viewer, grant):
+        """Read-only verified original File receipt; usable by GET and replay.
+
+        Never call accept_handoff from GET: that method can create a File. This
+        helper performs native owner/read/revision checks and has no mutation.
+        """
+        self._viewer(viewer)
+        self._manager(viewer.owner, grant['record']['spec'])
+        receipt = grant['receipt']
+        if (grant['state'] != 'accepted' or grant['recipient'] != viewer.owner
+                or type(receipt) is not dict or receipt.get('state') != 'accepted'
+                or receipt.get('enabled') is not False
+                or not isinstance(receipt.get('proposal_id'), str)
+                or not 1 <= len(receipt['proposal_id']) <= 140
+                or any(ord(c) < 32 for c in receipt['proposal_id'])
+                or receipt.get('revision') != grant['record']['revision']
+                or receipt.get('selection') != {'view': 'business_blueprint', 'proposal_id': receipt['proposal_id']}):
+            raise PermissionError('Accepted proposal receipt cannot be verified')
+        _, gates, bp, _ = _services()
+        def verify():
+            gates._account(viewer.owner, self.authority.site)
+            if bp.revision(bp._load(receipt['proposal_id'])) != grant['record']['revision']:
+                raise PermissionError('Accepted private proposal has changed')
+        self.authority.run_check(viewer.owner, verify)
+        self._viewer(viewer)
+        return receipt
 
     def accept_handoff(self, viewer, handoff_id):
         """Copy via original service as recipient; activation remains separate.
@@ -613,14 +804,7 @@ class BusinessProposals:
         self._manager(viewer.owner, spec)
         frappe, gates, bp, _ = _services()
         if grant['state'] == 'accepted':
-            receipt = grant['receipt']
-            def verify():
-                gates._account(viewer.owner, self.authority.site)
-                if bp.revision(bp._load(receipt['proposal_id'])) != grant['record']['revision']:
-                    raise PermissionError('Accepted private proposal has changed')
-            self.authority.run_check(viewer.owner, verify)
-            self._viewer(viewer)
-            return receipt
+            return self._accepted_receipt(viewer, grant)
         if grant['state'] != 'pending':
             return {'state': 'uncertain', 'enabled': False, 'retry_allowed': False,
                     'note': '管理者私有文件的提交结果待核实，不能盲目再次接受。'}

@@ -178,6 +178,41 @@ class MealViewsTests(unittest.TestCase):
                 views.publish_for_task('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', {'view': 'students'})
         store.emit.assert_not_called()
 
+    def test_handoff_cli_only_requests_browser_view_without_forging_a_session(self):
+        from tongjianyun import meal_chat
+        store = MagicMock()
+        store.read.return_value = {'owner': 'actual-owner', 'status': 'running', 'day': '2026-09-22',
+                                   'meal': 'lunch', 'cancel_requested': '0'}
+        choices = [{'view': 'business_proposal_inbox', 'folder': 'received'},
+                   {'view': 'business_proposal_handoff', 'handoff_id': '22222222-2222-4222-8222-222222222222'}]
+        with patch.object(meal_chat, 'TaskStore', return_value=store), patch.object(meal_chat, 'require_chat_access'), \
+             patch.object(frappe, 'session', SimpleNamespace(user='Administrator')), \
+             patch.object(frappe, 'set_user'), patch.object(views, 'get_view') as read:
+            for choice in choices:
+                result = views.publish_for_task('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', choice)
+                self.assertTrue(result['display_requested'])
+                self.assertFalse(result['summary']['data_read'])
+                self.assertFalse(result['summary']['activation_verified'])
+        read.assert_not_called()
+        self.assertEqual(store.emit.call_count, 2)
+
+    def test_proposal_routes_reject_other_business_filters_and_identity(self):
+        with patch.object(frappe, 'throw', side_effect=ValueError):
+            for value in ({'view': 'students', 'folder': 'sent'}, {'view': 'recipe_week', 'handoff_id': 'x'},
+                          {'view': 'business_proposal_inbox', 'folder': 'received', 'day': '2026-09-22'},
+                          {'view': 'business_proposal_inbox', 'folder': 'received', 'owner': 'other'}):
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    views.selection(value)
+
+    def test_proposal_web_uses_actual_viewer_even_if_model_runtime_unavailable(self):
+        from tongjianyun import business_proposal_views
+        choice = {'view': 'business_proposal_inbox', 'folder': 'received'}
+        with patch('tongjianyun.scene_access.require_view_access'), \
+             patch.object(business_proposal_views, 'get_view', side_effect=PermissionError('recipient revoked')) as read:
+            with self.assertRaises(PermissionError):
+                views.get_view(choice)
+        read.assert_called_once_with({**choice, 'state': 'pending'})
+
 
 def verify_read_only_views():
     """Bench-only production read check; returns aggregates, never student names."""

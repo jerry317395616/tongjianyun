@@ -41,6 +41,10 @@
 .view-blueprint-confirm h3{font-size:15px;margin:0 0 8px}.view-blueprint-confirm p{margin:0 0 12px}
 .view-blueprint-confirm button{margin:0 12px 0 0;min-height:44px}.view-blueprint-confirm button:disabled{cursor:not-allowed;opacity:.55}
 .view-blueprint>.view-action{display:block;margin-top:12px}
+.view-proposal-handoff{display:flex;flex-wrap:wrap;gap:12px;align-items:end;border-top:1px solid #dce7da;margin-top:18px;padding-top:16px}
+.view-proposal-handoff label{display:flex;flex-direction:column;gap:7px;font-size:13px;max-width:100%;color:#284739}
+.view-proposal-handoff input{box-sizing:border-box;width:290px;max-width:100%;min-height:42px;border:1px solid #dce7da;border-radius:8px;padding:9px 11px;font:inherit}
+.view-proposal-handoff .view-register-status{flex-basis:100%;margin:0}.view-proposal-handoff :disabled{cursor:not-allowed;opacity:.6}
 .view-register-context{font-size:14px;font-weight:600;color:#284739;margin:0 0 8px}
 .view-register-row-hint{display:block;font-size:11px;line-height:1.6;color:#826221;margin-top:5px;max-width:240px}
 .view-register .view-table-wrap{max-height:58dvh;overflow:auto;border:1px solid #e3ebe0;border-radius:9px}

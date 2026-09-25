@@ -669,6 +669,131 @@ class ProposalTests(unittest.TestCase):
         self.assertIn(proposals._capability(entry['proposal_id'], entry['revision']), all_sources)
         self.assertFalse(tail['has_more'])
 
+    def context_claim(self, owner, selection):
+        identity = TaskIdentity(self.site, owner, str(uuid.uuid4()))
+        scopes = self.authority.view_scopes(identity, selection)
+        self.store.create(owner, identity.task_id, '继续当前页面', {'selection': selection}, authority_scopes=scopes)
+        ticket = self.store.take_dispatch(identity)
+        self.store.acknowledge_dispatch(ticket)
+        return self.store.claim(identity, ticket.job_id)
+
+    def test_sent_context_is_exact_navigation_not_a_read_of_private_rows(self):
+        selection = {'view': 'business_proposal_inbox', 'folder': 'sent', 'state': 'all', 'cursor': str(uuid.uuid4())}
+        with (patch.object(self.repository, 'handoff_page', side_effect=AssertionError('No page read')),
+                patch.object(self.repository, 'read', side_effect=AssertionError('No draft read')),
+                patch.object(self.base, 'capture_viewer', side_effect=AssertionError('No manufactured browser session'))):
+            claim = self.context_claim(self.owner, selection)
+            self.assertEqual(self.store.required_scopes(claim.identity), [{'kind': 'view', 'selection': selection}])
+            self.store.emit(claim, {'kind': 'message', 'item_id': 'nav', 'text': '未读取交接记录内容。'})
+            self.assertTrue(self.store.events(claim.identity))
+        self.bp.propose.assert_not_called()
+        self.bp._load.assert_not_called()
+
+    def test_received_navigation_requires_original_manager_permission_on_every_replay(self):
+        selection = {'view': 'business_proposal_inbox', 'folder': 'received', 'state': 'pending'}
+        with self.assertRaises(self.frappe.PermissionError):
+            self.context_claim(self.owner, selection)
+        claim = self.context_claim(self.manager, selection)
+        self.store.emit(claim, {'kind': 'message', 'item_id': 'nav', 'text': '当前是收到方案页面，并未读入列表。'})
+        self.managers.remove(self.manager)
+        with self.assertRaises(PermissionError):
+            self.store.events(claim.identity)
+
+    def test_received_navigation_does_not_imply_doc_create_permission(self):
+        selection = {'view': 'business_proposal_inbox', 'folder': 'received', 'state': 'all'}
+        with patch.object(self.frappe, 'has_permission', return_value=False), self.assertRaises(PermissionError):
+            self.context_claim(self.manager, selection)
+
+    def test_handoff_context_registers_exact_recipient_version_and_all_links(self):
+        linked = dict(SPEC, fields=[{'fieldname': 'student_ref', 'label': '学生', 'fieldtype': 'Link', 'options': 'Student'}])
+        record = self.create(spec=linked)
+        grant = self.agent.handoff(self.viewer, record['proposal_id'], record['revision'], self.manager)
+        selection = {'view': 'business_proposal_handoff', 'handoff_id': grant['handoff_id']}
+        claim = self.context_claim(self.manager, selection)
+        scopes = self.store.required_scopes(claim.identity)
+        self.assertIn({'kind': 'view', 'selection': selection}, scopes)
+        capability = proposals._handoff_capability(grant['handoff_id'], record['revision'])
+        self.assertIn(capability, scopes)
+        self.assertLessEqual(len(capability['name']), 140)
+        self.assertIn({'kind': 'doctype', 'doctype': 'Student', 'actions': ['read']}, scopes)
+        self.assertNotIn(proposals._capability(record['proposal_id'], record['revision']), scopes)
+        self.bp.propose.assert_not_called()
+        self.bp._load.assert_not_called()
+        self.assertEqual(self.actor.get(), 'outer')
+        # Task permission does not depend on keeping the sender's browser SID.
+        self.sessions.clear()
+        self.assertTrue(self.authority(claim.identity, scopes))
+        self.links.remove('Student')
+        with self.assertRaises(PermissionError):
+            self.store.events(claim.identity)
+
+    def test_handoff_context_is_not_readable_by_sender_or_another_manager(self):
+        record = self.create()
+        grant = self.agent.handoff(self.viewer, record['proposal_id'], record['revision'], self.manager)
+        selection = {'view': 'business_proposal_handoff', 'handoff_id': grant['handoff_id']}
+        self.managers.add('other@example.invalid')
+        for owner in (self.owner, 'other@example.invalid'):
+            with self.subTest(owner=owner), self.assertRaises(PermissionError):
+                self.context_claim(owner, selection)
+        identity = replace(self.claim.identity, owner=self.manager, site='other.localhost')
+        with self.assertRaises(PermissionError):
+            self.authority.view_scopes(identity, selection)
+
+    def test_pending_handoff_invalidated_by_revision_blocks_old_context_history(self):
+        record = self.create()
+        grant = self.agent.handoff(self.viewer, record['proposal_id'], record['revision'], self.manager)
+        claim = self.context_claim(self.manager, {'view': 'business_proposal_handoff', 'handoff_id': grant['handoff_id']})
+        self.store.emit(claim, {'kind': 'message', 'item_id': 'old', 'text': '旧版讨论'})
+        self.update(record)
+        with self.assertRaises(PermissionError):
+            self.store.events(claim.identity)
+
+    def test_accepted_handoff_context_keeps_original_version_without_loading_native_file(self):
+        record = self.create()
+        grant = self.agent.handoff(self.viewer, record['proposal_id'], record['revision'], self.manager)
+        self.agent.accept_handoff(self.manager_viewer, grant['handoff_id'])
+        self.update(record)
+        self.bp._load.reset_mock()
+        with patch.object(self.bp, '_load', side_effect=AssertionError('Native File is browser-only')):
+            claim = self.context_claim(self.manager, {'view': 'business_proposal_handoff', 'handoff_id': grant['handoff_id']})
+            self.assertIn(proposals._handoff_capability(grant['handoff_id'], record['revision']), self.store.required_scopes(claim.identity))
+        self.assertEqual(len(self.files), 1)
+
+    def test_context_never_discards_previous_full_scope_union(self):
+        record = self.create()
+        grant = self.agent.handoff(self.viewer, record['proposal_id'], record['revision'], self.manager)
+        claim = self.context_claim(self.manager, {'view': 'business_proposal_handoff', 'handoff_id': grant['handoff_id']})
+        self.store.register_authority(claim, {'kind': 'doctype', 'doctype': 'Supplier', 'actions': ['read']})
+        self.links.remove('Supplier')
+        sent = self.authority.view_scopes(claim.identity, {'view': 'business_proposal_inbox', 'folder': 'sent'})
+        with self.assertRaises(PermissionError):
+            self.authority.register_read(self.store, claim, self.gates.ReadSet(sent))
+        with self.assertRaises(PermissionError):
+            self.store.events(claim.identity)
+
+    def test_malformed_context_and_forged_revision_capability_fail_closed(self):
+        for selection in (
+                {'view': 'business_proposal_inbox', 'folder': 'sent', 'state': 'pending'},
+                {'view': 'business_proposal_inbox', 'folder': 'all'},
+                {'view': 'business_proposal_inbox', 'folder': 'sent', 'owner': self.manager},
+                {'view': 'business_proposal_handoff', 'handoff_id': str(uuid.uuid4()), 'revision': '0' * 64}):
+            with self.subTest(selection=selection), self.assertRaises(ValueError):
+                self.authority.view_scopes(self.claim.identity, selection)
+        record = self.create()
+        grant = self.agent.handoff(self.viewer, record['proposal_id'], record['revision'], self.manager)
+        identity = replace(self.claim.identity, owner=self.manager)
+        self.assertFalse(self.authority(identity, (proposals._handoff_capability(grant['handoff_id'], '0' * 64),)))
+        self.enabled.remove(self.manager)
+        with self.assertRaises(PermissionError):
+            self.authority.view_scopes(identity, {'view': 'business_proposal_handoff', 'handoff_id': grant['handoff_id']})
+
+    def test_context_support_does_not_add_handoff_or_acceptance_model_tools(self):
+        for tool in ('handoff', 'accept_handoff', 'proposal_accept', 'proposal_handoff'):
+            with self.subTest(tool=tool), self.assertRaises(ValueError):
+                self.agent.dispatch(self.claim, tool, {}, 'model-accept')
+        self.bp.propose.assert_not_called()
+        self.bp.activate.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

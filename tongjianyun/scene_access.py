@@ -14,7 +14,7 @@ from tongjianyun.workspace_entry import require_account, mark_private_response
 BUSINESS_VIEWS = frozenset({
     'students', 'class_students', 'classroom_day', 'meal_counts',
     'frappe_catalog', 'frappe_doctype', 'frappe_document', 'frappe_new',
-    'business_proposal',
+    'business_proposal', 'business_proposal_inbox', 'business_proposal_handoff',
 })
 
 

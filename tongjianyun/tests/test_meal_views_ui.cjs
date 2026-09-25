@@ -146,6 +146,102 @@ test('ordinary proposal never silently renders an activated or unversioned draft
     context.block={...blueprint,...patch};assert.throws(()=>run('renderProposal(block)'),/个人业务方案版本/);
   }
 });
+const proposalId='11111111-1111-4111-8111-111111111111',handoffId='22222222-2222-4222-8222-222222222222';
+const ownProposal={...blueprintV2,type:'business_proposal',proposal_id:proposalId,can_activate:false,can_handoff:true};
+const receivedProposal={...ownProposal,type:'business_proposal_handoff',handoff_id:handoffId,handoff_state:'pending',sender:'teacher<script>',can_handoff:false,can_accept:true};
+async function proposalSetup(block=ownProposal){
+  const fixture=setup();fixture.context.calls=[];
+  fixture.context.initial={...data,selection:block.type==='business_proposal'?{view:'business_proposal',proposal_id:proposalId,revision:block.revision}:{view:'business_proposal_handoff',handoff_id:handoffId},components:[block]};
+  fixture.context.after={...data,selection:{view:'business_proposal_inbox',folder:'sent',state:'all'},components:[{type:'notice',text:'交接记录'}]};
+  fixture.context.check={eligible:true,recipient:'manager@example.invalid',proposal_id:proposalId,revision:block.revision};
+  fixture.context.ack={handoff_id:handoffId,proposal_id:proposalId,revision:block.revision,state:'pending',enabled:false};
+  fixture.run('initializeViews({request:async(url,options)=>{calls.push({url,options});if(options?.method==="POST")return url.endsWith("check_recipient")?check:ack;return calls.some(c=>c.options?.method==="POST"&&!c.url.endsWith("check_recipient"))?after:initial;}})');
+  await fixture.run('showBusinessView(initial.selection)');return fixture;
+}
+function setRecipient(fixture,value='manager@example.invalid'){
+  fixture.context.recipientName=value;fixture.run('registerSession.recipient.value=recipientName;registerSession.recipient.listeners.input()');
+}
+test('proposal handoff needs explicit recipient and click, uses exact revision not identity',async()=>{
+  const fixture=await proposalSetup();const {run,context}=fixture;
+  assert.equal(context.calls.length,1);assert.equal(run('registerSession.button.disabled'),true);
+  setRecipient(fixture);await run('registerSession.button.click()');
+  const posts=context.calls.filter(call=>call.options?.method==='POST');assert.equal(posts.length,2);
+  assert(posts[0].url.endsWith('check_recipient'));assert(posts[1].url.endsWith('handoff'));
+  assert.deepEqual(JSON.parse(posts[1].options.body),{proposal_id:proposalId,revision:'a'.repeat(64),recipient:'manager@example.invalid'});
+  assert.equal(run('current.view'),'business_proposal_inbox');assert(!context.calls.some(call=>call.url.includes('activate')));
+});
+test('historical owner drafts cannot be handed off and recipients cannot regrant them',async()=>{
+  const {run,context}=await proposalSetup({...ownProposal,can_handoff:false});assert.equal(run('registerSession'),null);
+  context.block=receivedProposal;const section=run('renderProposalHandoff(block)');
+  assert.equal(elementTree(section).some(node=>node.tag==='input'),false);assert.match(elementText(section),/teacher<script>/);
+  assert.equal(elementTree(section).some(node=>node.className==='view-blueprint-activate'),false);
+});
+test('recipient eligibility failure creates no grant and allows correcting the account',async()=>{
+  const fixture=await proposalSetup();setRecipient(fixture);fixture.context.check.eligible=false;
+  await fixture.run('registerSession.button.click()');
+  assert.equal(fixture.run('registerSession.state'),'ready');assert.equal(fixture.run('registerSession.recipient.disabled'),false);
+  assert.match(fixture.run('registerSession.status.textContent'),/未交接/);
+  assert.equal(fixture.context.calls.filter(call=>call.url.endsWith('.handoff')).length,0);
+});
+test('unknown handoff response fences repeat writes and recovery only reads',async()=>{
+  const fixture=await proposalSetup();const {run,context}=fixture;setRecipient(fixture);
+  context.ack={state:'pending',handoff_id:handoffId,proposal_id:proposalId,revision:'b'.repeat(64),enabled:false};
+  await run('registerSession.button.click()');assert.equal(run('registerSession.state'),'uncertain');
+  await run('registerSession.button.click()');assert.equal(context.calls.filter(call=>call.url.endsWith('.handoff')).length,1);
+  await run('registerSession.verify.click()');assert.equal(context.calls.filter(call=>call.url.endsWith('.handoff')).length,1);
+  assert.equal(context.calls.at(-1).options,undefined);
+});
+test('in-flight handoff prevents assistant navigation and double submission',async()=>{
+  const fixture=await proposalSetup();setRecipient(fixture);const {run,context}=fixture;let resolve;
+  context.slow=()=>new Promise(r=>resolve=r);
+  run('request=async(url,options)=>{calls.push({url,options});return url.endsWith("check_recipient")?check:slow()};');
+  const pending=run('registerSession.button.click()');await Promise.resolve();await Promise.resolve();
+  assert.equal((await run('showBusinessView({view:"students"},{origin:"assistant"})')).status,'blocked');
+  await run('registerSession.button.click()');assert.equal(context.calls.filter(call=>call.url.endsWith('.handoff')).length,1);
+  run('request=async()=>after');resolve(context.ack);await pending;assert.equal(run('current.view'),'business_proposal_inbox');
+});
+test('accepting a handoff only copies, then GET verifies; never auto-activates',async()=>{
+  const {run,context}=await proposalSetup(receivedProposal);
+  const target={view:'business_blueprint',proposal_id:'FILE-1'};
+  context.ack={state:'accepted',enabled:false,proposal_id:'FILE-1',revision:'a'.repeat(64),selection:target};
+  context.after={...context.initial,components:[{...receivedProposal,handoff_state:'accepted',can_accept:false,accepted_selection:target}]};
+  assert.equal(context.calls.length,1);await run('registerSession.button.click()');
+  const posts=context.calls.filter(call=>call.options?.method==='POST');assert.equal(posts.length,1);
+  assert(posts[0].url.endsWith('accept_handoff'));assert.deepEqual(JSON.parse(posts[0].options.body),{handoff_id:handoffId});
+  assert.equal(context.calls.at(-1).options,undefined);assert.equal(run('registerSession'),null);
+  assert(!context.calls.some(call=>call.url.includes('activate')));
+});
+test('copying or uncertain handoff has no retry-accept action even after reload',async()=>{
+  for(const state of ['copying','uncertain']){
+    const {run,context}=await proposalSetup({...receivedProposal,handoff_state:state,can_accept:false});
+    assert.equal(run('registerSession.button.disabled'),true);assert.equal(run('registerSession.button.hidden'),true);
+    assert.equal(run('registerSession.state'),'uncertain');await run('registerSession.button.click()');
+    assert.equal(context.calls.length,1);
+  }
+});
+test('accept failure preserves the readback fence and original exact handoff',async()=>{
+  const {run,context}=await proposalSetup(receivedProposal);context.ack={state:'uncertain',enabled:false,retry_allowed:false};
+  await run('registerSession.button.click()');assert.equal(run('registerSession.state'),'uncertain');
+  context.after={...context.initial,components:[{...receivedProposal,handoff_state:'copying',can_accept:false}]};
+  await run('registerSession.verify.click()');assert.equal(context.calls.filter(call=>call.options?.method==='POST').length,1);
+  const selection=JSON.parse(new URL(context.calls.at(-1).url,'https://test.local').searchParams.get('selection_json'));
+  assert.deepEqual(selection,{view:'business_proposal_handoff',handoff_id:handoffId});
+});
+test('proposal selections do not silently acquire date, meal, owner or site',()=>{
+  const {run,context}=setup();
+  for(const choice of [{view:'business_proposal',proposal_id:proposalId,revision:'a'.repeat(64)},
+    {view:'business_proposal_inbox',folder:'received',state:'pending'},{view:'business_proposal_handoff',handoff_id:handoffId}]){
+    context.choice=choice;assert.deepEqual(JSON.parse(run('JSON.stringify(sceneChoice(choice))')),choice);
+  }
+});
+test('accepted handoff rejects unverified destinations and corrupt identifiers',()=>{
+  const {run,context}=setup();
+  for(const patch of [{handoff_id:'bad'},{proposal_id:'FILE-1'},{revision:'x'},
+    {handoff_state:'accepted',accepted_selection:{view:'frappe_new',proposal_id:'F'}},
+    {handoff_state:'accepted',accepted_selection:{view:'business_blueprint',proposal_id:'F',owner:'other'}}]){
+    context.block={...receivedProposal,...patch};assert.throws(()=>run('renderProposalHandoff(block)'));
+  }
+});
 async function blueprintSetup(block=blueprint){
   const fixture=setup();fixture.context.responses=blueprintData(block);fixture.context.activeResponse=blueprintData({...block,state:'active',can_activate:false});
   fixture.context.ack={state:'active',doctype:block.doctype,proposal_id:block.proposal_id,revision:block.revision};fixture.context.calls=[];
