@@ -5,7 +5,7 @@
   <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="same-origin">
   <meta name="csrf-token" content="{{ csrf_token | e }}"><title>膳食管理工作台 · 童健云</title>
   <link rel="icon" href="/assets/tongjianyun/images/tongjianyun-logo.svg">
-  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-workbench-20260924-4">
+  <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/app.css?v=meal-header-20260925-1">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/chat.css?v=meal-chat-sse-20260925-2">
   <link rel="stylesheet" href="/assets/tongjianyun/meal_scene/views.css?v=frappe-wide-20260925-1">
 </head>
@@ -13,7 +13,6 @@
   <a href="#business-canvas" class="skip">跳到业务内容</a>
   <header class="topbar">
     <a class="brand" href="/tongjianyun-entry?choose=1"><img src="/assets/tongjianyun/images/tongjianyun-logo.svg" alt="童健云"><span><b>童健云</b><small>膳食管理工作台</small></span></a>
-    <div class="filters"><label>业务日期 <input id="day" type="date" aria-label="业务日期"></label><label>餐次 <select id="meal" aria-label="餐次"><option value="breakfast">早餐</option><option value="morning_snack">早点</option><option value="lunch" selected>午餐</option><option value="afternoon_snack">午点</option><option value="dinner">晚餐</option></select></label><button id="refresh" title="刷新业务数据" aria-label="刷新业务数据">↻</button></div>
     <div class="account"><a href="/tongjianyun-entry?choose=1">切换工作空间 ↗</a><span id="user-label">膳食工作空间</span></div>
   </header>
   <main id="stage" class="workbench">
@@ -52,6 +51,6 @@
   </main>
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p>请启用 JavaScript，或进入<a href="/desk/tongjianyun-workbench">原业务工作台</a>。</p></noscript>
-  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-chat-20260924-1"></script>
-  <script type="module" src="/assets/tongjianyun/meal_scene/chat.js?v=frappe-wide-20260925-1"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/app.js?v=meal-header-20260925-1"></script>
+  <script type="module" src="/assets/tongjianyun/meal_scene/chat.js?v=meal-header-20260925-1"></script>
 </body></html>

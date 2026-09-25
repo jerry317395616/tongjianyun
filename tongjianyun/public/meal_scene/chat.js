@@ -1,4 +1,5 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=frappe-wide-20260925-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=meal-header-20260925-1';
+import {mealContext as context,refreshMealData} from './state.js?v=meal-header-20260925-1';
 const $=id=>document.getElementById(id);
 const form=$('chat-form'),input=$('chat-input'),fileInput=$('chat-file'),send=$('chat-send');
 const messages=$('chat-messages'),chip=$('chat-file-chip'),fileName=$('chat-file-name');
@@ -12,7 +13,6 @@ function addMessage(kind,text,parent=messages){
   node.className=`chat-message ${kind}`;node.textContent=text;parent.append(node);return node;
 }
 function scrollMessages(){messages.scrollTop=messages.scrollHeight;}
-function context(){return {day:$('day').value,meal:$('meal').value};}
 function showContext(){
   const {day,meal}=context();
   $('chat-context').textContent=day?`${day} · ${mealNames[meal]||'午餐'}`:'正在读取业务日期…';
@@ -62,7 +62,7 @@ function finish(view,event){
   view.state=event.status;view.status.textContent=event.text||'本次处理结束。';
   view.status.classList.toggle('error',event.status==='failed');
   for(const row of view.items.values()){if(row.dataset.state==='running'){row.dataset.state='stopped';row.textContent='· '+row.dataset.label+'（已结束）';}}
-  if(activeTask===view.id){activeTask=null;source?.close();source=null;clearTimeout(recoveryTimer);controls();$('refresh').click();input.focus();}
+  if(activeTask===view.id){activeTask=null;source?.close();source=null;clearTimeout(recoveryTimer);controls();refreshMealData();input.focus();}
 }
 function applyEvent(view,event,id,replay=false){
   if(id){if(view.seen.has(id))return;view.seen.add(id);view.cursor=id;}
@@ -137,7 +137,6 @@ input.addEventListener('keydown',event=>{
   if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}
 });
 document.addEventListener('meal-scene:context',showContext);
-$('day').addEventListener('change',showContext);$('meal').addEventListener('change',showContext);
 form.addEventListener('submit',async event=>{
   event.preventDefault();if(!allowed||submitting)return;
   if(activeTask){

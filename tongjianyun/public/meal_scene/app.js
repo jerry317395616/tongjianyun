@@ -1,4 +1,4 @@
-import {STEPS,MEALS,SLOTS,stepFor,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
+import {STEPS,MEALS,SLOTS,stepFor,professionalRoute,mealDraft,draftTotals,mealContext,setMealContext,esc as h,number as n} from './state.js?v=meal-header-20260925-1';
 
 const $=id=>document.getElementById(id),panel=$('panel'),chatMode=!!$('meal-chat');
 let data=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
@@ -33,10 +33,10 @@ function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').sc
 function revealPanel(){if(window.matchMedia('(max-width:950px)').matches)panel.scrollIntoView({behavior:'smooth',block:'start'});}
 async function load(automatic=false){
   if(writing||(automatic&&((panel.open&&!chatMode)||document.hidden)))return;
-  const ticket=++loadSequence;ready=false;if(!automatic)message('正在读取所选日期与餐次的业务记录…');$('refresh').disabled=true;
+  const ticket=++loadSequence;ready=false;if(!automatic)message('正在读取所选日期与餐次的业务记录…');
   try{
-    const result=await api('get_overview',{day:$('day').value||'',meal:$('meal').value});if(ticket!==loadSequence)return;
-    data=result;ready=true;$('day').value=data.day;$('meal').value=data.meal;$('user-label').textContent=data.user_label;
+    const result=await api('get_overview',mealContext());if(ticket!==loadSequence)return;
+    data=result;ready=true;setMealContext(getContext());$('user-label').textContent=data.user_label;
     if(chatMode){
       weekPayload=null;selectedRecipe=null;
       if(data.recipes?.rows?.length===1){
@@ -49,7 +49,6 @@ async function load(automatic=false){
     document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:getContext()}));
     if(!chatMode&&!active)await openStep('recipe');
   }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);}
-  finally{if(ticket===loadSequence)$('refresh').disabled=false;}
 }
 async function openStep(id){
   const step=stepFor(id);if(!step||!ready){notify('请先等待读取成功，或刷新后再操作。');return false;}if(!leaveDraft())return false;
@@ -376,7 +375,7 @@ document.addEventListener('click',event=>{
   const weekCell=event.target.closest('[data-workbench-date][data-workbench-meal]');if(weekCell){
     const day=weekCell.dataset.workbenchDate,meal=weekCell.dataset.workbenchMeal;
     if(chatMode){
-      if(day!==data?.day||meal!==data?.meal)contextChange(null,day,meal);
+      if(day!==data?.day||meal!==data?.meal)contextChange(day,meal);
       else document.dispatchEvent(new CustomEvent('meal-scene:context',{detail:{day,meal}}));
       if(window.matchMedia('(max-width:950px)').matches)$('meal-chat').scrollIntoView({behavior:'smooth',block:'start'});
       return;
@@ -384,7 +383,7 @@ document.addEventListener('click',event=>{
     if(draftState?.kind==='draft'){
       captureDraftEditor();draftState.day=day;draftState.slot=SLOTS[meal];mobileWeekDay=day;renderDraftEditor();return;
     }
-    if(day===data?.day&&meal===data?.meal)openStep('recipe');else contextChange(null,day,meal);
+    if(day===data?.day&&meal===data?.meal)openStep('recipe');else contextChange(day,meal);
     revealPanel();
     return;
   }
@@ -403,21 +402,19 @@ $('close-panel').onclick=closePanel;panel.addEventListener('cancel',e=>{e.preven
 $('expand-panel').onclick=()=>panel.classList.toggle('expanded');
 $('previous-step').onclick=()=>{const step=stepFor(active);if(step.number>1)openStep(STEPS[step.number-2].id);};
 $('next-step').onclick=()=>{const step=stepFor(active);if(step.number<8)openStep(STEPS[step.number].id);};
-function contextChange(el,requestedDay=$('day').value,requestedMeal=$('meal').value){
-  if(!leaveDraft()){if(data){$('day').value=data.day;$('meal').value=data.meal;}return;}
+function contextChange(requestedDay,requestedMeal){
+  if(!leaveDraft())return;
   if(panel.open)closePanel();
-  $('day').value=requestedDay;$('meal').value=requestedMeal;
+  setMealContext({day:requestedDay,meal:requestedMeal});
   const covers=weekPayload?.payload?.days.some(row=>row.date===requestedDay);
   if(!covers){selectedRecipe=null;recipeCalendarState=null;weekPayload=null;}
   else if(recipeCalendarState){recipeCalendarState.day=requestedDay;recipeCalendarState.slot=SLOTS[requestedMeal];}
   load();
 }
-$('day').onchange=()=>{if($('day').value)contextChange($('day'));};$('meal').onchange=()=>contextChange($('meal'));
-$('refresh').onclick=()=>{if(chatMode){load();return;}if(!leaveDraft())return;if(panel.open)closePanel();load();};
+document.addEventListener('meal-scene:refresh',()=>{if(chatMode){load();return;}if(!leaveDraft())return;if(panel.open)closePanel();load();});
 $('week-mobile-day').onchange=()=>{mobileWeekDay=$('week-mobile-day').value;renderWeekOverview();};
 document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'&&panel.open){e.preventDefault();closePanel();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
 window.addEventListener('beforeunload',e=>{if(dirty||writing||embedded){e.preventDefault();e.returnValue='';}});
 const timer=setInterval(()=>load(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(true);});
 window.addEventListener('pagehide',()=>clearInterval(timer));window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
-const params=new URLSearchParams(location.search);if(/^\d{4}-\d{2}-\d{2}$/.test(params.get('day')||''))$('day').value=params.get('day');if(MEALS.some(([m])=>m===params.get('meal')))$('meal').value=params.get('meal');
 load();

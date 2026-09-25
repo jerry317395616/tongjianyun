@@ -18,16 +18,17 @@ class Element {
 function setup() {
   const nodes = new Map();
   const document = {
-    getElementById(id) { if(!nodes.has(id))nodes.set(id,new Element()); return nodes.get(id); },
+    getElementById(id) { assert(!['day','meal','refresh'].includes(id),'removed header control requested: '+id);if(!nodes.has(id))nodes.set(id,new Element()); return nodes.get(id); },
     createElement() { return new Element(); },
     querySelector() { return new Element(); },
   };
   const opened=[];
-  const context = vm.createContext({document,clearTimeout,setTimeout,URLSearchParams,opened,showBusinessView:value=>opened.push(value)});
+  const refreshed=[];
+  const context = vm.createContext({document,clearTimeout,setTimeout,URLSearchParams,opened,context:()=>({day:'2026-09-24',meal:'lunch'}),refreshMealData:()=>refreshed.push(true),showBusinessView:value=>opened.push(value)});
   const source = fs.readFileSync(path.join(__dirname,'../public/meal_scene/chat.js'),'utf8');
-  vm.runInContext(source.replace(/^import .*;\r?\n/,'').split("fileInput.addEventListener('change'")[0],context);
+  vm.runInContext(source.replace(/^import .*;\r?\n/gm,'').split("fileInput.addEventListener('change'")[0],context);
   vm.runInContext("const view=taskView({task_id:'test',message:'测试',status:'running'});",context);
-  return {context,nodes,run:code=>vm.runInContext(code,context)};
+  return {context,nodes,refreshed,run:code=>vm.runInContext(code,context)};
 }
 
 test('messages and tool stages stay in chronological order',()=>{
@@ -46,6 +47,13 @@ test('replayed event does not add a duplicate message',()=>{
   run("applyEvent(view,{kind:'message',item_id:'m1',text:'阶段一'},'1-0')");
   assert.equal(run('view.seen.size'),1);
   assert.equal(run('view.root.children.length'),3);
+});
+test('active task completion refreshes business data once without header controls',()=>{
+  const {run,refreshed,nodes}=setup();
+  run("showContext();activeTask='test';applyEvent(view,{kind:'terminal',status:'completed',text:'完成'},'1-0')");
+  run("applyEvent(view,{kind:'terminal',status:'completed',text:'完成'},'1-0')");
+  assert.equal(refreshed.length,1);assert.equal(run('activeTask'),null);
+  assert.equal(nodes.get('chat-context').textContent,'2026-09-24 · 午餐');
 });
 
 test('terminal event wins over stale running metadata during reload',async()=>{

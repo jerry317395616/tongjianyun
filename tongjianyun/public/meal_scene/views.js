@@ -1,4 +1,5 @@
 // Registered components only. Model messages, HTML and executable code are never rendered here.
+import {mealContext,setMealContext,refreshMealData} from './state.js?v=meal-header-20260925-1';
 const $=id=>document.getElementById(id);
 const validViews=new Set(['students','class_students','meal_counts','recipe_week','recipe_nutrition',
   'business_catalog','business_list','business_record','stock','ingredient_nutrition','classroom_day','weekly_orders',
@@ -6,33 +7,17 @@ const validViews=new Set(['students','class_students','meal_counts','recipe_week
 let request,current=null,ticket=0;
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=String(text??'—');if(cls)el.className=cls;return el;};
 function notice(text,error=false){$('view-status').textContent=text;$('view-status').hidden=!text;$('view-status').classList.toggle('error',error);}
-export function currentViewContext(){return current||{view:'recipe_week',day:$('day').value,meal:$('meal').value};}
+export function currentViewContext(){return current||{view:'recipe_week',...mealContext()};}
 export function initializeViews(options){
   request=options.request;
   // Each page load starts on the weekly recipe, independently of chat history.
   showCalendar();
   $('view-back').addEventListener('click',()=>showCalendar());
-  $('refresh').addEventListener('click',()=>{if(current&&current.view!=='recipe_week')showBusinessView(current);});
-  for(const id of ['day','meal'])$(id).addEventListener('change',()=>{
-    if(current?.view==='meal_counts')showBusinessView({...current,day:$('day').value,meal:$('meal').value});
-    if(current?.view==='recipe_nutrition'){
-      if(id==='day'){const {recipe,...choice}=current;showBusinessView({...choice,day:$('day').value,meal:$('meal').value});}
-      else current={...current,meal:$('meal').value}; // A whole-week analysis is not a single meal.
-    }
-    if(current&&['business_catalog','business_list','classroom_day','weekly_orders'].includes(current.view)){
-      if(id==='day')showBusinessView({...current,day:$('day').value,offset:current.view!=='business_catalog'?0:undefined});
-      else current={...current,meal:$('meal').value};
-    }
-    if(current?.view==='ingredient_nutrition'&&id==='day'){
-      const {recipe,...choice}=current;showBusinessView({...choice,day:$('day').value,offset:0});
-    }
-  });
+  document.addEventListener('meal-scene:refresh',event=>{if(!event.detail?.calendarOnly&&current&&current.view!=='recipe_week')showBusinessView(current);});
 }
 function calendarContext(choice){
   if(!choice?.day||!choice?.meal)return;
-  const changed=$('day').value!==choice.day||$('meal').value!==choice.meal;
-  $('day').value=choice.day;$('meal').value=choice.meal;
-  if(changed)$('refresh').click();
+  if(setMealContext(choice))refreshMealData({calendarOnly:true});
 }
 function showCalendar(choice){
   ++ticket;current=null;notice('');$('business-view').hidden=true;$('recipe-workspace').hidden=false;

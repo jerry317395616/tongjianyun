@@ -11,6 +11,15 @@ export const STEPS=Object.freeze([
   {id:'trace',number:8,title:'追溯与报表',subtitle:'业务单据关联 · 分清未接入',color:'#9383bc',point:[-10,3.55,4.5],cap:null},
 ]);
 export const MEALS=[['breakfast','早餐'],['morning_snack','早点'],['lunch','午餐'],['afternoon_snack','午点'],['dinner','晚餐']];
+// Date/meal belong to the workspace, not to header form controls.
+const initialParams=new URLSearchParams(typeof location==='undefined'?'':location.search);
+let selectedContext={day:/^\d{4}-\d{2}-\d{2}$/.test(initialParams.get('day')||'')?initialParams.get('day'):'',meal:MEALS.some(([key])=>key===initialParams.get('meal'))?initialParams.get('meal'):'lunch'};
+export const mealContext=()=>({...selectedContext});
+export function setMealContext({day,meal}){
+  const changed=selectedContext.day!==day||selectedContext.meal!==meal;
+  selectedContext={day,meal};return changed;
+}
+export function refreshMealData({calendarOnly=false}={}){document.dispatchEvent(new CustomEvent('meal-scene:refresh',{detail:{calendarOnly}}));}
 export const SLOTS={breakfast:'breakfast',morning_snack:'morningSnack',lunch:'lunch',afternoon_snack:'snack',dinner:'dinner'};
 export const stepFor=id=>STEPS.find(s=>s.id===id)||null;
 export const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

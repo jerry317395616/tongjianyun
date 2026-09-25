@@ -84,6 +84,8 @@ body{height:auto;min-height:100dvh;overflow:auto;background:#f3f6f2}
 #stage.workbench #panel-number{display:none}
 #stage.workbench #panel>footer button:disabled{visibility:hidden}
 .visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* With no header filters, small screens need only the brand/account row. */
+@media(max-width:760px){.topbar{height:64px;min-height:64px;flex-wrap:nowrap}#stage{height:calc(100dvh - 64px)}}
 @media(max-width:950px){#stage.workbench{grid-template-columns:minmax(0,1fr)}#stage.workbench #panel{grid-column:1;position:static;width:100%;height:min(720px,85dvh);top:auto}.workbench-main{min-height:0}}
 @media(max-width:760px){#stage.workbench .workbench-main,#stage.workbench #panel{margin-bottom:9px}#stage.workbench .more-work .flow-nav{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}#stage.workbench .more-work .flow-nav button{min-height:42px;flex-direction:row;text-align:left;justify-content:flex-start}#stage.workbench .more-work .flow-nav strong{font-size:11px;white-space:normal}.workbench-main>.worklist{padding:11px}#stage.workbench .worklist-heading{display:flex;grid-template-columns:none;align-items:center}.worklist-heading p{font-size:9px}}
 @media print{#stage.workbench .workbench-main{display:none!important}}
