@@ -88,12 +88,14 @@ class CDP{
     await until(`document.readyState==='complete'&&!!document.querySelector('#stage')`,'page shell');
     if(await run(`document.querySelector('#stage').classList.contains('workbench')`)){
       await until(`document.querySelector('#message').hidden&&document.querySelectorAll('#workbench-week .workbench-week-cell').length===25&&document.querySelector('#panel-body').textContent.includes('秋日食谱')`,'unified workbench');
+      check('left sidebar removed and work begins in main area',await run(`!document.querySelector('.workbench-sidebar')&&document.querySelector('.workbench-main').contains(document.querySelector('.worklist'))&&document.querySelector('#worklist-items button').textContent.includes('核对预计用餐人数')`));
       check('week is the primary workspace',await run(`document.querySelector('#week-title').textContent.includes('2026-09-21')&&document.querySelector('#stage').contains(document.querySelector('#panel'))`));
-      check('eight real business entries remain',await run(`document.querySelectorAll('#flow-nav [data-step]').length===8`));
-      check('unconfirmed groups are not counted as zero',await run(`document.querySelector('#facts').textContent.includes('待核对')`));
+      check('eight real business entries remain inside collapsed other work',await run(`document.querySelectorAll('#flow-nav [data-step]').length===8&&!document.querySelector('#more-work').open`));
+      check('unconfirmed groups are not counted as zero',await run(`document.querySelector('#worklist-items').textContent.includes('1 / 2 个可见班已保存预计')`));
       check('3D loads only on request',await run(`!document.querySelector('#canvas canvas')&&!document.querySelector('#scene-preview').open`));
       check('week displays authoritative recipe rows',await run(`document.querySelectorAll('#workbench-week .workbench-week-cell').length===25&&document.querySelector('#workbench-week').textContent.includes('田园时蔬')`));
       await shot('unified-desktop.png');
+      await click('#more-work summary');check('other work opens in the main area',await run(`document.querySelector('#more-work').open&&document.querySelector('.workbench-main').contains(document.querySelector('#flow-nav'))`));
       await send('Emulation.setDeviceMetricsOverride',{width:1024,height:768,deviceScaleFactor:1,mobile:false});await delay(250);
       check('1024px workbench has no horizontal overflow',await run(`document.documentElement.scrollWidth<=innerWidth+1`));
       await shot('unified-1024.png');
@@ -123,6 +125,7 @@ class CDP{
       await run(`(()=>{const day=document.querySelector('#day');day.value='2026-09-28';day.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await until(`document.querySelector('#message').hidden&&document.querySelector('#week-caption').textContent.includes('尚未选定本周食谱')`,'week without covering recipe');
       check('uncovered week does not pretend meals are zero',await run(`document.querySelectorAll('#workbench-week .workbench-week-cell.unplanned').length===25&&document.querySelector('#panel-body').textContent.includes('不代表其他日期也未编排')`));
+      check('uncovered week suggests exactly one direct recipe action',await run(`document.querySelectorAll('#worklist-items button').length===1&&document.querySelector('#worklist-items [data-start-draft]')?.textContent.includes('开始编排本周食谱')`));
       await click('#scene-preview summary');await until(`!!document.querySelector('#canvas canvas')`,'lazy Three.js');
       check('optional 3D remains available',await run(`document.querySelector('#fallback').hidden`));
       await shot('unified-scene-expanded.png');
@@ -130,6 +133,9 @@ class CDP{
       check('mobile has no page horizontal overflow',await run(`document.documentElement.scrollWidth<=innerWidth+1`));
       check('mobile shows one readable day',await run(`document.querySelectorAll('#workbench-week .workbench-week-cell.mobile-day').length===5&&getComputedStyle(document.querySelector('#week-mobile-day')).display!=='none'`));
       await shot('unified-mobile.png');
+      await click('#worklist-items [data-start-draft]');await until(`!!document.querySelector('#draft-title')`,'one-tap draft action on mobile');await delay(500);
+      check('mobile suggested action reveals the editor',await run(`document.querySelector('#panel').getBoundingClientRect().top<innerHeight&&scrollY>0`));
+      await shot('simple-mobile-editor.png');
       check('no unexpected write or browser exception',calls.filter(c=>c.write).map(c=>c.method).join(',')==='create_recipe_draft,upload_file,start_recipe_import'&&errors.length===0);
       console.log(JSON.stringify({passed:true,checks,api_calls:calls.length,synthetic_writes:calls.filter(c=>c.write).map(c=>c.method),screenshots:OUT,browser_exceptions:errors}));
       return;

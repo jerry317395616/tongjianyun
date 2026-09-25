@@ -1,4 +1,4 @@
-import {STEPS,MEALS,SLOTS,stepFor,stepBadge,factCards,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
+import {STEPS,MEALS,SLOTS,stepFor,stepBadge,professionalRoute,mealDraft,draftTotals,esc as h,number as n} from './state.js?v=meal-flow-20260923-1';
 
 const $=id=>document.getElementById(id),panel=$('panel');
 let data=null,scene=null,scenePromise=null,active=null,selectedRecipe=null,recipeCalendarState=null,weekPayload=null,draftState=null,dirty=false,writing=false,ready=false,embedded=false,sequence=0,loadSequence=0,toastTimer,mobileWeekDay=null;
@@ -28,8 +28,9 @@ async function api(method,args={},write=false){
 }
 function message(text='',error=false){$('message').textContent=text;$('message').hidden=!text;$('message').classList.toggle('error',error);}
 function leaveDraft(){if(writing)return false;if((dirty||embedded)&&!window.confirm(embedded?'离开原业务面板前，请确认已保存其中的修改。继续吗？':'有未保存的食谱修改，确认放弃并切换吗？'))return false;const hadDraft=!!draftState;dirty=false;draftState=null;embedded=false;panel.classList.remove('embedded-open');if(hadDraft)renderWeekOverview();return true;}
-function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panelBody(empty('请选择周历餐次或左侧业务环节。'));scene?.focus(null);return true;}
+function closePanel(){if(!leaveDraft())return false;++sequence;active=null;panelBody(empty('请选择周历餐次或下方其他业务。'));scene?.focus(null);return true;}
 function panelBody(content){$('panel-body').innerHTML=content;$('panel-body').scrollTop=0;}
+function revealPanel(){if(window.matchMedia('(max-width:950px)').matches)panel.scrollIntoView({behavior:'smooth',block:'start'});}
 function fallback(){ $('render-status').hidden=true;$('fallback').hidden=false;$('labels').hidden=true;scene?.dispose();scene=null; }
 function ensureScene(){
   if(scenePromise||!$('scene-preview').open)return;
@@ -47,7 +48,6 @@ async function load(automatic=false){
     const result=await api('get_overview',{day:$('day').value||'',meal:$('meal').value});if(ticket!==loadSequence)return;
     data=result;ready=true;$('day').value=data.day;$('meal').value=data.meal;$('user-label').textContent=data.user_label;
     $('sync').textContent='业务读取 '+String(data.generated_at).slice(11,19);
-    $('facts').innerHTML=factCards(data).map(c=>`<button class="fact" data-step="dispatch"><span>${h(c.label)}</span><b>${h(c.value)}</b><small>${h(c.note)}</small></button>`).join('');
     document.querySelectorAll('#flow-nav button').forEach(el=>el.title=stepBadge(el.dataset.step,data));
     renderWorklist();renderWeekOverview();scene?.setData(data);message();history.replaceState(null,'','/tongjianyun-meal-scene?'+new URLSearchParams(getContext()));
     if($('scene-preview').open)ensureScene();
@@ -55,10 +55,10 @@ async function load(automatic=false){
   }catch(error){if(ticket!==loadSequence)return;message(failure(error),true);$('render-status').hidden=true;}
   finally{if(ticket===loadSequence)$('refresh').disabled=false;}
 }
-$('flow-nav').innerHTML=STEPS.map(s=>`<button data-step="${s.id}" style="--tint:${s.color}" aria-label="第${s.number}站：${h(s.title)}"><span class="step-num">${s.number}</span><span><strong>${h(s.title)}</strong><small>${s.number<5?'准备与供给':'参考与结果'}</small></span></button>`).join('');
+$('flow-nav').innerHTML=STEPS.map(s=>`<button data-step="${s.id}" style="--tint:${s.color}" aria-label="${h(s.title)}"><span class="step-num">${s.number}</span><span><strong>${h(s.title)}</strong></span></button>`).join('');
 async function openStep(id){
   const step=stepFor(id);if(!step||!ready){notify('请先等待读取成功，或刷新后再操作。');return false;}if(!leaveDraft())return false;
-  const ticket=++sequence;active=id;scene?.focus(id);$('panel-title').textContent=step.title;$('panel-number').textContent=step.number;$('panel-subtitle').textContent='第 '+step.number+' 站 · '+step.subtitle;
+  const ticket=++sequence;active=id;scene?.focus(id);$('panel-title').textContent=step.title;$('panel-number').textContent=step.number;$('panel-subtitle').textContent=step.subtitle;
   panel.style.setProperty('--active-color',step.color);$('panel-context').textContent=`${data.day} · ${MEALS.find(([m])=>m===data.meal)?.[1]} · 仅当前账号可见范围`;
   $('previous-step').disabled=step.number===1;$('next-step').disabled=step.number===8;$('step-position').textContent=step.number+' / 8';
   panel.classList.remove('expanded','embedded-open');if(!panel.open)panel.show();
@@ -95,11 +95,11 @@ function businessWeekDates(day){
 function renderWorklist(){
   if(!data)return;
   const items=[],summary=data.plans?.summary;
-  if(data.capabilities.recipe&&data.recipes.rows.length===0)items.push(['recipe','所选日期暂无覆盖食谱','先编排或选择食谱']);
-  if(summary&&summary.visible_groups>summary.planned_groups)items.push(['dispatch','预计人数待核对',`${summary.planned_groups} / ${summary.visible_groups} 个可见班已保存预计`]);
-  if(summary&&data.day<=data.today&&summary.visible_groups>summary.confirmed_groups)items.push(['dining','实际用餐待确认',`${summary.confirmed_groups} / ${summary.visible_groups} 个可见班已确认`]);
-  if(data.capabilities.receipt&&data.receipts.rows.length)items.push(['receipt','查看近七日收货单',`${data.receipts.rows.length}${data.receipts.has_more?'＋':''} 条可见单据；不代表待验收`]);
-  $('worklist-items').innerHTML=items.slice(0,4).map(([id,title,detail])=>`<button type="button" class="worklist-item" data-step="${id}"><strong>${h(title)}</strong><small>${h(detail)}</small></button>`).join('')||'<p class="muted">当前没有可由已接入数据判定的待办；可从下方业务链路继续。</p>';
+  if(data.capabilities.recipe&&data.recipes.rows.length===0)items.push([data.capabilities.recipe_create?'draft':'recipe',data.capabilities.recipe_create?'开始编排本周食谱':'选择本周食谱','当前日期还没有选定覆盖食谱']);
+  if(summary&&summary.visible_groups>summary.planned_groups)items.push(['dispatch','核对预计用餐人数',`${summary.planned_groups} / ${summary.visible_groups} 个可见班已保存预计`]);
+  if(summary&&data.day<=data.today&&summary.visible_groups>summary.confirmed_groups)items.push(['dining','确认实际用餐人数',`${summary.confirmed_groups} / ${summary.visible_groups} 个可见班已确认`]);
+  const first=items[0]||['recipe','查看本周食谱','当前没有可从已接入数据判定的待办'];
+  $('worklist-items').innerHTML=`<button type="button" class="worklist-item" ${first[0]==='draft'?'data-start-draft="1"':`data-step="${first[0]}"`}><span><strong>${h(first[1])}</strong><small>${h(first[2])}</small></span><span aria-hidden="true">→</span></button>${items.length>1?`<p class="worklist-rest">还有 ${items.length-1} 项需核对，可在“其他业务”中查看。</p>`:''}`;
 }
 function renderWeekOverview(){
   if(!data)return;
@@ -353,7 +353,7 @@ function plansView(id){
     note(id==='dispatch'?'未保存预计的班级显示“待核对”，不是零份。当前没有特殊餐执行清单、配送批次或签收模块，不能把餐车模型当作凭证。':'修改已确认记录必须填写原因。未来只能保存预计，未发生的餐次不可提前确认实际。','warning'));
 }
 async function editMeals(group){
-  if(!leaveDraft())return;active='dining';scene?.focus('dining');$('panel-title').textContent='实际用餐确认';$('panel-number').textContent=7;$('panel-subtitle').textContent='第 7 站 · 逐生核对五餐';$('step-position').textContent='7 / 8';$('previous-step').disabled=false;$('next-step').disabled=false;
+  if(!leaveDraft())return;active='dining';scene?.focus('dining');$('panel-title').textContent='实际用餐确认';$('panel-number').textContent=7;$('panel-subtitle').textContent='逐生核对五餐';$('step-position').textContent='7 / 8';$('previous-step').disabled=false;$('next-step').disabled=false;
   const ticket=++sequence,day=data.day;panelBody(empty('读取班级已保存计划与实际状态…'));
   try{const result=await api('get_meals',{student_group:group,day});if(!live(ticket))return;
     const rows=result.record.students.map(mealDraft),editable=!!data.capabilities.meals_write&&result.editable!==false,future=day>data.today;
@@ -390,16 +390,18 @@ function openNative(key,name=''){
     `<div class="buttons"><a class="secondary" href="${h(route)}" target="_blank" rel="noopener">在新页打开原模块 ↗</a><button class="secondary" id="native-back">返回本站业务</button></div><iframe class="professional" title="原 Frappe 专业业务模块" src="${h(route)}" referrerpolicy="same-origin"></iframe>`);
   $('native-back').onclick=()=>openStep(active);
 }
-document.addEventListener('click',event=>{
+document.addEventListener('click',async event=>{
   const weekCell=event.target.closest('[data-workbench-date][data-workbench-meal]');if(weekCell){
     const day=weekCell.dataset.workbenchDate,meal=weekCell.dataset.workbenchMeal;
     if(draftState?.kind==='draft'){
       captureDraftEditor();draftState.day=day;draftState.slot=SLOTS[meal];mobileWeekDay=day;renderDraftEditor();return;
     }
     if(day===data?.day&&meal===data?.meal)openStep('recipe');else contextChange(null,day,meal);
+    revealPanel();
     return;
   }
-  const step=event.target.closest('[data-step]');if(step){$('search-results').hidden=true;openStep(step.dataset.step);return;}
+  const startDraft=event.target.closest('[data-start-draft]');if(startDraft){if(await openStep('recipe')){beginRecipeDraft();revealPanel();}return;}
+  const step=event.target.closest('[data-step]');if(step){$('search-results').hidden=true;openStep(step.dataset.step);revealPanel();return;}
   const native=event.target.closest('[data-native]');if(native){openNative(native.dataset.native,native.dataset.doc||'');return;}
   const draftCell=event.target.closest('[data-draft-day][data-draft-slot]');if(draftCell&&draftState?.kind==='draft'){captureDraftEditor();const top=$('panel-body').scrollTop,left=$('panel-body').querySelector('.recipe-week-scroll')?.scrollLeft||0;draftState.day=draftCell.dataset.draftDay;draftState.slot=draftCell.dataset.draftSlot;renderDraftEditor();$('panel-body').scrollTop=top;$('panel-body').querySelector('.recipe-week-scroll').scrollLeft=left;return;}
   const draftRemove=event.target.closest('[data-draft-remove]');if(draftRemove&&draftState?.kind==='draft'){captureDraftEditor();const portion=draftPortion(draftState.day,draftState.slot,true);portion.dishIngredientRows.splice(Number(draftRemove.dataset.draftRemove),1);dirty=true;const top=$('panel-body').scrollTop;renderDraftEditor();$('panel-body').scrollTop=top;return;}
@@ -433,8 +435,8 @@ $('week-import').onclick=async()=>{if(await openStep('recipe'))beginRecipeImport
 $('week-other-recipes').onclick=async()=>{if(await openStep('recipe'))document.querySelector('[data-sub="recipe-library"]')?.click();};
 $('labels-toggle').onclick=()=>{const hidden=document.body.classList.toggle('tags-off');$('labels-toggle').setAttribute('aria-pressed',String(!hidden));};
 $('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch(_){notify('浏览器未允许全屏，所有业务仍可使用。');}};
-$('search').oninput=()=>{const q=$('search').value.trim();$('search-results').hidden=!q;$('search-results').innerHTML=STEPS.filter(s=>(s.title+s.subtitle).includes(q)).map(s=>`<button data-step="${s.id}">${s.number} · ${h(s.title)}</button>`).join('')||'<p class="muted">没有匹配的业务物件</p>';};
-document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'){if(!$('search-results').hidden){$('search-results').hidden=true;return;}if(panel.open){e.preventDefault();closePanel();}}if(e.key==='/'&&!editing){e.preventDefault();$('search').focus();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
+$('search').oninput=()=>{const q=$('search').value.trim();$('search-results').hidden=!q;$('search-results').innerHTML=STEPS.filter(s=>(s.title+s.subtitle).includes(q)).map(s=>`<button data-step="${s.id}">${h(s.title)}</button>`).join('')||'<p class="muted">没有匹配的业务</p>';};
+document.addEventListener('keydown',e=>{const editing=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable;if(e.key==='Escape'){if(!$('search-results').hidden){$('search-results').hidden=true;return;}if(panel.open){e.preventDefault();closePanel();}}if(e.key==='/'&&!editing){e.preventDefault();$('more-work').open=true;$('search').focus();}if(!editing&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&/^[1-8]$/.test(e.key))openStep(STEPS[Number(e.key)-1].id);});
 window.addEventListener('beforeunload',e=>{if(dirty||writing||embedded){e.preventDefault();e.returnValue='';}});
 const timer=setInterval(()=>load(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(true);});
 window.addEventListener('pagehide',()=>{clearInterval(timer);scene?.dispose();});window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
