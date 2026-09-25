@@ -92,10 +92,11 @@ class CDP{
       check('week is the primary workspace',await run(`document.querySelector('#week-title').textContent.includes('2026-09-21')&&document.querySelector('#stage').contains(document.querySelector('#panel'))`));
       check('eight real business entries remain inside collapsed other work',await run(`document.querySelectorAll('#flow-nav [data-step]').length===8&&!document.querySelector('#more-work').open`));
       check('unconfirmed groups are not counted as zero',await run(`document.querySelector('#worklist-items').textContent.includes('1 / 2 个可见班已保存预计')`));
-      check('3D loads only on request',await run(`!document.querySelector('#canvas canvas')&&!document.querySelector('#scene-preview').open`));
+      check('3D controls and renderer are absent',await run(`!document.querySelector('#scene-preview,#canvas,#labels,#fullscreen,script[type="importmap"]')&&!performance.getEntriesByType('resource').some(row=>/scene\.js|three\.module\.js/.test(row.name))`));
       check('week displays authoritative recipe rows',await run(`document.querySelectorAll('#workbench-week .workbench-week-cell').length===25&&document.querySelector('#workbench-week').textContent.includes('田园时蔬')`));
       await shot('unified-desktop.png');
       await click('#more-work summary');check('other work opens in the main area',await run(`document.querySelector('#more-work').open&&document.querySelector('.workbench-main').contains(document.querySelector('#flow-nav'))`));
+      check('expanded other work still has no 3D entry',await run(`!document.querySelector('#scene-preview')&&!document.querySelector('#more-work').textContent.includes('3D')`));
       await send('Emulation.setDeviceMetricsOverride',{width:1024,height:768,deviceScaleFactor:1,mobile:false});await delay(250);
       check('1024px workbench has no horizontal overflow',await run(`document.documentElement.scrollWidth<=innerWidth+1`));
       await shot('unified-1024.png');
@@ -126,9 +127,6 @@ class CDP{
       await until(`document.querySelector('#message').hidden&&document.querySelector('#week-caption').textContent.includes('尚未选定本周食谱')`,'week without covering recipe');
       check('uncovered week does not pretend meals are zero',await run(`document.querySelectorAll('#workbench-week .workbench-week-cell.unplanned').length===25&&document.querySelector('#panel-body').textContent.includes('不代表其他日期也未编排')`));
       check('uncovered week suggests exactly one direct recipe action',await run(`document.querySelectorAll('#worklist-items button').length===1&&document.querySelector('#worklist-items [data-start-draft]')?.textContent.includes('开始编排本周食谱')`));
-      await click('#scene-preview summary');await until(`!!document.querySelector('#canvas canvas')`,'lazy Three.js');
-      check('optional 3D remains available',await run(`document.querySelector('#fallback').hidden`));
-      await shot('unified-scene-expanded.png');
       await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(500);
       check('mobile has no page horizontal overflow',await run(`document.documentElement.scrollWidth<=innerWidth+1`));
       check('mobile shows one readable day',await run(`document.querySelectorAll('#workbench-week .workbench-week-cell.mobile-day').length===5&&getComputedStyle(document.querySelector('#week-mobile-day')).display!=='none'`));
