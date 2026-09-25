@@ -18,6 +18,8 @@ from frappe.model.base_document import RESERVED_KEYWORDS
 from frappe.model.document import Document
 
 PREFIX = 'Tongjianyun Extension '
+COMPLEX_PREFIX = 'Tongjianyun Advanced '
+OWNED_PREFIXES = (PREFIX, COMPLEX_PREFIX)
 FILE_PREFIX = 'business-blueprint-'
 TYPES = {'Data', 'Small Text', 'Date', 'Datetime', 'Int', 'Float', 'Currency', 'Check', 'Select', 'Link'}
 RESERVED = {'name', 'owner', 'creation', 'modified', 'modified_by', 'docstatus', 'idx', 'doctype',
@@ -43,6 +45,9 @@ def validate_spec(value):
         if len(value.encode('utf-8')) > MAX_BYTES:
             raise ValueError('业务方案过大')
         value = json.loads(value)
+    if isinstance(value, dict) and value.get('version') == 2:
+        from tongjianyun.business_blueprints_v2 import validate_spec as validate_v2
+        return validate_v2(value)
     if not isinstance(value, dict) or set(value) - {'key', 'title', 'description', 'fields'}:
         raise ValueError('业务方案只接受 key、title、description、fields')
     key = value.get('key')
@@ -95,7 +100,7 @@ def revision(spec):
 
 
 def doctype_name(spec):
-    return PREFIX + spec['key']
+    return (COMPLEX_PREFIX if spec.get('version') == 2 else PREFIX) + spec['key']
 
 
 def _access():
@@ -106,7 +111,7 @@ def _access():
 def _validate_links(spec):
     from tongjianyun.frappe_project_views import module_apps, _doctype
     modules = module_apps()
-    for field in spec['fields']:
+    for field in [*spec['fields'], *[f for t in spec.get('tables', []) for f in t['fields']]]:
         if field['fieldtype'] == 'Link':
             _doctype(field['options'], modules)
 
@@ -130,7 +135,7 @@ def _load(proposal_id):
     return validate_spec(payload.get('spec'))
 
 
-def _definition(spec):
+def _definition_v1(spec):
     return {'doctype': 'DocType', 'name': doctype_name(spec), 'module': 'Tongjianyun',
             'custom': 1, 'is_submittable': 0, 'track_changes': 1, 'autoname': 'hash',
             'title_field': 'title', 'search_fields': 'title',
@@ -142,13 +147,23 @@ def _definition(spec):
                              'report': 1, 'export': 1, 'print': 1, 'email': 0, 'delete': 0}]}
 
 
+def _definition(spec):
+    if spec.get('version') == 2:
+        from tongjianyun.business_blueprints_v2 import definitions
+        return definitions(spec)[-1]
+    return _definition_v1(spec)
+
+
 def _state(spec):
+    if spec.get('version') == 2:
+        from tongjianyun.business_blueprints_v2 import state
+        return state(spec)
     name = doctype_name(spec)
     if not frappe.db.exists('DocType', name):
-        return 'proposed'
+        return 'conflict' if frappe.db.table_exists(name, cached=False) else 'proposed'
     # Frappe commits metadata before MariaDB DDL. Metadata alone may therefore
     # survive a failed CREATE/ALTER and must never count as a usable business.
-    if not frappe.db.table_exists(name):
+    if not frappe.db.table_exists(name, cached=False):
         return 'conflict'
     meta = frappe.get_meta(name, cached=False)
     # Do not claim an unrelated pre-existing type is the activated proposal.
@@ -161,7 +176,7 @@ def _state(spec):
                        for f in expected['fields']]
     required_columns = {'name', 'owner', 'creation', 'modified', 'modified_by', 'docstatus', 'idx'} | {
         field['fieldname'] for field in expected['fields']}
-    if not required_columns.issubset(set(frappe.db.get_table_columns(name))):
+    if not required_columns.issubset({row[0] for row in frappe.db.describe(name)}):
         return 'conflict'
     permissions = list(meta.permissions or [])
     if len(permissions) != 1 or permissions[0].get('role') != 'System Manager':
@@ -184,6 +199,14 @@ def preview(proposal_id):
     warnings = ['启用将新增独立业务数据表；不会修改已有类型或自动生成业务记录。',
                 '初始仅系统管理员可用；保留修改历史，不授予删除权限。',
                 '这是登记类业务：不自动扣库存、付款、发送消息或建立专业审批规则。']
+    if spec.get('version') == 2:
+        warnings[-1] = '包含受控明细与固定计算，可选原生复核流程；不代替采购、库存或财务专业规则。'
+        warnings += ['多表结构安装不能保证事务回滚；部分失败将停止并标记冲突，不覆盖已有数据。',
+                     '计算由服务端重算；金额固定两位小数，仅接受非负有限数值。']
+        if spec['workflow']:
+            warnings += ['复核仅限 System Manager，普通管理者不能复核自己创建的单据；Administrator 保留 Frappe 原生例外。']
+            can_activate = can_activate and all(frappe.has_permission(dt, 'create') for dt in
+                ('Workflow', 'Workflow State', 'Workflow Action Master'))
     if state == 'conflict':
         warnings.append('同名业务已经存在且与方案不一致，不能覆盖。请先核对原业务或换业务键。')
     if state == 'proposed' and not can_activate:
@@ -191,6 +214,9 @@ def preview(proposal_id):
     component = {'type': 'business_blueprint', 'proposal_id': proposal_id, 'revision': revision(spec),
                  'title': spec['title'], 'description': spec['description'], 'fields': _definition(spec)['fields'],
                  'state': state, 'doctype': doctype_name(spec), 'warnings': warnings, 'can_activate': can_activate}
+    if spec.get('version') == 2:
+        from tongjianyun.business_blueprints_v2 import preview_extra
+        component.update(preview_extra(spec))
     return {'title': '新业务方案：' + spec['title'], 'subtitle': '先核对字段，再决定是否启用',
             'components': [component], 'source': '当前用户私有方案；未启用不改变数据库结构',
             'actions': ([{'label': '打开业务', 'selection': {'view': 'frappe_doctype', 'doctype': doctype_name(spec)}}]
@@ -224,14 +250,19 @@ def activate(proposal_id, revision):
     from tongjianyun.extension_policy import evaluate_extension_change
     if not evaluate_extension_change('add-custom-business', explicitly_confirmed=True).allowed:
         frappe.throw('当前策略不允许启用新业务。')
-    lock = 'business-blueprint:' + frappe.local.site + ':' + doctype_name(spec)
+    # v2 installs shared workflow-state/action labels as well as its own types.
+    lock = 'business-blueprint:' + frappe.local.site + ':' + ('v2-install' if spec.get('version') == 2 else doctype_name(spec))
     with frappe.cache().lock(lock, timeout=120, blocking_timeout=5):
         state = _state(spec)
         if state == 'conflict':
             frappe.throw('同名业务已存在且结构不同，不能覆盖。')
         if state == 'proposed':
-            doc = frappe.get_doc(_definition(spec)).insert()
-            doc.add_comment('Comment', text='由统一业务场景启用。私有方案：' + proposal_id + '；校验：' + expected)
+            if spec.get('version') == 2:
+                from tongjianyun.business_blueprints_v2 import install
+                install(spec, proposal_id)
+            else:
+                doc = frappe.get_doc(_definition(spec)).insert()
+                doc.add_comment('Comment', text='由统一业务场景启用。私有方案：' + proposal_id + '；校验：' + expected)
             # Schema DDL is not reliably transactional; verify before reporting
             # success. A retry checks the exact existing schema, never drops it.
             if _state(spec) != 'active':

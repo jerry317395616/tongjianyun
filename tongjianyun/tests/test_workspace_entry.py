@@ -195,10 +195,10 @@ class TeacherScopeTests(unittest.TestCase):
                 save.assert_not_called()
 
     def test_meal_read_does_not_leak_other_group_index(self):
-        payload = {"record":{"student_group":"C1"},"revision":"r","expected":{},"actual":{},"groups":[{"name":"SECRET-C2"}]}
+        payload = {"record":{"student_group":"C1"},"revision":"r","expected":{},"actual":{},"meals":{},"groups":[{"name":"SECRET-C2"}]}
         with patch.object(classroom, "_scope", return_value=_dict(name="C1")), patch("tongjianyun.student_meals.get_class_meals", return_value=payload):
             result = classroom.get_meals("C1","2026-09-23",workspace="teacher")
-            self.assertEqual(set(result), {"record","revision","expected","actual"})
+            self.assertEqual(set(result), {"record","revision","expected","actual","meals"})
             self.assertNotIn("SECRET-C2", str(result))
 
     def test_meal_save_delegates_without_overriding_validation(self):

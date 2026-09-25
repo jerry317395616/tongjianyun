@@ -6,7 +6,7 @@ from datetime import timedelta
 import frappe
 from frappe import _
 from frappe.utils import getdate, nowdate
-from tongjianyun.attendance_scope import allowed_groups, require_group, require_manager, visible_confirmation
+from tongjianyun.attendance_scope import allowed_groups, is_manager, require_group, require_manager, visible_confirmation
 
 
 CONFIRMATION_DOCTYPE = "Tongjianyun Daily Meal Confirmation"
@@ -291,6 +291,8 @@ def prepare_today_confirmation():
 def _require_login():
     if frappe.session.user == "Guest":
         frappe.throw(_("请先登录"), frappe.AuthenticationError)
+    if not frappe.db.get_value("User", frappe.session.user, "enabled"):
+        frappe.throw(_("请使用已启用的账号登录"), frappe.PermissionError)
 
 
 def _require_attendance_editor():
@@ -298,14 +300,63 @@ def _require_attendance_editor():
         frappe.throw(_("当前角色只能查看学生缺勤，不能修改"), frappe.PermissionError)
 
 
-def _get_confirmation_for_edit(meal_date):
+def attendance_write_allowed(meal_date) -> bool:
+    """Advisory capability; the write service rechecks identity, rows and locks.
+
+    An assigned teacher edits attendance facts, not the whole-school aggregate.
+    This never grants Daily Confirmation DocPerm or bypasses a document read.
+    """
+    user = frappe.session.user
+    if user == "Guest" or not frappe.db.get_value("User", user, "enabled"):
+        return False
+    if not set(frappe.get_roles()).intersection(ATTENDANCE_EDITOR_ROLES):
+        return False
+    if not all(frappe.has_permission(dt, "read") for dt in ("Student Group", "Student", "Student Attendance")):
+        return False
+    if getdate(meal_date) > getdate(nowdate()) or not allowed_groups():
+        return False
+    confirmation = frappe.db.get_value(CONFIRMATION_DOCTYPE, {"meal_date": getdate(meal_date)},
+                                      ["name", "status"], as_dict=True)
+    if confirmation and confirmation.status in {"已确认", "已锁定"}:
+        return False
+    if not is_manager():
+        return "Instructor" in frappe.get_roles()
+    return bool(frappe.has_permission(CONFIRMATION_DOCTYPE, "write", doc=confirmation.name)
+                if confirmation else frappe.has_permission(CONFIRMATION_DOCTYPE, "create"))
+
+
+def _attendance_editor_scope():
+    _require_login()
+    _require_attendance_editor()
+    for doctype in ("Student Group", "Student", "Student Attendance"):
+        frappe.has_permission(doctype, "read", throw=True)
+    return allowed_groups()
+
+
+def _get_confirmation_for_edit(meal_date, student_groups):
+    """Prepare a derived aggregate only for the current actor's checked classes.
+
+    This private helper independently checks the actor and supplied groups;
+    there is no request-supplied internal/ignore-permissions switch. Teachers
+    still cannot read/write the aggregate through Desk or resource APIs.
+    """
+    scope = _attendance_editor_scope()
+    if not student_groups:
+        frappe.throw(_("没有需要保存的班级"))
+    for group in student_groups:
+        require_group(group, scope)
     meal_date = getdate(meal_date or nowdate())
+    if meal_date > getdate(nowdate()):
+        frappe.throw(_("不能登记未来日期的实际出勤"), frappe.PermissionError)
     name = frappe.db.exists(CONFIRMATION_DOCTYPE, {"meal_date": meal_date})
     if name:
-        doc = frappe.get_doc(CONFIRMATION_DOCTYPE, name)
-        doc.check_permission("write")
+        # Read the protected status with the lock, not from an earlier repeatable
+        # read snapshot after waiting for another request to confirm/lock it.
+        doc = frappe.get_doc(CONFIRMATION_DOCTYPE, name, for_update=True)
+        if is_manager():
+            doc.check_permission("write")
     else:
-        if not frappe.has_permission(CONFIRMATION_DOCTYPE, "create"):
+        if is_manager() and not frappe.has_permission(CONFIRMATION_DOCTYPE, "create"):
             frappe.throw(_("没有创建每日就餐确认的权限"), frappe.PermissionError)
         doc = refresh_confirmation(meal_date)
     if doc.status == "已锁定":
@@ -320,9 +371,10 @@ def _student_name(student: str) -> str:
 
 
 def _assert_active_membership(student_group: str, student: str):
-    if not frappe.db.exists(
+    if not frappe.db.get_value("Student", student, "enabled") or not frappe.db.exists(
         "Student Group Student",
-        {"parent": student_group, "student": student, "active": 1},
+        {"parent": student_group, "parenttype": "Student Group", "parentfield": "students",
+         "student": student, "active": 1},
     ):
         frappe.throw(_("学生 {0} 不属于班级 {1}，或该学生已停用").format(student, student_group))
 
@@ -405,6 +457,7 @@ def confirm_daily_meal(meal_date=None) -> dict:
     There is no second daily confirmation state transition and a locked day is
     never unlocked by pressing this legacy button.
     """
+    _require_login()
     require_manager()
     from tongjianyun.student_meals import all_classes_confirmed
     if not all_classes_confirmed(calculate_rows(meal_date), getdate(meal_date or nowdate())):
@@ -427,6 +480,7 @@ def confirm_daily_meal(meal_date=None) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def recalculate_daily_meal(name: str) -> dict:
+    _require_login()
     require_manager()
     doc = frappe.get_doc(CONFIRMATION_DOCTYPE, name)
     doc.check_permission("write")
@@ -447,40 +501,51 @@ def get_student_details(meal_date=None, student_group=None) -> list:
 
 @frappe.whitelist(methods=["POST"])
 def save_student_meal_attendance(meal_date=None, changes=None) -> dict:
-    _require_login()
-    _require_attendance_editor()
+    scope = _attendance_editor_scope()
+    meal_date = getdate(meal_date or nowdate())
+    if meal_date > getdate(nowdate()):
+        frappe.throw(_("不能登记未来日期的实际出勤"), frappe.PermissionError)
     changes = frappe.parse_json(changes) if isinstance(changes, str) else changes
-    if not isinstance(changes, list) or not changes:
+    if not isinstance(changes, list) or not changes or len(changes) > 500:
         frappe.throw(_("没有需要保存的学生缺勤变更"))
 
-    scope = allowed_groups()
-    # Validate every class before any write (including confirmation creation).
+    seen, validated = set(), []
+    # Validate the complete batch before creating or changing any business row.
+    # This also protects direct calls which do not pass through classroom.py.
     for change in changes:
         if not isinstance(change, dict):
             frappe.throw(_("学生缺勤变更格式不正确"))
-        require_group(change.get("student_group"), scope)
-    _get_confirmation_for_edit(meal_date)
-    seen = set()
-    meal_date = getdate(meal_date or nowdate())
-    for change in changes:
-        if not isinstance(change, dict):
+        if not all(isinstance(change.get(key, ""), str) for key in ("student_group", "student", "status", "leave_reason")):
             frappe.throw(_("学生缺勤变更格式不正确"))
-        student_group = (change.get("student_group") or "").strip()
-        student = (change.get("student") or "").strip()
-        status = (change.get("status") or "").strip()
+        student_group = change.get("student_group", "").strip()
+        student = change.get("student", "").strip()
+        status = change.get("status", "").strip()
+        reason = change.get("leave_reason", "").strip()[:1000]
+        require_group(student_group, scope)
         if not student_group or not student or status not in STUDENT_ATTENDANCE_STATUSES:
             frappe.throw(_("学生、班级和出勤状态不能为空或不正确"))
+        if status == "Leave" and not reason:
+            frappe.throw(_("标记请假时必须填写请假原因"))
         key = (student_group, student)
         if key in seen:
             frappe.throw(_("学生 {0} 在本次提交中重复出现").format(student))
         seen.add(key)
-        _set_student_status(
-            student_group,
-            student,
-            meal_date,
-            status,
-            change.get("leave_reason") or "",
-        )
+        validated.append((student_group, student, status, reason))
+    groups = sorted({row[0] for row in validated})
+    # Match the classroom lock order and re-read authoritative membership while
+    # held; another request cannot turn a stale roster into a cross-class write.
+    for group in groups:
+        frappe.db.get_value("Student Group", group, "name", for_update=True)
+        require_group(group, allowed_groups())
+        frappe.get_doc("Student Group", group).check_permission("read")
+    for group, student, status, reason in validated:
+        _assert_active_membership(group, student)
+        frappe.has_permission("Student", "read", doc=student, throw=True)
+        if status != "Leave" and _leave_records(group, [student], meal_date):
+            frappe.throw(_("学生已有生效请假，请先在请假模块撤销或标记返校"))
+    _get_confirmation_for_edit(meal_date, groups)
+    for group, student, status, reason in validated:
+        _set_student_status(group, student, meal_date, status, reason)
 
     refreshed = refresh_confirmation(meal_date, force=True)
     return {

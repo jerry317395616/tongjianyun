@@ -55,12 +55,35 @@ doctype_js = {
 }
 
 override_whitelisted_methods = {
+    "frappe.model.workflow.apply_workflow": "tongjianyun.business_blueprint_workflow.apply_workflow",
+    "frappe.model.workflow.get_transitions": "tongjianyun.business_blueprint_workflow.get_transitions",
+    "frappe.model.workflow.bulk_workflow_approval": "tongjianyun.business_blueprint_workflow.bulk_workflow_approval",
     "education.education.doctype.student_group.student_group.get_students": (
         "tongjianyun.education_integration.get_unassigned_students_for_group"
     ),
 }
 
 doc_events = {
+    "Workflow": {
+        "before_insert": "tongjianyun.business_blueprint_workflow.validate_workflow_metadata",
+        "before_validate": "tongjianyun.business_blueprint_workflow.validate_workflow_metadata",
+        "on_trash": "tongjianyun.business_blueprint_workflow.validate_workflow_metadata",
+    },
+    "Workflow Transition": {
+        "before_insert": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
+        "before_validate": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
+        "on_trash": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
+    },
+    "Workflow Document State": {
+        "before_insert": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
+        "before_validate": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
+        "on_trash": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
+    },
+    "*": {
+        "before_validate": "tongjianyun.business_blueprints_v2.validate_document",
+        "before_cancel": "tongjianyun.business_blueprints_v2.validate_document",
+        "before_update_after_submit": "tongjianyun.business_blueprints_v2.validate_document",
+    },
     "Material Request": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
     "Purchase Order": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
     "Purchase Receipt": {"before_validate": "tongjianyun.procurement_precision.before_validate"},

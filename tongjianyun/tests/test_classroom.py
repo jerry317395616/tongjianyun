@@ -50,6 +50,17 @@ class ClassroomFactsTests(unittest.TestCase):
 
 
 class ClassroomBoundaryTests(unittest.TestCase):
+    def test_attendance_capability_delegates_without_granting_daily_permissions(self):
+        for allowed in (True, False):
+            with self.subTest(allowed=allowed), patch.object(service.frappe, "get_roles", return_value=["Instructor"]), \
+                 patch.object(service.frappe, "db", MagicMock(get_value=MagicMock(return_value=None))), \
+                 patch.object(service, "today", return_value="2026-09-23"), patch.object(service, "_can", return_value=False), \
+                 patch.object(service, "_health_allowed", return_value=False), \
+                 patch("tongjianyun.daily_meals.attendance_write_allowed", return_value=allowed) as capability:
+                result = service._capabilities(date(2026, 9, 23))
+            self.assertEqual(result["attendance_write"], allowed)
+            capability.assert_called_once_with(date(2026, 9, 23))
+
     def test_single_meal_save_preserves_scope_revision_and_reason(self):
         with patch.object(service, '_scope', return_value=_dict(name='C1')), \
              patch.object(service, '_capabilities', return_value={'meals_write': True}), \

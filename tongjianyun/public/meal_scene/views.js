@@ -151,23 +151,71 @@ function renderFrappeFrame(block){
 }
 function renderBlueprint(block){
   if(!Array.isArray(block.fields)||!Array.isArray(block.warnings)||!['proposed','active','conflict'].includes(block.state))throw Error('业务方案格式无效。');
+  const enabled=value=>value===true||value===1||value==='1',tables=block.tables??[],calculations=block.calculations??[],workflow=block.workflow??null;
+  const fieldMap=fields=>{
+    if(!Array.isArray(fields)||fields.some(field=>!field||typeof field.fieldname!=='string'||!field.fieldname||typeof field.fieldtype!=='string'||!field.fieldtype))throw Error('业务字段预览格式无效。');
+    const map=new Map(fields.map(field=>[field.fieldname,field]));
+    if(map.size!==fields.length)throw Error('业务字段预览存在重复字段。');
+    return map;
+  };
+  const parentFields=fieldMap(block.fields),tableFields=new Map(),tableNames=new Map();
+  if(!Array.isArray(tables)||tables.length>2||!Array.isArray(calculations))throw Error('明细表或计算预览格式无效。');
+  for(const table of tables){
+    if(!table||typeof table.fieldname!=='string'||parentFields.get(table.fieldname)?.fieldtype!=='Table'||tableFields.has(table.fieldname)||!Array.isArray(table.fields)||!table.fields.length||table.fields.length>12)throw Error('明细表预览格式无效。');
+    tableFields.set(table.fieldname,fieldMap(table.fields));tableNames.set(table.fieldname,table.label||parentFields.get(table.fieldname).label||table.fieldname);
+  }
+  if(block.fields.some(field=>field.fieldtype==='Table'&&!tableFields.has(field.fieldname)))throw Error('明细表字段预览缺失，请重新读取方案。');
+  const fieldLabel=(fields,key)=>{const field=fields.get(key);if(!field)throw Error('固定公式引用的字段不存在。');return field.label||field.fieldname;};
+  const formulaRows=calculations.map(calculation=>{
+    if(!calculation||!['multiply','sum'].includes(calculation.op))throw Error('不支持的固定公式，请重新读取方案。');
+    const childFields=calculation.table?tableFields.get(calculation.table):null;
+    if(calculation.table&&!childFields)throw Error('固定公式引用的明细表不存在。');
+    if(calculation.op==='multiply'){
+      if(!Array.isArray(calculation.sources)||calculation.sources.length!==2)throw Error('乘法公式预览格式无效。');
+      const fields=childFields||parentFields;
+      return {cells:[childFields?`${tableNames.get(calculation.table)} · 每行`:'主表',`${fieldLabel(fields,calculation.target)} = ${calculation.sources.map(source=>fieldLabel(fields,source)).join(' × ')}`,'服务端重新计算，不能手工覆盖']};
+    }
+    if(!childFields||typeof calculation.source!=='string')throw Error('合计公式预览格式无效。');
+    return {cells:['主表',`${fieldLabel(parentFields,calculation.target)} = ${tableNames.get(calculation.table)} · ${fieldLabel(childFields,calculation.source)} 的合计`,'服务端重新计算，不能手工覆盖']};
+  });
+  if(workflow!==null){
+    if(typeof workflow!=='object'||Array.isArray(workflow)||workflow.template!=='review'||!Array.isArray(workflow.states)||!workflow.states.length||!Array.isArray(workflow.transitions)||!workflow.transitions.length)throw Error('复核流程预览格式无效。');
+    const states=new Set();
+    for(const state of workflow.states){
+      if(!state||typeof state.state!=='string'||!state.state||states.has(state.state)||!['0','1','2'].includes(String(state.doc_status))||typeof state.allow_edit!=='string'||!state.allow_edit)throw Error('复核状态预览格式无效。');
+      states.add(state.state);
+    }
+    for(const transition of workflow.transitions){
+      if(!transition||!states.has(transition.state)||!states.has(transition.next_state)||typeof transition.action!=='string'||!transition.action||typeof transition.allowed!=='string'||!transition.allowed||![true,false,0,1,'0','1'].includes(transition.allow_self_approval))throw Error('复核流转预览格式无效。');
+    }
+  }
+  const fieldTable=(title,fields)=>renderTable({title,columns:['字段','类型','必填','选项 / 关联业务','填写方式'],rows:fields.map(field=>({cells:[field.label||field.fieldname,field.fieldtype,enabled(field.reqd)?'是':'否',field.options||'—',enabled(field.read_only)?'只读 / 系统维护':'按业务权限填写']}))});
   const section=node('section',undefined,'view-blueprint');section.append(node('h2',block.title),node('p',block.description,'view-note'));
-  section.append(renderTable({title:'业务字段预览',columns:['字段','类型','必填','选项 / 关联业务'],rows:block.fields.map(field=>({cells:[field.label||field.fieldname,field.fieldtype,field.reqd?'是':'否',field.options||'—']}))}));
+  section.append(fieldTable('业务字段预览（主表）',block.fields));
+  for(const table of tables)section.append(fieldTable(`明细表：${tableNames.get(table.fieldname)}`,table.fields));
+  if(formulaRows.length)section.append(renderTable({title:'固定计算规则',columns:['计算位置','公式','执行方式'],rows:formulaRows}));
+  if(workflow){
+    const documentStates={'0':'草稿（0）','1':'已提交（1）','2':'已撤销（2）'};
+    section.append(renderTable({title:'原生复核流程 · 状态',columns:['业务状态','单据状态','可编辑角色'],rows:workflow.states.map(state=>({cells:[state.state,documentStates[String(state.doc_status)],state.allow_edit]}))}));
+    section.append(renderTable({title:'原生复核流程 · 操作',columns:['当前状态','操作','进入状态','操作角色','允许本人复核'],rows:workflow.transitions.map(transition=>({cells:[transition.state,transition.action,transition.next_state,transition.allowed,enabled(transition.allow_self_approval)?'允许':'不允许（Administrator 例外）']}))}));
+    section.append(node('p','使用 Frappe 原生复核流程，操作仍需具备相应角色与单据权限。禁止本人复核的操作对 Administrator 存在原生例外，不代表已经实现双人复核；此处不会新增或授予角色。','view-note'));
+  }
   for(const warning of block.warnings)section.append(node('p',warning,'view-note warning'));
-  section.append(node('p','启用会新增独立业务数据表，默认仅 System Manager 可使用；不会自动创建真实业务记录。','view-note'));
+  const impact=`启用会新增 1 张主表${tables.length?` + ${tables.length} 张明细表`:''}${workflow?'，并建立上述原生复核流程':''}，默认仅 System Manager 可使用；不会自动创建真实业务记录，也不会执行库存或财务操作。已有专业业务仍使用原流程。`;
+  section.append(node('p',impact,'view-note'));
   const status=node('p',block.state==='active'?'这项业务已经启用。':block.state==='conflict'?'方案存在冲突，当前不能启用。':'当前仅为方案预览，尚未新增业务数据表。','view-blueprint-status');status.setAttribute('role','status');section.append(status);
   if(block.state==='proposed'&&block.can_activate===true){
     if(typeof block.proposal_id!=='string'||!/^[a-f0-9]{64}$/i.test(block.revision||''))throw Error('业务方案版本无效，请重新预览。');
     const button=node('button','确认启用这项业务','view-blueprint-activate');button.type='button';section.append(button);
     button.addEventListener('click',async()=>{
-      if(button.disabled||!window.confirm('确认启用这项业务？将新增独立业务数据表，默认仅 System Manager 可使用，不会自动建立真实业务记录。'))return;
+      if(button.disabled||!window.confirm(`确认启用这项业务？\n${impact}`))return;
       const startingTicket=ticket;button.disabled=true;status.textContent='正在启用，请勿重复提交…';
       try{
         const result=await request('/api/method/tongjianyun.business_blueprints.activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proposal_id:block.proposal_id,revision:block.revision})});
         if(typeof result?.doctype!=='string'||!result.doctype)throw Error('启用结果需要核对，请重新打开方案，不要重复提交。');
         status.textContent='业务已经启用；尚未建立真实业务记录。';
         if(startingTicket===ticket)await showBusinessView({view:'frappe_doctype',doctype:result.doctype});
-      }catch(error){status.textContent=error.message||'启用结果未知，请先重新读取方案核对，不要直接重复提交。';}
+      }catch(error){status.textContent=`${error.message||'启用结果未知。'} 请重新读取方案核对，不要直接重复提交。`;}
     });
   }
   return section;

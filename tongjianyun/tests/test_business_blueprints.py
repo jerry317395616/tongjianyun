@@ -147,6 +147,7 @@ class BlueprintTests(unittest.TestCase):
         columns = ['name', 'owner', 'creation', 'modified', 'modified_by', 'docstatus', 'idx', 'title', 'visited_on', 'reason']
         db = MagicMock()
         db.get_table_columns.return_value = columns
+        db.describe.return_value = [(column,) for column in columns]
         with patch.object(frappe, 'db', db), patch.object(frappe, 'get_meta', return_value=meta):
             self.assertEqual(blueprint._state(spec), 'active')
             meta.fields[1]['reqd'] = 0
@@ -164,6 +165,7 @@ class BlueprintTests(unittest.TestCase):
         meta = SimpleNamespace(fields=definition['fields'])
         db = MagicMock()
         db.get_table_columns.return_value = ['name', 'title']
+        db.describe.return_value = [('name',), ('title',)]
         with patch.object(frappe, 'db', db), patch.object(frappe, 'get_meta', return_value=meta):
             self.assertEqual(blueprint._state(spec), 'conflict')
 

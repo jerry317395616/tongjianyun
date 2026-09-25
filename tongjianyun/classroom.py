@@ -173,13 +173,12 @@ def _logs(students, day):
 
 
 def _capabilities(day):
-    from tongjianyun.daily_meals import ATTENDANCE_EDITOR_ROLES, CONFIRMATION_DOCTYPE
+    from tongjianyun.daily_meals import ATTENDANCE_EDITOR_ROLES, CONFIRMATION_DOCTYPE, attendance_write_allowed
     editor = bool(set(frappe.get_roles()) & ATTENDANCE_EDITOR_ROLES)
     confirmation = frappe.db.get_value(CONFIRMATION_DOCTYPE, {"meal_date": day}, ["name", "status"], as_dict=True)
     lock = (confirmation or {}).get("status")
     day_editable = day <= getdate(today())
-    can_daily = frappe.has_permission(CONFIRMATION_DOCTYPE, "write", doc=confirmation.name) if confirmation else _can(CONFIRMATION_DOCTYPE, "create")
-    return {"attendance_write": editor and _can("Student Attendance") and bool(can_daily) and day_editable and lock not in {"已确认", "已锁定"},
+    return {"attendance_write": attendance_write_allowed(day),
             "attendance_lock": lock if lock in {"已确认", "已锁定"} else None,
             "meals_write": editor and _can("Tongjianyun Class Meal Confirmation", "write") and lock != "已锁定",
             "log_create": _can("Student Log", "create") and day_editable,
