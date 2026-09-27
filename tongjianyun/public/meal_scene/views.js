@@ -138,6 +138,7 @@ function renderStats(block){
 }
 function renderTable(block){
   const section=node(block.collapsed?'details':'section',undefined,block.collapsed?'view-section view-details':'view-section');
+  if(block.detail_key==='nutrition-nutrients')section.id='nutrition-nutrients';
   section.append(node(block.collapsed?'summary':'h2',block.title));
   if(!block.rows.length){section.append(node('p','当前可见范围没有记录。','view-empty'));return section;}
   const wrapper=node('div',undefined,'view-table-wrap'),table=node('table'),head=node('thead'),header=node('tr');
@@ -163,6 +164,41 @@ function renderBars(block){
   }return section;
 }
 function renderNotice(block){return node('p',block.text,'view-note'+(block.warning?' warning':''));}
+function renderNutritionOverview(block){
+  if(!['good','attention','unknown'].includes(block.state)||!Array.isArray(block.items)||block.items.length!==3||!Array.isArray(block.attention)||block.selection?.view!=='recipe_nutrition'||typeof block.can_export!=='boolean')throw Error('营养概览数据不完整，请重新读取。');
+  const section=node('section',undefined,'nutrition-overview'),heading=node('div',undefined,'nutrition-assessment '+block.state);
+  heading.append(node('span','本周营养估算','nutrition-eyebrow'),node('h2',block.headline),node('p',`${block.day_count??'—'} 天食谱 · ${block.ingredient_count??'—'} 种食材 · ${block.unknown_count??'—'} 项指标待核对`));section.append(heading);
+  const openDetails=()=>{const details=$('nutrition-nutrients');if(details){details.open=true;details.scrollIntoView?.({behavior:'smooth',block:'nearest'});}};
+  const metrics=node('div',undefined,'nutrition-metrics');
+  for(const item of block.items){
+    const card=node('button',undefined,'nutrition-metric');card.type='button';card.setAttribute('aria-controls','nutrition-nutrients');
+    const value=node('div',undefined,'nutrition-value');value.append(node('strong',item.value),node('small',item.unit));
+    card.append(node('span',item.label),value,node('span',item.status,'nutrition-state '+(item.status==='适宜'?'good':item.status==='未评价'?'unknown':'attention')),node('small',`在园目标 ${item.target??'—'} ${item.unit} · 查看明细`));
+    card.addEventListener('click',openDetails);metrics.append(card);
+  }section.append(metrics);
+  if(block.attention.length){const attention=node('div',undefined,'nutrition-attention');attention.append(node('h3','需要关注'));
+    for(const item of block.attention)attention.append(node('span',`${item.nutrient} ${item.status}`,'nutrition-attention-item'));
+    attention.append(node('p','先核对食材用量与分析口径，再决定是否调整食谱。'));section.append(attention);}
+  const buttons=node('div',undefined,'nutrition-actions'),adjust=node('button','请助手调整食谱','nutrition-primary'),download=node('button','导出分析报告','view-back'),status=node('p','导出沿用原报表，可能冻结人口标准快照并保存附件。','nutrition-export-status');
+  adjust.type=download.type='button';download.disabled=!block.can_export;status.setAttribute('role','status');
+  adjust.addEventListener('click',()=>{
+    const input=$('chat-input');if(!input||input.disabled){status.textContent='助手正在处理，请稍后再发起调整。';return;}
+    if(!input.value.trim())input.value=`请根据当前营养分析，帮我调整食谱 ${block.selection.recipe}：`;
+    input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();
+    if(typeof window.matchMedia==='function'&&window.matchMedia('(max-width:950px)').matches)$('meal-chat').scrollIntoView?.({behavior:'smooth',block:'start'});
+  });
+  download.addEventListener('click',async()=>{
+    if(download.disabled||!window.confirm('确认导出当前食谱及分析口径的报告？将沿用原系统生成附件，可能冻结人口标准快照；不会发布食谱或创建采购单。'))return;
+    download.disabled=true;status.textContent='正在生成报告，请勿重复点击…';
+    try{
+      const result=await request('/api/method/tongjianyun.meal_nutrition_view.export_view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selection_json:JSON.stringify(block.selection)})});
+      if(result?.recipe!==block.selection.recipe||typeof result.file_url!=='string'||!/^\/(?:private\/)?files\/[^/]+$/.test(result.file_url)||/[\\\r\n?#]/.test(result.file_url))throw Error('导出返回的附件信息不完整。');
+      const link=node('a','下载报告','nutrition-primary');link.href=result.file_url;link.target='_blank';link.rel='noopener noreferrer';
+      status.replaceChildren(node('span','报告已生成。 '),link);
+    }catch(error){status.textContent=(error.message||'导出未完成。')+' 导出结果尚未确认，请让助手查询该食谱附件，不要重复生成。';}
+  });
+  buttons.append(adjust,download);section.append(buttons,status);return section;
+}
 function safeDeskRoute(route){
   if(typeof route!=='string'||!route.startsWith('/desk/')||/[\\?#\r\n]/.test(route)||route.includes('//')||route.includes('..'))return false;
   try{return !route.split('/').some(part=>{const decoded=decodeURIComponent(part);return decoded==='.'||decoded==='..'||/[\\?#\r\n]/.test(decoded);});}catch(_){return false;}
@@ -507,6 +543,7 @@ function renderStockRepair(block){
   return section;
 }
 const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,business_proposal:renderProposal,business_proposal_handoff:renderProposalHandoff,attendance_register:renderAttendance,meal_register:renderMealRegister,stock_repair:renderStockRepair};
+renderers.nutrition_overview=renderNutritionOverview;
 export function buildComponents(data){
   if(data?.version!==1||!validViews.has(data.selection?.view)||!Array.isArray(data.components)||data.components.length>12)throw Error('展示结果格式不受支持，已保留当前页面。');
   const content=document.createDocumentFragment();

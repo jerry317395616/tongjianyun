@@ -326,7 +326,7 @@ def get_view(selection_json):
         result['components'] = [block for kind in choice['components'] for block in blocks if block['type'] == kind]
         if 'notice' not in choice['components']:
             result['components'].extend(block for block in blocks if block['type'] == 'notice')
-        result['components'].extend(block for block in blocks if block['type'] in {'attendance_register', 'meal_register'})
+        result['components'].extend(block for block in blocks if block['type'] in {'attendance_register', 'meal_register', 'nutrition_overview'})
     return {'version': 1, 'selection': choice, 'generated_at': str(now_datetime()).split('.')[0], **result}
 
 

@@ -359,6 +359,16 @@ def native_view(choice):
         title, module = label(doc.name), doc.module
     elif view == 'frappe_page':
         doc = _page(choice['page'], modules)
+        if doc.name == 'weekly-recipe-nutrition-sheet':
+            # Exact audited replacement, after the original Page/module check.
+            # Other pages retain their native forms; no arbitrary URL remapping.
+            from tongjianyun.meal_views import selection as canvas_selection
+            from tongjianyun.meal_nutrition_view import nutrition_view
+            from tongjianyun.scene_access import require_view_access
+            selected = canvas_selection({'view': 'recipe_nutrition', **_context(choice)})
+            require_view_access(selected['view'])
+            result = nutrition_view(selected)
+            return {**result, 'selection': selected}
         route = '/desk/' + quote(doc.name, safe='')
         title, module = label(doc.title or doc.name), doc.module
     else:

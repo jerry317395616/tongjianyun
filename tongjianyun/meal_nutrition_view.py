@@ -99,19 +99,39 @@ def nutrition_view(choice):
                     'source': '当前日期的可见食谱，尚未进行营养计算',
                     'summary': {'available': False, 'answer': message}}
         recipe = rows[0]['name']
-    # Preserve the scene's row-level checks, then call the original calculation.
-    get_recipe(recipe)
+    check_recipe_scope(recipe, choice['student_groups'])
     doc = read_doc(RECIPE, recipe)
-    groups = choice['student_groups']
+    result = get_nutrition_sheet(recipe=recipe, **{key: choice[key] for key in FIELDS - {'recipe'}})
+    choice['recipe'] = recipe
+    return project_sheet(result, choice, doc.workflow_status)
+
+
+def check_recipe_scope(recipe, groups):
+    # Shared by read and explicit export; re-check permissions after rendering.
+    get_recipe(recipe)
     if groups:
         # Do not let the existing service silently drop a requested inaccessible class.
         visible = set(frappe.get_list('Student Group', filters={'name': ['in', groups], 'disabled': 0},
                                      pluck='name', limit_page_length=0))
         if visible != set(groups):
             raise frappe.PermissionError('部分统计班级不存在、已停用或无权查看。')
-    result = get_nutrition_sheet(recipe=recipe, **{key: choice[key] for key in FIELDS - {'recipe'}})
-    choice['recipe'] = recipe
-    return project_sheet(result, choice, doc.workflow_status)
+
+
+@frappe.whitelist(methods=['POST'])
+def export_view(selection_json):
+    """Explicit user action only; preserve the original export and attachment flow."""
+    from tongjianyun.meal_views import selection
+    from tongjianyun.scene_access import require_scene_account, require_view_access
+    from tongjianyun.nutrition_sheet import export_nutrition_sheet
+    require_scene_account()
+    choice = selection(selection_json)
+    if choice['view'] != 'recipe_nutrition' or not choice.get('recipe'):
+        frappe.throw('请先选择并读取要导出的食谱。')
+    require_view_access('recipe_nutrition')
+    check_recipe_scope(choice['recipe'], choice['student_groups'])
+    # The original export may freeze a population snapshot and save a File.
+    # Never invoke it during view loading or return another recipe's attachment.
+    return export_nutrition_sheet(**{key: choice[key] for key in FIELDS})
 
 
 def project_sheet(result, choice, status):
@@ -122,42 +142,65 @@ def project_sheet(result, choice, status):
     nutrients = analysis.get('nutrients') or {}
     population = standard.get('population') or {}
     rule = analysis.get('calculation_rule') or {}
+    ingredients = analysis.get('ingredients') or []
+    has_amounts = bool(ingredients) and all(number(item.get('grams')) is not None and number(item.get('grams')) >= 0 for item in ingredients) and any(
+        number(item.get('grams')) > 0 for item in ingredients)
+    def assessment(key):
+        value = evaluations.get(key) or {}
+        actual = number(value.get('actual', nutrients.get(key))) if has_amounts else None
+        target = number(value.get('garden_target'))
+        valid = actual is not None and target is not None and target > 0 and value.get('status') in ('适宜', '偏低', '偏高')
+        return {**value, 'actual': actual, 'status': value.get('status') if valid else '未评价',
+                'percent': value.get('percent') if valid else None}
+    assessed = {key: assessment(key) for key, _, _ in NUTRIENTS}
+    attention = [{'nutrient': label, 'status': assessed[key]['status']} for key, label, _ in NUTRIENTS
+                 if assessed[key]['status'] in ('偏低', '偏高')]
+    unknown = [label for key, label, _ in NUTRIENTS if assessed[key]['status'] == '未评价']
     warnings = list(population.get('warnings') or [])
     if status != '已发布':
         warnings.insert(0, f'食谱状态：{status or "待核对"}。本次仅分析，不发布食谱或创建采购单。')
     if not str(recipe.get('week_start', '')) <= choice['day'] <= str(recipe.get('week_end', '')):
         warnings.append('指定食谱不覆盖顶部业务日期；以下分析以标题中的食谱日期为准。')
-    if not analysis.get('ingredients'):
-        warnings.append('食谱尚无可分析的食材带量，不能把零估算值认定为实际摄入为零。')
-    if any(key not in evaluations for key, _, _ in NUTRIENTS):
+    if not has_amounts:
+        warnings.append('食材用量缺失或不完整，暂不能评价营养；未填写不代表实际摄入为零。')
+    if unknown:
         warnings.append('部分营养素未配置评价或缺少数据，以“— / 未评价”标示，不当作零或偏低。')
     components = []
     if warnings:
         components.append(notice(' '.join(warnings), True))
     items = []
     for key, label, unit in NUTRIENTS[:3]:
-        evaluation = evaluations.get(key, {})
-        items.append({'label': label + ' · 日均每生估算', 'value': number(evaluation.get('actual', nutrients.get(key))),
-                      'unit': unit, 'note': evaluation.get('status') or '未评价'})
-    items.append({'label': '纳入自动标准计算', 'value': population.get('student_count'), 'unit': '人',
-                  'note': '按学生档案计算' if population else '当前为手动估算口径'})
-    components.append({'type': 'stats', 'items': items})
-    components.append(notice(analysis.get('conclusion') or '暂无结论。'))
+        evaluation = assessed[key]
+        items.append({'label': label, 'value': evaluation['actual'], 'unit': unit,
+                      'target': number(evaluation.get('garden_target')), 'status': evaluation['status']})
+    headline = ('先补充食材用量，再做营养分析' if not has_amounts else
+                f'{len(attention)} 项指标需要关注' if attention else
+                '部分指标还需核对' if unknown else '已评价指标处于参考范围')
+    components.append({'type': 'nutrition_overview', 'headline': headline,
+                       'state': 'unknown' if not has_amounts else 'attention' if attention else 'unknown' if unknown else 'good',
+                       'items': items, 'attention': attention, 'unknown_count': len(unknown),
+                       'ingredient_count': len(ingredients), 'day_count': analysis.get('day_count'),
+                       'selection': dict(choice), 'can_export': has_amounts})
+    components.append(notice('整周日均每生估算，不是实际摄入量。' +
+                             ('请先补齐用量；原服务的零估算不作为偏低或达标结论。' if not has_amounts else
+                              analysis.get('conclusion') or '请核对原分析明细。')))
     rows = []
     for key, label, unit in NUTRIENTS:
-        e = evaluations.get(key, {})
+        e = assessed[key]
         state = e.get('status') or '未评价'
         rows.append({'cells': [f'{label}（{unit}）', number(e.get('full_target')), number(e.get('garden_target')),
-                               number(e.get('actual', nutrients.get(key))), percent(e.get('percent')), state],
+                               e['actual'], percent(e.get('percent')), state],
                      'evaluation': state})
-    components.append(table('营养素对照 · 日均每生', ['营养素', '全日标准', '在园目标', '食谱估算供给', '目标占比', '评价'], rows))
+    nutrient_table = table('全部营养指标 · 点击查看对照明细', ['营养素', '全日标准', '在园目标', '食谱估算供给', '目标占比', '评价'], rows, True)
+    nutrient_table['detail_key'] = 'nutrition-nutrients'
+    components.append(nutrient_table)
     macro_rows = []
     for key, label in (('carbohydrate', '碳水化合物供能'), ('fat', '脂肪供能'), ('protein', '蛋白质供能')):
-        actual = number((analysis.get('macro_energy_ratio') or {}).get(key))
+        actual = number((analysis.get('macro_energy_ratio') or {}).get(key)) if has_amounts else None
         bounds = (rule.get('macro_ranges') or {}).get(key) or standard.get(key + '_energy_range')
         state = '未评价' if actual is None or not bounds else '偏低' if actual < bounds[0] else '偏高' if actual > bounds[1] else '适宜'
         macro_rows.append({'cells': [label, f'{bounds[0]}%—{bounds[1]}%' if bounds else '—', percent(actual), state], 'evaluation': state})
-    protein = number(nutrients.get('protein'))
+    protein = number(nutrients.get('protein')) if has_amounts else None
     for key, label, target_key in (('animal_protein', '动物蛋白占总蛋白', 'animal_protein_target'),
                                    ('animal_soy_protein', '动豆蛋白占总蛋白', 'animal_soy_protein_target')):
         actual = number(analysis.get(key))
@@ -167,29 +210,28 @@ def project_sheet(result, choice, status):
         macro_rows.append({'cells': [label, f'≥{percent(target)}' if target is not None else '—', percent(ratio), state], 'evaluation': state})
     components.append(table('供能结构与蛋白质构成', ['项目', '参考比例', '食谱估算比例', '评价'], macro_rows, True))
     components.append(table('各餐热量分配', ['餐次', '原分析参考比例', '食谱估算比例'], [
-        {'cells': [label, percent((analysis.get('meal_standard') or {}).get(slot)), percent((analysis.get('meal_ratio') or {}).get(slot))]}
+        {'cells': [label, percent((analysis.get('meal_standard') or {}).get(slot)), percent((analysis.get('meal_ratio') or {}).get(slot)) if has_amounts else '—']}
         for slot, label in zip(('breakfast', 'morningSnack', 'lunch', 'snack', 'dinner'), ('早餐', '早点', '午餐', '午点', '晚餐'))], True))
     components.append(table('食物分类用量 · 日均每生（g）', ['食物分类', '估算用量'], [
         {'cells': [CATEGORIES.get(key, key), number(value)]} for key, value in (analysis.get('category_totals') or {}).items()], True))
-    ingredients = analysis.get('ingredients') or []
     components.append(table(f'食材明细 · {len(ingredients)} 种', ['食材', '分类', '日均每生用量（g）', '数据口径'], [
         {'cells': [item['name'], CATEGORIES.get(item['category'], item['category']), number(item.get('grams')), item.get('basis') or '分类代表值']}
         for item in ingredients], True))
     components.append(table('补充指标与计算口径', ['项目', '结果'], [
-        {'cells': ['钙/磷比例', number(analysis.get('calcium_phosphorus_ratio'))]},
-        *[{'cells': [label, number(nutrients.get(key))]} for key, label in
+        {'cells': ['钙/磷比例', number(analysis.get('calcium_phosphorus_ratio')) if has_amounts else None]},
+        *[{'cells': [label, number(nutrients.get(key)) if has_amounts else None]} for key, label in
           (('carotene', '胡萝卜素（μg）'), ('fiber', '膳食纤维（g）'), ('cholesterol', '胆固醇（mg）'))],
         {'cells': ['分析天数', analysis.get('day_count')]},
         {'cells': ['原报告总人日数（非实际就餐确认）', analysis.get('person_days')]},
         {'cells': ['标准参考日期', population.get('reference_date') or recipe.get('week_start')]},
+        {'cells': ['纳入自动标准计算学生数', population.get('student_count')]},
         {'cells': ['计算规则', f'{rule.get("title", "未标明")} · {rule.get("version", "—")}']},
     ], True))
     components.append(notice(BASIS))
-    attention = [{'nutrient': label, 'status': evaluations[key]['status']} for key, label, _ in NUTRIENTS
-                 if evaluations.get(key, {}).get('status') not in (None, '适宜')]
     return {'title': '周食谱营养分析',
             'subtitle': f'{recipe.get("title") or recipe["name"]} · {recipe.get("week_start")} — {recipe.get("week_end")} · {status} · {standard.get("profile", "未标明标准")} · 园内目标 {percent(choice["garden_ratio"])}',
             'components': components, 'source': f'原周食谱营养分析服务 · {standard.get("source", "")}；按当前账号权限读取',
             'summary': {'available': True, 'recipe': recipe['name'], 'day_count': analysis.get('day_count'),
-                        'attention': attention, 'basis': BASIS, 'warnings': warnings,
+                        'attention': attention, 'unknown_nutrients': unknown, 'analysis_ready': has_amounts,
+                        'basis': BASIS, 'warnings': warnings,
                         'answer': '已展示整周营养估算；' + ('需关注：' + '、'.join(item['nutrient'] + item['status'] for item in attention) if attention else '请查看指标与计算口径。')}}

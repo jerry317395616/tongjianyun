@@ -1,4 +1,24 @@
 #business-canvas [hidden]{display:none!important}
+.nutrition-assessment{padding:20px 24px;border:1px solid #dce7da;border-radius:14px;background:#f4f8f3}
+.nutrition-assessment.attention{background:#fff9ef;border-color:#eeddba}
+.nutrition-assessment h2{font-size:24px;line-height:1.4;margin:8px 0;color:#284739}
+.nutrition-assessment p,.nutrition-eyebrow{font-size:12px;line-height:1.7;color:#718276;margin:0}
+.nutrition-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0}
+.nutrition-metric{display:flex;align-items:flex-start;flex-direction:column;gap:10px;text-align:left;padding:20px;border:1px solid #dce7da;border-radius:12px;background:white;cursor:pointer;color:#284739;min-width:0}
+.nutrition-metric:hover{border-color:#4b836b;background:#fbfdf9}
+.nutrition-metric:focus-visible,.nutrition-actions button:focus-visible{outline:3px solid #84b5a0;outline-offset:3px}
+.nutrition-value{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.nutrition-value strong{font-size:34px;font-variant-numeric:tabular-nums;font-weight:600}
+.nutrition-value small,.nutrition-metric>small{font-size:12px;line-height:1.6;color:#718276}
+.nutrition-state{padding:4px 9px;border-radius:6px;font-size:12px;background:#f0f3ef;color:#718276}
+.nutrition-state.good{background:#edf6ee;color:#347653}.nutrition-state.attention{background:#fff2d8;color:#9b6228}
+.nutrition-attention{padding:16px 20px;background:#fff9ef;border-radius:12px;margin:18px 0}
+.nutrition-attention h3{font-size:14px;margin:0 0 10px}.nutrition-attention-item{display:inline-block;font-size:13px;color:#9b6228;margin:0 14px 6px 0}
+.nutrition-attention p,.nutrition-export-status{font-size:12px;color:#718276;line-height:1.7;margin:8px 0}
+.nutrition-actions{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 8px}
+.nutrition-primary{display:inline-block;border:0;border-radius:8px;background:#47816c;color:white;padding:10px 15px;font-size:13px;cursor:pointer;text-decoration:none}
+.nutrition-actions button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:600px){.nutrition-metrics{grid-template-columns:1fr;gap:10px}.nutrition-metric{padding:16px}.nutrition-value strong{font-size:30px}.nutrition-assessment{padding:16px}.nutrition-assessment h2{font-size:20px}.nutrition-actions button{min-height:44px}}
 #view-status{margin:0 0 15px;padding:10px 13px;border-radius:9px;background:#f2f7ef;color:#4c6658;font-size:13px}
 #view-status.error{background:#fff1ed;color:#984e43}
 .view-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px}

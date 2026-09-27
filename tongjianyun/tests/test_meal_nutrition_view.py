@@ -105,7 +105,7 @@ class NutritionViewTests(unittest.TestCase):
 
     def test_projection_preserves_values_evaluation_warnings_and_missing_data(self):
         result = nutrition.project_sheet(sheet(), selection(recipe='R1'), '草稿')
-        rows = next(c for c in result['components'] if c.get('title') == '营养素对照 · 日均每生')['rows']
+        rows = next(c for c in result['components'] if c.get('detail_key') == 'nutrition-nutrients')['rows']
         self.assertEqual(rows[0]['cells'], ['热量（kcal）', 1291.63, 1033.31, 1096.54, '106.1%', '适宜'])
         self.assertIsNone(rows[1]['cells'][1])
         self.assertEqual(rows[1]['cells'][-1], '未评价')
@@ -114,12 +114,72 @@ class NutritionViewTests(unittest.TestCase):
         self.assertLessEqual(len(result['components']), 12)
         self.assertNotIn('population', result['summary'])
 
+    def test_overview_uses_original_evaluations_and_folds_all_details(self):
+        original = sheet()
+        original['analysis']['nutrient_evaluations']['protein'] = {
+            'actual': 45.18, 'garden_target': 60, 'percent': 75.3, 'status': '偏低'}
+        result = nutrition.project_sheet(original, selection(recipe='R1'), '草稿')
+        overview = next(c for c in result['components'] if c['type'] == 'nutrition_overview')
+        self.assertEqual(overview['headline'], '1 项指标需要关注')
+        self.assertEqual(overview['items'][1]['value'], 45.18)
+        self.assertEqual(overview['attention'], [{'nutrient': '蛋白质', 'status': '偏低'}])
+        self.assertEqual(overview['selection']['recipe'], 'R1')
+        self.assertTrue(overview['can_export'])
+        self.assertTrue(all(c['collapsed'] for c in result['components'] if c['type'] == 'table'))
+
+    def test_missing_zero_nonfinite_or_negative_amounts_do_not_claim_deficiency(self):
+        for amounts in ([], [{'grams': 0}], [{'grams': None}], [{'grams': float('nan')}], [{'grams': -2}]):
+            original = sheet()
+            original['analysis']['ingredients'] = [dict(name='食材', category='fine_grain', **row) for row in amounts]
+            with self.subTest(amounts=amounts):
+                result = nutrition.project_sheet(original, selection(recipe='R1'), '草稿')
+                overview = next(c for c in result['components'] if c['type'] == 'nutrition_overview')
+                self.assertEqual(overview['state'], 'unknown')
+                self.assertFalse(overview['can_export'])
+                self.assertTrue(all(item['value'] is None and item['status'] == '未评价' for item in overview['items']))
+                self.assertEqual(result['summary']['attention'], [])
+                self.assertIn('不代表实际摄入为零', result['components'][0]['text'])
+
+    def test_incomplete_evaluation_never_appears_good(self):
+        original = sheet()
+        original['analysis']['nutrient_evaluations']['energy']['garden_target'] = None
+        result = nutrition.project_sheet(original, selection(recipe='R1'), '已发布')
+        overview = next(c for c in result['components'] if c['type'] == 'nutrition_overview')
+        self.assertEqual(overview['state'], 'unknown')
+        self.assertEqual(overview['items'][0]['status'], '未评价')
+
+    def test_export_is_explicit_pinned_and_rechecks_scope_without_read_side_effects(self):
+        with patch('tongjianyun.scene_access.require_scene_account'), \
+             patch('tongjianyun.scene_access.require_view_access') as gate, \
+             patch.object(nutrition, 'check_recipe_scope') as scope, \
+             patch('tongjianyun.nutrition_sheet.export_nutrition_sheet', return_value={'recipe': 'R1'}) as export:
+            self.assertEqual(nutrition.export_view(selection(recipe='R1', garden_ratio=90)), {'recipe': 'R1'})
+        gate.assert_called_once_with('recipe_nutrition')
+        scope.assert_called_once_with('R1', [])
+        self.assertEqual(export.call_args.kwargs['recipe'], 'R1')
+        self.assertEqual(export.call_args.kwargs['garden_ratio'], 90)
+        self.assertNotIn('day', export.call_args.kwargs)
+
+    def test_export_rejects_missing_recipe_wrong_view_or_revoked_scope(self):
+        with patch('tongjianyun.scene_access.require_scene_account'), \
+             patch('tongjianyun.scene_access.require_view_access'), \
+             patch.object(frappe, 'throw', side_effect=ValueError), \
+             patch('tongjianyun.nutrition_sheet.export_nutrition_sheet') as export:
+            for choice in (selection(), {'view': 'students'}, {**selection(recipe='R1'), 'url': '/files/x'}):
+                with self.subTest(choice=choice), self.assertRaises(ValueError):
+                    nutrition.export_view(choice)
+            with patch.object(nutrition, 'check_recipe_scope', side_effect=frappe.PermissionError):
+                with self.assertRaises(frappe.PermissionError):
+                    nutrition.export_view(selection(recipe='R1'))
+        export.assert_not_called()
+
     def test_get_view_routes_and_retains_required_warnings(self):
         with patch('tongjianyun.meal_chat.require_chat_access'), \
              patch.object(views, 'now_datetime', return_value='2026-09-25'), \
              patch.object(nutrition, 'nutrition_view', return_value=nutrition.project_sheet(sheet(), selection(), '草稿')):
             result = views.get_view({**selection(), 'components': ['stats']})
         self.assertIn('notice', [c['type'] for c in result['components']])
+        self.assertIn('nutrition_overview', [c['type'] for c in result['components']])
         self.assertEqual(result['selection']['view'], 'recipe_nutrition')
 
 
@@ -132,7 +192,7 @@ def verify_live_nutrition_view():
     recipe = result['selection']['recipe']
     doc_before = frappe.get_doc('Tongjianyun Recipe', recipe).as_dict()
     original = nutrition.get_nutrition_sheet(recipe=recipe)
-    rows = next(c['rows'] for c in result['components'] if c.get('title') == '营养素对照 · 日均每生')
+    rows = next(c['rows'] for c in result['components'] if c.get('detail_key') == 'nutrition-nutrients')
     for (key, _, _), row in zip(nutrition.NUTRIENTS, rows):
         expected = original['analysis']['nutrient_evaluations'][key]
         assert row['cells'][3] == round(expected['actual'], 2)

@@ -7,18 +7,61 @@ class Element{
   addEventListener(k,v){this.listeners[k]=v;}
   removeEventListener(k){delete this.listeners[k];}
   click(){return this.listeners.click?.();}
+  focus(){this.focused=true;}
+  dispatchEvent(event){return this.listeners[event.type]?.(event);}
+  scrollIntoView(){this.scrolled=true;}
 }
 function setup(){
   const nodes=new Map(),storage=new Map();
   const events=new Map(),windowEvents=new Map(),emitted=[];
   const document={getElementById(id){assert(!['day','meal','refresh'].includes(id),'removed header control requested: '+id);if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement:tag=>Object.assign(new Element(),{tag}),createDocumentFragment:()=>new Element(),addEventListener:(type,handler)=>events.set(type,handler),dispatchEvent:event=>{emitted.push(event);return events.get(event.type)?.(event);}};
-  const context=vm.createContext({document,URL,URLSearchParams,location:{origin:'https://test.local'},window:{confirm:()=>true,addEventListener:(type,handler)=>windowEvents.set(type,handler)},CustomEvent:class{constructor(type,options={}){this.type=type;this.detail=options.detail;}},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
+  const context=vm.createContext({document,URL,URLSearchParams,location:{origin:'https://test.local'},window:{confirm:()=>true,addEventListener:(type,handler)=>windowEvents.set(type,handler)},Event:class{constructor(type){this.type=type;}},CustomEvent:class{constructor(type,options={}){this.type=type;this.detail=options.detail;}},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)}});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../public/meal_scene/state.js'),'utf8').replace(/export /g,''),context);
   const source=fs.readFileSync(path.join(__dirname,'../public/meal_scene/views.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/export /g,'');
   vm.runInContext(source,context);
   return {nodes,context,storage,emitted,windowEvents,run:code=>vm.runInContext(code,context)};
 }
 const data={version:1,selection:{view:'students'},title:'在园学生',subtitle:'scope',source:'Student',generated_at:'now',components:[{type:'stats',items:[{label:'人数',value:12,unit:'人'}]}]};
+const nutritionBlock=(extra={})=>({type:'nutrition_overview',headline:'1 项指标需要关注',state:'attention',items:[
+  {label:'热量',value:1096.54,unit:'kcal',target:1033.31,status:'适宜'},
+  {label:'蛋白质',value:45.18,unit:'g',target:60,status:'偏低'},
+  {label:'钙',value:null,unit:'mg',target:null,status:'未评价'}],attention:[{nutrient:'蛋白质',status:'偏低'}],
+  day_count:5,ingredient_count:20,unknown_count:1,can_export:true,
+  selection:{view:'recipe_nutrition',recipe:'R1',day:'2026-09-24',meal:'lunch',garden_ratio:80},...extra});
+function descendants(element){return [element,...element.children.flatMap(descendants)];}
+test('nutrition overview shows compact real values and opens details only on click',()=>{
+  const {run,context,nodes}=setup();context.data={...data,selection:{view:'recipe_nutrition'},components:[nutritionBlock()]};
+  const section=run('buildComponents(data)').children[0],cards=descendants(section).filter(e=>e.className==='nutrition-metric');
+  assert.equal(cards.length,3);assert(descendants(cards[2]).some(e=>e.textContent==='—'));
+  assert(!descendants(section).some(e=>e.tag==='iframe'));
+  const details=run("document.getElementById('nutrition-nutrients')");assert.equal(details.open,undefined);
+  cards[0].click();assert.equal(nodes.get('nutrition-nutrients').open,true);
+});
+test('nutrition adjustment prepares text but never sends or replaces unsent text',()=>{
+  const {run,context,nodes}=setup();context.data={...data,selection:{view:'recipe_nutrition'},components:[nutritionBlock()]};
+  const section=run('buildComponents(data)').children[0],adjust=descendants(section).find(e=>e.textContent==='请助手调整食谱');
+  adjust.click();const input=nodes.get('chat-input');assert.match(input.value,/R1/);assert.equal(input.focused,true);
+  input.value='我的未发送消息';adjust.click();assert.equal(input.value,'我的未发送消息');
+  input.disabled=true;input.value='';adjust.click();assert.equal(input.value,'');
+});
+test('nutrition export is explicit, exact-filtered, single-click and returns private download',async()=>{
+  const {run,context}=setup();context.data={...data,selection:{view:'recipe_nutrition'},components:[nutritionBlock()]};
+  const calls=[];context.exportRequest=async(url,options)=>{calls.push({url,options});return {recipe:'R1',file_url:'/private/files/report.xlsx'};};run('request=exportRequest');
+  const section=run('buildComponents(data)').children[0],download=descendants(section).find(e=>e.textContent==='导出分析报告');
+  assert.equal(calls.length,0);context.window.confirm=()=>false;await download.click();assert.equal(calls.length,0);
+  context.window.confirm=()=>true;await download.click();await download.click();assert.equal(calls.length,1);
+  assert.match(calls[0].url,/meal_nutrition_view.export_view$/);assert.equal(calls[0].options.method,'POST');
+  assert.deepEqual(JSON.parse(JSON.parse(calls[0].options.body).selection_json),nutritionBlock().selection);
+  assert.equal(descendants(section).find(e=>e.tag==='a').href,'/private/files/report.xlsx');
+});
+test('nutrition missing data disables export and unknown export result prevents duplicates',async()=>{
+  const {run,context}=setup();context.data={...data,selection:{view:'recipe_nutrition'},components:[nutritionBlock({can_export:false})]};
+  let calls=0;context.exportRequest=async()=>{calls++;return {recipe:'R1',file_url:'https://evil/report.xlsx'};};run('request=exportRequest');
+  let section=run('buildComponents(data)').children[0];await descendants(section).find(e=>e.textContent==='导出分析报告').click();assert.equal(calls,0);
+  context.data.components=[nutritionBlock()];section=run('buildComponents(data)').children[0];const download=descendants(section).find(e=>e.textContent==='导出分析报告');
+  await download.click();await download.click();assert.equal(calls,1);assert.equal(descendants(section).filter(e=>e.tag==='a').length,0);
+  assert(descendants(section).some(e=>/不要重复生成/.test(e.textContent)));
+});
 test('view uses text nodes instead of executing model or record HTML',()=>{
   const {run,context}=setup();context.data={...data,components:[{type:'notice',text:'<img src=x onerror=alert(1)>'}]};
   const result=run('buildComponents(data)');assert.equal(result.children[0].textContent,'<img src=x onerror=alert(1)>');assert.equal(result.children[0].children.length,0);

@@ -35,6 +35,29 @@ class FrappeProjectTests(unittest.TestCase):
         self.assertEqual(result['doctype'], 'Sales Invoice')
         self.assertNotIn('url', result)
 
+    def test_nutrition_page_entry_uses_canvas_after_original_page_permission(self):
+        page = SimpleNamespace(name='weekly-recipe-nutrition-sheet', module='Tongjianyun', title='周食谱营养分析')
+        choice = self.select(view='frappe_page', page=page.name)
+        with patch.object(project, 'module_apps', return_value={'Tongjianyun': 'tongjianyun'}), \
+             patch.object(project, '_page', return_value=page) as page_check, \
+             patch('tongjianyun.scene_access.require_view_access') as gate, \
+             patch('tongjianyun.meal_nutrition_view.nutrition_view', return_value={'components': []}) as canvas:
+            result = project.native_view(choice)
+        page_check.assert_called_once_with(page.name, {'Tongjianyun': 'tongjianyun'})
+        gate.assert_called_once_with('recipe_nutrition')
+        self.assertEqual(result['selection']['view'], 'recipe_nutrition')
+        self.assertEqual(result['selection']['day'], '2026-09-25')
+        canvas.assert_called_once()
+
+    def test_nutrition_page_denial_does_not_fall_back_or_run_analysis(self):
+        choice = self.select(view='frappe_page', page='weekly-recipe-nutrition-sheet')
+        with patch.object(project, 'module_apps', return_value={'Tongjianyun': 'tongjianyun'}), \
+             patch.object(project, '_page', side_effect=frappe.PermissionError), \
+             patch('tongjianyun.meal_nutrition_view.nutrition_view') as canvas:
+            with self.assertRaises(frappe.PermissionError):
+                project.native_view(choice)
+        canvas.assert_not_called()
+
     def test_doctype_requires_installed_module_nonchild_and_read_access(self):
         meta = SimpleNamespace(module='Accounts', istable=0)
         with patch.object(frappe, 'get_meta', return_value=meta), patch.object(frappe, 'has_permission', return_value=False):
