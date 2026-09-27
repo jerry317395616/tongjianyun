@@ -4,6 +4,9 @@ from unittest.mock import patch
 import frappe
 from tongjianyun import meal_views as views
 from tongjianyun import meal_nutrition_view as nutrition
+from tongjianyun.recipe_analysis import DEFAULT_STANDARD, NUTRIENT_KEYS, MEAL_STANDARD
+from tongjianyun.nutrition_canvas_sheet import NUTRIENT_ROWS, project_report_bytes
+from tongjianyun.nutrition_rules import normalize_rule_set
 
 
 def selection(**kwargs):
@@ -12,14 +15,24 @@ def selection(**kwargs):
 
 def sheet():
     return {'recipe': {'name': 'R1', 'title': '本周食谱', 'week_start': '2026-09-21', 'week_end': '2026-09-25'},
-            'analysis': {'standard': {'profile': '自动计算', 'source': '原标准',
+            'analysis': {'standard': {**DEFAULT_STANDARD, 'profile': '自动计算', 'source': '原标准',
                                      'population': {'student_count': 12, 'warnings': ['排除1名超出年龄范围学生']}},
-                         'nutrients': {'energy': 1096.54, 'protein': 45.18, 'calcium': 375.07},
-                         'nutrient_evaluations': {'energy': {'actual': 1096.54, 'full_target': 1291.63,
+                         'nutrients': {**dict.fromkeys(NUTRIENT_KEYS, 0), 'energy': 1096.54, 'protein': 45.18, 'calcium': 375.07},
+                         'nutrient_evaluations': {**{key: {'status': '未评价'} for key in NUTRIENT_ROWS}, 'energy': {'actual': 1096.54, 'full_target': 1291.63,
                                                    'garden_target': 1033.31, 'percent': 106.12, 'status': '适宜'}},
+                         'recipe': {'title': '本周食谱', 'weekStart': '2026-09-21', 'weekEnd': '2026-09-25'},
+                         'person_days': 60, 'meal_standard': MEAL_STANDARD, 'meal_ratio': MEAL_STANDARD,
+                         'calculation_rule': normalize_rule_set(None),
+                         'macro_energy_ratio': {'carbohydrate': 60, 'fat': 25, 'protein': 15},
+                         'animal_protein': 20, 'animal_soy_protein': 25, 'calcium_phosphorus_ratio': 1,
                          'conclusion': '原服务结论', 'day_count': 5,
                          'ingredients': [{'name': '<script>食材</script>', 'category': 'fine_grain', 'grams': 20}],
                          'category_totals': {'fine_grain': 20}}}
+
+
+def grid(result):
+    block = next(c for c in result['components'] if c['type'] == 'nutrition_sheet')
+    return {c['ref']: c for row in block['rows'] for c in row['cells']}
 
 
 class NutritionViewTests(unittest.TestCase):
@@ -105,10 +118,10 @@ class NutritionViewTests(unittest.TestCase):
 
     def test_projection_preserves_values_evaluation_warnings_and_missing_data(self):
         result = nutrition.project_sheet(sheet(), selection(recipe='R1'), '草稿')
-        rows = next(c for c in result['components'] if c.get('detail_key') == 'nutrition-nutrients')['rows']
-        self.assertEqual(rows[0]['cells'], ['热量（kcal）', 1291.63, 1033.31, 1096.54, '106.1%', '适宜'])
-        self.assertIsNone(rows[1]['cells'][1])
-        self.assertEqual(rows[1]['cells'][-1], '未评价')
+        cells = grid(result)
+        self.assertEqual([cells[f'{col}4']['value'] for col in 'RSTUV'], [1291.63, 1033.31, 1096.54, '106.1%', '适宜'])
+        self.assertEqual(cells['R8']['value'], '—')
+        self.assertEqual(cells['V8']['value'], '未评价')
         self.assertIn('草稿', result['components'][0]['text'])
         self.assertIn('排除1名', result['components'][0]['text'])
         self.assertLessEqual(len(result['components']), 12)
@@ -125,6 +138,15 @@ class NutritionViewTests(unittest.TestCase):
         self.assertEqual(overview['attention'], [{'nutrient': '蛋白质', 'status': '偏低'}])
         self.assertEqual(overview['selection']['recipe'], 'R1')
         self.assertTrue(overview['can_export'])
+        self.assertEqual(overview['mode'], 'sheet')
+        cells = grid(result)
+        self.assertEqual(cells['B2']['rowspan'], 2)
+        self.assertEqual(cells['B2']['colspan'], 2)
+        self.assertEqual(cells['D2']['colspan'], 10)
+        self.assertEqual(cells['N26']['rowspan'], 6)
+        self.assertEqual(cells['P32']['colspan'], 7)
+        self.assertEqual(cells['P23']['value'], '硒（μg）')
+        self.assertEqual(cells['D4']['value'], '<script>食材</script>')
         self.assertTrue(all(c['collapsed'] for c in result['components'] if c['type'] == 'table'))
 
     def test_missing_zero_nonfinite_or_negative_amounts_do_not_claim_deficiency(self):
@@ -139,6 +161,11 @@ class NutritionViewTests(unittest.TestCase):
                 self.assertTrue(all(item['value'] is None and item['status'] == '未评价' for item in overview['items']))
                 self.assertEqual(result['summary']['attention'], [])
                 self.assertIn('不代表实际摄入为零', result['components'][0]['text'])
+                cells = grid(result)
+                self.assertEqual(cells['T4']['value'], '—')
+                self.assertEqual(cells['V5']['value'], '未评价')
+                self.assertNotIn('原服务结论', cells['P32']['value'])
+                self.assertTrue(all(cells[f'{col}{row}']['value'] in ('', '—') for row in range(4, 38) for col in 'EGIKM'))
 
     def test_incomplete_evaluation_never_appears_good(self):
         original = sheet()
@@ -180,6 +207,7 @@ class NutritionViewTests(unittest.TestCase):
             result = views.get_view({**selection(), 'components': ['stats']})
         self.assertIn('notice', [c['type'] for c in result['components']])
         self.assertIn('nutrition_overview', [c['type'] for c in result['components']])
+        self.assertIn('nutrition_sheet', [c['type'] for c in result['components']])
         self.assertEqual(result['selection']['view'], 'recipe_nutrition')
 
 
@@ -192,12 +220,12 @@ def verify_live_nutrition_view():
     recipe = result['selection']['recipe']
     doc_before = frappe.get_doc('Tongjianyun Recipe', recipe).as_dict()
     original = nutrition.get_nutrition_sheet(recipe=recipe)
-    rows = next(c['rows'] for c in result['components'] if c.get('detail_key') == 'nutrition-nutrients')
-    for (key, _, _), row in zip(nutrition.NUTRIENTS, rows):
+    cells = grid(result)
+    for key, row in NUTRIENT_ROWS.items():
         expected = original['analysis']['nutrient_evaluations'][key]
-        assert row['cells'][3] == round(expected['actual'], 2)
-        assert row['cells'][5] == expected['status']
+        assert cells[f'T{row}']['value'] == round(expected['actual'], 2)
+        assert cells[f'V{row}']['value'] == expected['status']
     assert before == {dt: frappe.db.count(dt) for dt in doctypes}
     assert doc_before == frappe.get_doc('Tongjianyun Recipe', recipe).as_dict()
-    return {'selection': result['selection'], 'nutrient_count': len(rows), 'original_values_match': True,
+    return {'selection': result['selection'], 'nutrient_count': len(NUTRIENT_ROWS), 'original_values_match': True,
             'record_counts_unchanged': True, 'summary': result['summary']}

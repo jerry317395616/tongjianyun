@@ -19,6 +19,22 @@
 .nutrition-primary{display:inline-block;border:0;border-radius:8px;background:#47816c;color:white;padding:10px 15px;font-size:13px;cursor:pointer;text-decoration:none}
 .nutrition-actions button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:600px){.nutrition-metrics{grid-template-columns:1fr;gap:10px}.nutrition-metric{padding:16px}.nutrition-value strong{font-size:30px}.nutrition-assessment{padding:16px}.nutrition-assessment h2{font-size:20px}.nutrition-actions button{min-height:44px}}
+.nutrition-sheet-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.nutrition-sheet-tools .nutrition-assessment{padding:0;border:0;background:transparent;flex:1}
+.nutrition-sheet-tools .nutrition-eyebrow{display:none}.nutrition-sheet-tools .nutrition-assessment h2{font-size:15px;margin:0 0 4px}
+.nutrition-sheet-tools .nutrition-actions{margin:0}.nutrition-sheet-tools .nutrition-export-status{flex-basis:100%;margin:0}
+.nutrition-sheet-hint{font-size:12px;line-height:1.6;color:#718276;margin:0 0 8px}
+.nutrition-sheet-scroll{max-height:max(320px,calc(100dvh - 340px));overflow:auto;border:1px solid #202020;background:#fff;overscroll-behavior:contain}
+.nutrition-sheet-scroll:focus-visible{outline:3px solid #84b5a0;outline-offset:2px}
+.nutrition-sheet-grid{border-collapse:collapse;table-layout:fixed;color:#171717;background:#fff;font:12px/1.5 SimSun,'Songti SC','Microsoft YaHei',serif}
+.nutrition-sheet-grid thead{position:sticky;top:0;z-index:1;background:#fff}
+.nutrition-sheet-grid th,.nutrition-sheet-grid td{padding:3px 4px;font-weight:400;vertical-align:middle;text-align:left;white-space:pre-line;overflow-wrap:anywhere;border:0}
+.nutrition-sheet-grid th{height:28px;padding:3px 2px;text-align:center;background:#fff;color:#171717;font:inherit}.nutrition-sheet-grid td{height:22px}
+.nutrition-sheet-grid .sheet-edge-t{border-top:1px solid #202020}.nutrition-sheet-grid .sheet-edge-b{border-bottom:1px solid #202020}
+.nutrition-sheet-grid .sheet-edge-l{border-left:1px solid #202020}.nutrition-sheet-grid .sheet-edge-r{border-right:1px solid #202020}
+.nutrition-sheet-grid .sheet-number{text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:normal}
+.nutrition-sheet-grid .sheet-label{text-align:center}.nutrition-sheet-grid .sheet-attention{color:#955b22;background:#fff8e9}
+@media(max-width:950px){.nutrition-sheet-scroll{max-height:65dvh}.nutrition-sheet-tools .nutrition-actions button{min-height:44px}}
 #view-status{margin:0 0 15px;padding:10px 13px;border-radius:9px;background:#f2f7ef;color:#4c6658;font-size:13px}
 #view-status.error{background:#fff1ed;color:#984e43}
 .view-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px}

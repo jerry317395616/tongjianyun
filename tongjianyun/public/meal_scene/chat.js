@@ -1,4 +1,4 @@
-import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=nutrition-canvas-20260927-1';
+import {initializeViews,showBusinessView,currentViewContext} from './views.js?v=nutrition-excel-20260927-2';
 import {mealContext as context,refreshMealData} from './state.js?v=meal-calendar-read-20260926-2';
 import {getSceneBootstrap} from './scene_bootstrap.js?v=meal-calendar-read-20260926-2';
 const $=id=>document.getElementById(id);

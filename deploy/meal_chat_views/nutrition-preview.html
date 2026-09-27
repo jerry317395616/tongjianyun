@@ -1,23 +1,16 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>营养业务视图 · 合成数据预览</title>
+<title>Excel 版式营养视图 · 合成数据预览</title>
 <link rel="stylesheet" href="../../tongjianyun/public/meal_scene/app.css">
 <link rel="stylesheet" href="../../tongjianyun/public/meal_scene/chat.css">
 <link rel="stylesheet" href="../../tongjianyun/public/meal_scene/views.css">
 </head><body>
 <header class="topbar"><div class="brand"><img src="../../tongjianyun/public/images/tongjianyun-logo.svg" alt="童健云"><span><b>童健云</b><small>统一业务工作台</small></span></div><small>合成数据预览 · 不连接生产业务</small></header>
 <main id="stage" class="workbench"><section id="business-canvas" class="workbench-main"><p id="view-status" hidden></p><section id="recipe-workspace" hidden></section>
-<section id="business-view"><header class="view-heading"><div><h1 id="view-title">周食谱营养分析</h1><p id="view-subtitle">合成食谱 · 2026-09-21 — 2026-09-25 · 草稿 · 园内目标 80%</p></div><button id="view-back" class="view-back">← 回到食谱</button></header><div id="view-content"></div><div id="view-actions"></div><p id="view-source" class="view-source">合成数据，仅用于交互与布局验证，不代表真实营养结果。</p></section></section>
-<aside id="meal-chat" class="meal-chat"><header class="meal-chat-header"><h2>项目与业务助手</h2></header><div class="chat-messages"><div class="chat-message assistant">已展示营养分析。点击指标查看明细，告诉我需要怎样调整。</div></div><div class="chat-form"><div class="chat-composer"><textarea id="chat-input" aria-label="给助手发送消息" placeholder="说出需要调整的内容…"></textarea><button type="button" disabled>↑</button></div></div></aside></main>
+<section id="business-view"><header class="view-heading"><div><h1 id="view-title">周食谱营养分析</h1><p id="view-subtitle">合成食谱 · 2026-09-21 — 2026-09-25 · 园内目标 80%</p></div><button id="view-back" class="view-back">← 回到食谱</button></header><div id="view-content"></div><div id="view-actions"></div><p id="view-source" class="view-source">合成数据，仅用于交互与布局验证，不代表真实营养结果。</p></section></section>
+<aside id="meal-chat" class="meal-chat"><header class="meal-chat-header"><h2>项目与业务助手</h2></header><div class="chat-messages"><div class="chat-message assistant">已按 Excel 格式展示营养分析。食物用量、各餐分配、营养指标和结论都在同一张表里。</div></div><div class="chat-form"><div class="chat-composer"><textarea id="chat-input" aria-label="给助手发送消息" placeholder="说出需要调整的内容…"></textarea><button type="button" disabled>↑</button></div></div></aside></main>
 <script type="module">
 import {buildComponents} from '../../tongjianyun/public/meal_scene/views.js';
-const selection={view:'recipe_nutrition',recipe:'SYNTHETIC-RECIPE',day:'2026-09-24',meal:'lunch',garden_ratio:80};
-const components=[{type:'notice',text:'食谱为草稿。本次仅分析，不发布或创建采购单。',warning:true},
-{type:'nutrition_overview',headline:'2 项指标需要关注',state:'attention',items:[{label:'热量',value:1096.54,unit:'kcal',target:1033.31,status:'适宜'},{label:'蛋白质',value:45.18,unit:'g',target:60,status:'偏低'},{label:'钙',value:375.07,unit:'mg',target:640,status:'偏低'}],attention:[{nutrient:'蛋白质',status:'偏低'},{nutrient:'钙',status:'偏低'}],unknown_count:2,ingredient_count:20,day_count:5,selection,can_export:false},
-{type:'notice',text:'整周日均每生估算，不是实际摄入量。建议结合可食部、品牌营养标签和就餐人数复核。'},
-{type:'table',title:'全部营养指标 · 点击查看对照明细',detail_key:'nutrition-nutrients',collapsed:true,columns:['营养素','全日标准','在园目标','食谱估算供给','目标占比','评价'],rows:[{cells:['热量（kcal）',1291.63,1033.31,1096.54,'106.1%','适宜'],evaluation:'适宜'},{cells:['蛋白质（g）',75,60,45.18,'75.3%','偏低'],evaluation:'偏低'},{cells:['钙（mg）',800,640,375.07,'58.6%','偏低'],evaluation:'偏低'},{cells:['维生素C（mg）',null,null,null,'—','未评价'],evaluation:'未评价'}]},
-{type:'table',title:'食材明细 · 点击查看用量',collapsed:true,columns:['食材','分类','日均每生用量（g）','口径'],rows:[{cells:['大米','细粮',29.2,'分类代表值']},{cells:['牛奶','乳类',150,'分类代表值']}]},
-{type:'table',title:'供能结构与蛋白质构成',collapsed:true,columns:['项目','参考比例','估算比例'],rows:[{cells:['蛋白质供能','12%—15%','16.5%']}]},
-{type:'table',title:'补充指标与计算口径',collapsed:true,columns:['项目','结果'],rows:[{cells:['分析天数',5]},{cells:['统计口径','整周日均每生估算']}]}];
-document.getElementById('view-content').replaceChildren(buildComponents({version:1,selection,components}));
+const data=await (await fetch('/nutrition-sheet-preview.json')).json();
+document.getElementById('view-content').replaceChildren(buildComponents(data));
 </script></body></html>

@@ -167,6 +167,7 @@ function renderNotice(block){return node('p',block.text,'view-note'+(block.warni
 function renderNutritionOverview(block){
   if(!['good','attention','unknown'].includes(block.state)||!Array.isArray(block.items)||block.items.length!==3||!Array.isArray(block.attention)||block.selection?.view!=='recipe_nutrition'||typeof block.can_export!=='boolean')throw Error('营养概览数据不完整，请重新读取。');
   const section=node('section',undefined,'nutrition-overview'),heading=node('div',undefined,'nutrition-assessment '+block.state);
+  const sheetMode=block.mode==='sheet';if(sheetMode)section.classList.toggle('nutrition-sheet-tools',true);
   heading.append(node('span','本周营养估算','nutrition-eyebrow'),node('h2',block.headline),node('p',`${block.day_count??'—'} 天食谱 · ${block.ingredient_count??'—'} 种食材 · ${block.unknown_count??'—'} 项指标待核对`));section.append(heading);
   const openDetails=()=>{const details=$('nutrition-nutrients');if(details){details.open=true;details.scrollIntoView?.({behavior:'smooth',block:'nearest'});}};
   const metrics=node('div',undefined,'nutrition-metrics');
@@ -175,8 +176,8 @@ function renderNutritionOverview(block){
     const value=node('div',undefined,'nutrition-value');value.append(node('strong',item.value),node('small',item.unit));
     card.append(node('span',item.label),value,node('span',item.status,'nutrition-state '+(item.status==='适宜'?'good':item.status==='未评价'?'unknown':'attention')),node('small',`在园目标 ${item.target??'—'} ${item.unit} · 查看明细`));
     card.addEventListener('click',openDetails);metrics.append(card);
-  }section.append(metrics);
-  if(block.attention.length){const attention=node('div',undefined,'nutrition-attention');attention.append(node('h3','需要关注'));
+  }if(!sheetMode)section.append(metrics);
+  if(!sheetMode&&block.attention.length){const attention=node('div',undefined,'nutrition-attention');attention.append(node('h3','需要关注'));
     for(const item of block.attention)attention.append(node('span',`${item.nutrient} ${item.status}`,'nutrition-attention-item'));
     attention.append(node('p','先核对食材用量与分析口径，再决定是否调整食谱。'));section.append(attention);}
   const buttons=node('div',undefined,'nutrition-actions'),adjust=node('button','请助手调整食谱','nutrition-primary'),download=node('button','导出分析报告','view-back'),status=node('p','导出沿用原报表，可能冻结人口标准快照并保存附件。','nutrition-export-status');
@@ -198,6 +199,32 @@ function renderNutritionOverview(block){
     }catch(error){status.textContent=(error.message||'导出未完成。')+' 导出结果尚未确认，请让助手查询该食谱附件，不要重复生成。';}
   });
   buttons.append(adjust,download);section.append(buttons,status);return section;
+}
+function renderNutritionSheet(block){
+  const invalid=()=>{throw Error('营养分析表格式无效，请重新读取。');};
+  if(block.layout!=='weekly-nutrition-excel-v1'||!Array.isArray(block.columns)||block.columns.length!==21||block.columns.some(v=>!Number.isInteger(v)||v<20||v>200)||!Array.isArray(block.rows)||block.rows.length!==36)invalid();
+  const occupied=new Set();
+  const section=node('section',undefined,'nutrition-sheet-section'),hint=node('p','与 Excel 导出表相同版式 · 可左右滑动查看完整表格 · 实给量为食谱估算，非实际摄入','nutrition-sheet-hint');
+  const wrapper=node('div',undefined,'nutrition-sheet-scroll'),table=node('table',undefined,'nutrition-sheet-grid'),cols=node('colgroup'),head=node('thead'),body=node('tbody');
+  wrapper.tabIndex=0;wrapper.setAttribute('role','region');wrapper.setAttribute('aria-label','周食谱营养分析表，可横向和纵向滚动');table.setAttribute('aria-label','食谱带量营养分析');
+  for(const width of block.columns){const col=node('col');col.style.width=width+'px';cols.append(col);}table.style.width=block.columns.reduce((a,b)=>a+b,0)+'px';table.append(cols,head,body);
+  for(let index=0;index<block.rows.length;index++){
+    const row=block.rows[index],r=index+2;if(!row||row.number!==r||!Array.isArray(row.cells))invalid();
+    const tr=node('tr');let previous=1;
+    for(const cell of row.cells){
+      if(!cell||!Number.isInteger(cell.column)||cell.column<=previous||cell.column>22||!Number.isInteger(cell.rowspan)||cell.rowspan<1||r+cell.rowspan>38||(r<=3&&r+cell.rowspan>4)||!Number.isInteger(cell.colspan)||cell.colspan<1||cell.column+cell.colspan>23||typeof cell.borders!=='string'||!/^(t?b?l?r?)$/.test(cell.borders)||cell.ref!==String.fromCharCode(64+cell.column)+r||!(typeof cell.value==='string'&&cell.value.length<=20000||typeof cell.value==='number'&&Number.isFinite(cell.value)))invalid();
+      previous=cell.column;
+      for(let rr=r;rr<r+cell.rowspan;rr++)for(let cc=cell.column;cc<cell.column+cell.colspan;cc++){const key=rr+':'+cc;if(occupied.has(key))invalid();occupied.add(key);}
+      const td=node(r<=3?'th':'td',cell.value,'nutrition-sheet-cell');td.rowSpan=cell.rowspan;td.colSpan=cell.colspan;
+      for(const edge of cell.borders)td.classList.toggle('sheet-edge-'+edge,true);
+      if(r<=3)td.setAttribute('scope','col');
+      td.classList.toggle('sheet-number',typeof cell.value==='number');td.classList.toggle('sheet-label',cell.column<=3||cell.column>=14);
+      if(cell.column===22&&['偏低','偏高','未评价'].includes(cell.value))td.classList.toggle('sheet-attention',true);
+      tr.append(td);
+    }(r<=3?head:body).append(tr);
+  }
+  if(occupied.size!==36*21)invalid();
+  wrapper.append(table);section.append(hint,wrapper);return section;
 }
 function safeDeskRoute(route){
   if(typeof route!=='string'||!route.startsWith('/desk/')||/[\\?#\r\n]/.test(route)||route.includes('//')||route.includes('..'))return false;
@@ -544,6 +571,7 @@ function renderStockRepair(block){
 }
 const renderers={stats:renderStats,table:renderTable,bars:renderBars,notice:renderNotice,frappe_frame:renderFrappeFrame,business_blueprint:renderBlueprint,business_proposal:renderProposal,business_proposal_handoff:renderProposalHandoff,attendance_register:renderAttendance,meal_register:renderMealRegister,stock_repair:renderStockRepair};
 renderers.nutrition_overview=renderNutritionOverview;
+renderers.nutrition_sheet=renderNutritionSheet;
 export function buildComponents(data){
   if(data?.version!==1||!validViews.has(data.selection?.view)||!Array.isArray(data.components)||data.components.length>12)throw Error('展示结果格式不受支持，已保留当前页面。');
   const content=document.createDocumentFragment();

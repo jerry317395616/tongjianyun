@@ -6,6 +6,7 @@ import frappe
 from tongjianyun.meal_scene import RECIPE, get_recipe, read_doc, visible_rows
 from tongjianyun.nutrition_population import AUTO_MODE, MANUAL_MODE
 from tongjianyun.nutrition_sheet import get_nutrition_sheet
+from tongjianyun.nutrition_canvas_sheet import spreadsheet_component
 
 FIELDS = {'recipe', 'garden_ratio', 'standard_mode', 'student_groups', 'age_group', 'gender'}
 NUTRIENTS = [('energy', '热量', 'kcal'), ('protein', '蛋白质', 'g'), ('calcium', '钙', 'mg'),
@@ -176,57 +177,15 @@ def project_sheet(result, choice, status):
     headline = ('先补充食材用量，再做营养分析' if not has_amounts else
                 f'{len(attention)} 项指标需要关注' if attention else
                 '部分指标还需核对' if unknown else '已评价指标处于参考范围')
-    components.append({'type': 'nutrition_overview', 'headline': headline,
+    components.append({'type': 'nutrition_overview', 'mode': 'sheet', 'headline': headline,
                        'state': 'unknown' if not has_amounts else 'attention' if attention else 'unknown' if unknown else 'good',
                        'items': items, 'attention': attention, 'unknown_count': len(unknown),
                        'ingredient_count': len(ingredients), 'day_count': analysis.get('day_count'),
                        'selection': dict(choice), 'can_export': has_amounts})
-    components.append(notice('整周日均每生估算，不是实际摄入量。' +
-                             ('请先补齐用量；原服务的零估算不作为偏低或达标结论。' if not has_amounts else
-                              analysis.get('conclusion') or '请核对原分析明细。')))
-    rows = []
-    for key, label, unit in NUTRIENTS:
-        e = assessed[key]
-        state = e.get('status') or '未评价'
-        rows.append({'cells': [f'{label}（{unit}）', number(e.get('full_target')), number(e.get('garden_target')),
-                               e['actual'], percent(e.get('percent')), state],
-                     'evaluation': state})
-    nutrient_table = table('全部营养指标 · 点击查看对照明细', ['营养素', '全日标准', '在园目标', '食谱估算供给', '目标占比', '评价'], rows, True)
-    nutrient_table['detail_key'] = 'nutrition-nutrients'
-    components.append(nutrient_table)
-    macro_rows = []
-    for key, label in (('carbohydrate', '碳水化合物供能'), ('fat', '脂肪供能'), ('protein', '蛋白质供能')):
-        actual = number((analysis.get('macro_energy_ratio') or {}).get(key)) if has_amounts else None
-        bounds = (rule.get('macro_ranges') or {}).get(key) or standard.get(key + '_energy_range')
-        state = '未评价' if actual is None or not bounds else '偏低' if actual < bounds[0] else '偏高' if actual > bounds[1] else '适宜'
-        macro_rows.append({'cells': [label, f'{bounds[0]}%—{bounds[1]}%' if bounds else '—', percent(actual), state], 'evaluation': state})
-    protein = number(nutrients.get('protein')) if has_amounts else None
-    for key, label, target_key in (('animal_protein', '动物蛋白占总蛋白', 'animal_protein_target'),
-                                   ('animal_soy_protein', '动豆蛋白占总蛋白', 'animal_soy_protein_target')):
-        actual = number(analysis.get(key))
-        ratio = actual / protein * 100 if protein and actual is not None else None
-        target = number(rule.get(target_key))
-        state = '未评价' if ratio is None or target is None else '适宜' if ratio >= target else '偏低'
-        macro_rows.append({'cells': [label, f'≥{percent(target)}' if target is not None else '—', percent(ratio), state], 'evaluation': state})
-    components.append(table('供能结构与蛋白质构成', ['项目', '参考比例', '食谱估算比例', '评价'], macro_rows, True))
-    components.append(table('各餐热量分配', ['餐次', '原分析参考比例', '食谱估算比例'], [
-        {'cells': [label, percent((analysis.get('meal_standard') or {}).get(slot)), percent((analysis.get('meal_ratio') or {}).get(slot)) if has_amounts else '—']}
-        for slot, label in zip(('breakfast', 'morningSnack', 'lunch', 'snack', 'dinner'), ('早餐', '早点', '午餐', '午点', '晚餐'))], True))
-    components.append(table('食物分类用量 · 日均每生（g）', ['食物分类', '估算用量'], [
-        {'cells': [CATEGORIES.get(key, key), number(value)]} for key, value in (analysis.get('category_totals') or {}).items()], True))
-    components.append(table(f'食材明细 · {len(ingredients)} 种', ['食材', '分类', '日均每生用量（g）', '数据口径'], [
+    components.append(spreadsheet_component(analysis, assessed, has_amounts))
+    components.append(table(f'全部食材与计算口径 · {len(ingredients)} 种（含表外油脂、水）', ['食材', '分类', '日均每生用量（g）', '数据口径'], [
         {'cells': [item['name'], CATEGORIES.get(item['category'], item['category']), number(item.get('grams')), item.get('basis') or '分类代表值']}
         for item in ingredients], True))
-    components.append(table('补充指标与计算口径', ['项目', '结果'], [
-        {'cells': ['钙/磷比例', number(analysis.get('calcium_phosphorus_ratio')) if has_amounts else None]},
-        *[{'cells': [label, number(nutrients.get(key)) if has_amounts else None]} for key, label in
-          (('carotene', '胡萝卜素（μg）'), ('fiber', '膳食纤维（g）'), ('cholesterol', '胆固醇（mg）'))],
-        {'cells': ['分析天数', analysis.get('day_count')]},
-        {'cells': ['原报告总人日数（非实际就餐确认）', analysis.get('person_days')]},
-        {'cells': ['标准参考日期', population.get('reference_date') or recipe.get('week_start')]},
-        {'cells': ['纳入自动标准计算学生数', population.get('student_count')]},
-        {'cells': ['计算规则', f'{rule.get("title", "未标明")} · {rule.get("version", "—")}']},
-    ], True))
     components.append(notice(BASIS))
     return {'title': '周食谱营养分析',
             'subtitle': f'{recipe.get("title") or recipe["name"]} · {recipe.get("week_start")} — {recipe.get("week_end")} · {status} · {standard.get("profile", "未标明标准")} · 园内目标 {percent(choice["garden_ratio"])}',

@@ -29,6 +29,43 @@ const nutritionBlock=(extra={})=>({type:'nutrition_overview',headline:'1 项指�
   day_count:5,ingredient_count:20,unknown_count:1,can_export:true,
   selection:{view:'recipe_nutrition',recipe:'R1',day:'2026-09-24',meal:'lunch',garden_ratio:80},...extra});
 function descendants(element){return [element,...element.children.flatMap(descendants)];}
+function sheetBlock(){
+  // Same bounded coordinate space; only one header merge is needed to exercise
+  // the browser's full coverage/overlap checks. Exact template merges are tested
+  // against the real server-owned workbook in test_nutrition_canvas_sheet.py.
+  const rows=[];
+  for(let r=2;r<=37;r++){
+    const cells=[];for(let c=2;c<=22;c++){
+      if(r===2&&c>4&&c<=13)continue;
+      cells.push({ref:String.fromCharCode(64+c)+r,column:c,rowspan:1,colspan:r===2&&c===4?10:1,borders:'tblr',value:r===4&&c===4?'<img onerror=bad>':r===4&&c===20?123:''});
+    }rows.push({number:r,cells});
+  }
+  return {type:'nutrition_sheet',layout:'weekly-nutrition-excel-v1',columns:Array(21).fill(70),rows};
+}
+
+test('Excel nutrition sheet is a full merged text table with keyboard scrolling and no iframe',()=>{
+  const {run,context}=setup();context.data={...data,components:[sheetBlock()]};
+  const section=run('buildComponents(data)').children[0],nodes=descendants(section);
+  assert(!nodes.some(e=>e.tag==='iframe'||e.tag==='details'));
+  assert.equal(nodes.find(e=>e.tag==='table').attrs['aria-label'],'食谱带量营养分析');
+  assert.equal(nodes.find(e=>e.attrs.role==='region').tabIndex,0);
+  assert.equal(nodes.find(e=>e.tag==='thead').children.length,2);
+  assert.equal(nodes.find(e=>e.tag==='tbody').children.length,34);
+  assert(nodes.some(e=>e.colSpan===10));assert(nodes.some(e=>e.textContent==='123'));
+  const escaped=nodes.find(e=>e.textContent==='<img onerror=bad>');assert.equal(escaped.children.length,0);
+});
+test('Excel nutrition layout rejects overlap missing cells unsafe styles and malformed geometry',()=>{
+  const {run,context}=setup();
+  for(const change of [b=>b.columns[0]=Infinity,b=>b.rows[0].cells[0].rowspan=36,b=>b.rows[0].cells[0].colspan=3,b=>b.rows[4].cells.pop(),b=>b.rows[5].cells[0].borders='url(x)',b=>b.rows[6].cells[0].value=NaN,b=>b.rows[7].cells[0].ref='XFD99',b=>b.rows[8].cells[0]=null]){
+    const block=sheetBlock();change(block);context.data={...data,components:[block]};assert.throws(()=>run('buildComponents(data)'),/格式无效/);
+  }
+});
+test('Excel sheet mode replaces large overview cards with compact actions',()=>{
+  const {run,context}=setup();context.data={...data,components:[nutritionBlock({mode:'sheet'})]};
+  const section=run('buildComponents(data)').children[0],nodes=descendants(section);
+  assert.equal(nodes.filter(e=>e.className==='nutrition-metric').length,0);
+  assert(nodes.some(e=>e.textContent==='导出分析报告'));assert(nodes.some(e=>e.textContent==='请助手调整食谱'));
+});
 test('nutrition overview shows compact real values and opens details only on click',()=>{
   const {run,context,nodes}=setup();context.data={...data,selection:{view:'recipe_nutrition'},components:[nutritionBlock()]};
   const section=run('buildComponents(data)').children[0],cards=descendants(section).filter(e=>e.className==='nutrition-metric');

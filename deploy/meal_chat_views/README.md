@@ -21,7 +21,10 @@ Codex 不提供业务数字、SQL、HTML 或脚本给渲染器。当前可选视
   权限仍检查；班级筛选不允许静默丢弃无权限项。默认自动标准，档案错误不自动降级手动。
   可在对话中指定食谱、园内供给目标、统计班级或明确要求手动年龄/性别口径。
   这些筛选只影响本次查询，不写食谱、不冻结人口快照、不导出附件、不更改营养规则。
-  默认显示关键指标、需关注事项与未评价数量；所有对照和明细折叠显示，点击指标打开对照。
+  默认按原 Excel 导出模板显示完整带量分析表：食物分类与五组食物/重量列、各餐热量比例、
+  营养标准/实给量/评价、食谱口径和结论建议。合并区域、列比例和边框复用同一模板。
+  表头固定，窄屏在表格内滚动；概览只保留简洁提示和调整/导出操作，不再显示三张大卡。
+  全部食材口径折叠补充显示（含原模板未列出的油脂、水），超出分类容量的食材不丢弃。
   缺少有效食材用量时不把原服务的零估算显示为偏低或达标。
   `frappe_page/weekly-recipe-nutrition-sheet` 经原页面权限检查后切换到这份业务视图，
   原 Desk 页面及其菜单不再嵌入场景，其他原页面暂时保留。
@@ -30,7 +33,7 @@ Codex 不提供业务数字、SQL、HTML 或脚本给渲染器。当前可选视
   重新核对账号、食谱全部行及统计班级权限，再沿用原导出服务。
   原导出可能冻结人口标准快照并保存附件，查看视图不会调用导出。
 
-通用组件为 `stats/table/bars/notice`，营养专用组件为 `nutrition_overview`，周历复用已有实现。新增业务时注册受控数据查询
+通用组件为 `stats/table/bars/notice`，营养专用组件为 `nutrition_overview/nutrition_sheet`，周历复用已有实现。新增业务时注册受控数据查询
 与需要的组件，不允许聊天生成任意可执行前端代码。Codex 的既有系统权限和其他配置
 不变，网页对话仍仅向已有获权管理员开放。
 
@@ -73,4 +76,16 @@ python -m unittest tongjianyun.tests.test_meal_nutrition_view
 营养视图发布需在对话队列空闲时重启原 Web / SSE / meal_chat worker；不运行迁移。
 `tongjianyun.tests.test_meal_nutrition_view.verify_live_nutrition_view` 对照原服务各指标和评价，
 并检查食谱、菜品、食材、附件记录数不变。还须从真实对话验证 Codex → SSE → 营养视图，
-验证折叠明细、返回食谱及刷新默认周历。原 Desk 营养分析和 Excel 导出入口保持不变。
+验证 Excel 表格、固定表头、表内滚动、返回食谱及刷新默认周历。原 Desk 营养分析和 Excel 导出入口保持不变。
+
+Excel 版式增量发布使用 `release_nutrition_excel.py`：先检查当前七个目标文件的哈希，
+仅替换这次组件和资源版本，保留线上其他代码差异。新备份单独存放，不覆盖上一轮备份。
+`verify_nutrition_canvas.py` 在数据库强制 READ ONLY 会话里逐单元格对照原导出结果，
+五处历史单位/标签勘误除外；不会调用导出或新增附件。纯投影测试可独立运行：
+
+```sh
+python -m unittest tongjianyun.tests.test_nutrition_canvas_sheet
+python deploy/meal_chat_views/serve_nutrition_preview.py
+```
+
+预览只监听本机 23403 端口，使用合成数据，不代表生产营养结果；Ctrl+C 停止。
