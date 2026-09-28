@@ -8,6 +8,7 @@ from __future__ import annotations
 from urllib.parse import urlencode
 
 import frappe
+from tongjianyun.meal_manager_role import is_meal_manager
 
 ENTRY = "/tongjianyun-entry"
 CLASSROOM = "/tongjianyun-classroom"
@@ -84,14 +85,17 @@ def choose_profiles(user, roles, assignment, workbench_available):
 def entry_model():
     assignment = teaching_assignment()
     business = can_open_workbench()
-    profiles = choose_profiles(frappe.session.user, frappe.get_roles(), assignment, business)
+    roles = frappe.get_roles()
+    meal_manager = is_meal_manager(frappe.session.user, roles)
+    profiles = choose_profiles(frappe.session.user, roles, assignment, business)
     from tongjianyun.meal_scene import has_access as can_open_meal_scene
     teacher_only = profiles and all(p["id"] == "teacher" for p in profiles)
-    if not teacher_only and can_open_meal_scene():
+    if (meal_manager or not teacher_only) and can_open_meal_scene():
         profiles.append({"id": "meals", "label": "膳食全流程场景", "enabled": True,
             "description": "按业务顺序核对食谱、采购、到货、库存与实际用餐；不增加原账号权限。", "class_count": 0})
     return {"profiles": profiles, "groups": assignment["groups"],
             "checks": {k: v for k, v in assignment.items() if k != "groups"},
+            "meal_manager": meal_manager,
             "business_available": business,
             "user_label": frappe.db.get_value("User", frappe.session.user, "full_name") or "老师"}
 
@@ -102,6 +106,8 @@ def resolve_entry(model, profile=None, group=None, choose=False):
     available = {p["id"]: p for p in model["profiles"]}
     if profile and profile not in available:
         raise frappe.PermissionError("当前账号没有该工作入口")
+    if not profile and not choose and model.get("meal_manager") and available.get("meals", {}).get("enabled"):
+        profile = "meals"
     profile = profile or (enabled[0]["id"] if len(enabled) == 1 and len(available) == 1 else None)
     if group and profile != "teacher":
         raise frappe.PermissionError("请从教师入口选择任教班级")

@@ -13,8 +13,9 @@ ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
 app_home = "/tongjianyun-entry"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
 app_include_js = [
-    "/assets/tongjianyun/js/page_cache_buster.js?v=meal-flow-20260923-1",
-    "/assets/tongjianyun/js/teacher_entry_compat.js?v=meal-flow-20260923-1",
+    "/assets/tongjianyun/js/page_cache_buster.js?v=meal-flow-20260926-3",
+    "/assets/tongjianyun/js/teacher_entry_compat.js?v=meal-flow-20260926-3",
+    "/assets/tongjianyun/js/meal_manager_desktop.js?v=20260928-1",
 ]
 
 # Preserve the restricted management Page; route old teacher bookmarks safely.
@@ -41,7 +42,10 @@ after_migrate = [
     "tongjianyun.workbench.install",
     "tongjianyun.patches.v1_0.add_recipe_price_fields.execute",
     "tongjianyun.meal_attendance_roles.install",
+    "tongjianyun.meal_manager_role.install",
 ]
+
+boot_session = "tongjianyun.meal_manager_role.limit_app_launcher"
 
 override_doctype_class = {
     "Student": "tongjianyun.education_integration.TongjianyunStudent",
