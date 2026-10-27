@@ -1,5 +1,5 @@
-from frappe.model.document import Document
+from tongjianyun.archive import ReadOnlyArchive
 
 
-class TongjianyunRecipeIngredient(Document):
+class TongjianyunRecipeIngredient(ReadOnlyArchive):
     pass

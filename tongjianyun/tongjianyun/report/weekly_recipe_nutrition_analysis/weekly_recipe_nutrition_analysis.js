@@ -1,109 +1,49 @@
-frappe.query_reports["Weekly Recipe Nutrition Analysis"] = {
-    filters: [
-        {
-            fieldname: "recipe",
-            label: __("Recipe"),
-            fieldtype: "Link",
-            options: "Tongjianyun Recipe",
-            get_query: () => ({ filters: { is_deleted: 0 } }),
-        },
-        {
-            fieldname: "standard_mode",
-            label: "标准计算方式",
-            fieldtype: "Select",
-            options: "自动（按学生档案）\n手动估算",
-            default: "自动（按学生档案）",
-        },
-        {
-            fieldname: "student_groups",
-            label: "统计班级（不选则全园）",
-            fieldtype: "MultiSelectList",
-            get_data: (txt) => frappe.db.get_link_options("Student Group", txt, { disabled: 0 }),
-        },
-        {
-            fieldname: "age_group",
-            label: "手动年龄口径",
-            fieldtype: "Select",
-            options: "4–6岁平均\n4岁\n5岁\n6岁",
-            default: "4–6岁平均",
-        },
-        {
-            fieldname: "gender",
-            label: "手动性别口径",
-            fieldtype: "Select",
-            options: "男女平均\n男\n女",
-            default: "男女平均",
-        },
-        {
-            fieldname: "garden_ratio",
-            label: "园内供给目标",
-            fieldtype: "Percent",
-            default: 80,
-        },
-        {
-            fieldname: "section",
-            label: "报表内容",
-            fieldtype: "Select",
-            options: "全部\n营养素\n食物结构\n餐次结构",
-            default: "全部",
-        },
-    ],
-
-    onload(report) {
-        report.page.add_inner_button("打开食谱计划", () => {
-            frappe.set_route("tongjianyun-recipe-workbench");
-        });
-        report.page.add_inner_button("打开当前食谱", () => {
-            const recipe = report.get_filter_value("recipe");
-            if (!recipe) {
-                frappe.msgprint("请先选择一份食谱。");
-                return;
+(() => {
+    const name = "Weekly Recipe Nutrition Analysis";
+    const esc = value => frappe.utils.escape_html(String(value ?? ""));
+    async function changeSource(report, field) {
+        if (report._no_refresh || report.__changing_meal_source) return;
+        report.__changing_meal_source = true;
+        try {
+            if (report.get_filter_value(field)) {
+                const others = ["week_name", "plan_batch", "week_start"].filter(key => key !== field && report.get_filter_value(key));
+                if (others.length) await report.set_filter_value(Object.fromEntries(others.map(key => [key, ""])));
             }
-            frappe.route_options = { recipe };
-            frappe.set_route("tongjianyun-recipe-workbench");
-        });
-
-        if (!report.get_filter_value("recipe")) {
-            frappe.db.get_list("Tongjianyun Recipe", {
-                filters: { is_deleted: 0 },
-                fields: ["name"],
-                order_by: "modified desc",
-                limit: 1,
-            }).then((rows) => {
-                if (rows.length && !report.get_filter_value("recipe")) {
-                    report.set_filter_value("recipe", rows[0].name);
-                }
-            });
-        }
-    },
-
-    formatter(value, row, column, data, defaultFormatter) {
-        let formatted = defaultFormatter(value, row, column, data);
-        if (data?.section_header) {
-            if (column.fieldname === "metric") {
-                return `<span style="font-weight:700;color:var(--text-color);">${formatted}</span>`;
+        } finally { report.__changing_meal_source = false; }
+        return report.refresh(true);
+    }
+    const selectedSource = report => {
+        const week = report.get_filter_value("week_name"), batch = report.get_filter_value("plan_batch");
+        if (week) return {week_name: week};
+        if (batch) return {plan_batch: batch};
+        if (report.get_filter_value("week_start")) return {week_start: report.get_filter_value("week_start")};
+        const row = report.data?.[0];
+        return row?.week_name ? {week_name: row.week_name} : row?.plan_batch ? {plan_batch: row.plan_batch} : {};
+    };
+    frappe.query_reports[name] = {
+        filters: [
+            {fieldname: "week_start", label: __("周开始日期"), fieldtype: "Date", on_change: report => changeSource(report, "week_start")},
+            {fieldname: "week_name", label: __("周食谱"), fieldtype: "Link", options: "Meal Planning Week", on_change: report => changeSource(report, "week_name")},
+            {fieldname: "plan_batch", label: __("生产计划批次"), fieldtype: "Data", on_change: report => changeSource(report, "plan_batch")},
+            {fieldname: "age_group", label: __("手动年龄参考"), fieldtype: "Select", options: "4–5岁平均\n2岁\n3岁\n4岁\n5岁\n6岁", default: "4–5岁平均"},
+            {fieldname: "gender", label: __("手动性别参考"), fieldtype: "Select", options: "男女平均\n男\n女", default: "男女平均"},
+            {fieldname: "garden_ratio", label: __("园内参考比例"), fieldtype: "Percent", default: 80},
+            {fieldname: "section", label: __("报表内容"), fieldtype: "Select", options: "全部\n食谱结构\n营养估算\n食材带量\n待补资料", default: "全部"},
+        ],
+        async onload(report) {
+            report.page.set_title(__("食谱分析"));
+            report.page.add_inner_button(__("周食谱表"), () => frappe.set_route("query-report", "Tongjianyun Weekly Menu", selectedSource(report)));
+            if (Object.keys(selectedSource(report)).length) return;
+            const rows = await frappe.db.get_list("Meal Planning Week", {fields:["name"],filters:{docstatus:["<",2]},order_by:"week_start desc, modified desc",limit:1});
+            if (rows[0]?.name && !Object.keys(selectedSource(report)).length) await report.set_filter_value("week_name", rows[0].name);
+        },
+        formatter(value, row, column, data, defaultFormatter) {
+            if (["amount", "reference", "garden_target"].includes(column.fieldname)) {
+                if (value === null || value === undefined || value === "") return "—";
+                if (Number.isFinite(Number(value))) return Number(value).toLocaleString("zh-CN", {maximumFractionDigits: 4});
+                return "—";
             }
-            return "";
-        }
-        if (column.fieldname === "evaluation") {
-            const text = String(data?.evaluation || "");
-            let color = "var(--text-muted)";
-            let background = "var(--subtle-fg)";
-            if (["达标", "适宜", "接近目标"].includes(text)) {
-                color = "#2b8a3e";
-                background = "#ebfbee";
-            } else if (["偏低", "偏高", "需调整", "需关注"].includes(text)) {
-                color = "#c92a2a";
-                background = "#fff5f5";
-            } else if (["未记录", "数据不足"].includes(text)) {
-                color = "#e67700";
-                background = "#fff9db";
-            }
-            return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;color:${color};background:${background};font-weight:600;">${frappe.utils.escape_html(text)}</span>`;
-        }
-        if (column.fieldname === "achievement_rate" && Number(data?.achievement_rate) < 80) {
-            formatted = `<span style="color:#c92a2a;font-weight:600;">${formatted}</span>`;
-        }
-        return formatted;
-    },
-};
+            return esc(value);
+        },
+    };
+})();

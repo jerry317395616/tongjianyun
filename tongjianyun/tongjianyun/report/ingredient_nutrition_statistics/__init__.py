@@ -1,1 +1,0 @@
-"""Ingredient nutrition statistics report."""

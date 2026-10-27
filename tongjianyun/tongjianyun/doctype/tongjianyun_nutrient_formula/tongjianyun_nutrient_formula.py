@@ -1,5 +1,5 @@
-from frappe.model.document import Document
+from tongjianyun.archive import ReadOnlyArchive
 
 
-class TongjianyunNutrientFormula(Document):
+class TongjianyunNutrientFormula(ReadOnlyArchive):
     pass

@@ -1,5 +1,5 @@
-from frappe.model.document import Document
+from tongjianyun.archive import ReadOnlyArchive
 
 
-class TongjianyunDailyMealConfirmationRow(Document):
+class TongjianyunDailyMealConfirmationRow(ReadOnlyArchive):
     pass
