@@ -117,6 +117,9 @@ def result(report_id):
     try:
         payload = _rpc("/read", report_id=report_id)
         payload["nutrient_labels"] = NUTRIENTS
+        if payload.get("status") == "ready":
+            from tongjianyun.nutrition_layout import render_sheet
+            payload["sheet_html"] = render_sheet(payload["data"], payload["result"])
         body = canonical({"message": payload})
     except Exception:
         failed, payload, body = True, None, None

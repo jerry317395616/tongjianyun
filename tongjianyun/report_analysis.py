@@ -1,8 +1,8 @@
 """Current ERP structure and quantities. Nutrition is generated in a private transient view."""
 import frappe
-from frappe.utils import escape_html
-
 from tongjianyun.analysis_engine import analyze
+from tongjianyun.ai_nutrition import source_data
+from tongjianyun.nutrition_layout import render_sheet
 from tongjianyun.report_sources import load_source
 
 
@@ -28,8 +28,8 @@ def execute(filters=None):
     for food in analysis["foods"]:
         add("食材带量", food["name"], float(food["daily_quantity"]), food["uom"] + "/人日",
             "每名幼儿计划毛重；周人均合计：" + food["quantity"] + " " + food["uom"], ingredient_code=food["code"])
-    first, last = map(escape_html, (source["dates"][0], source["dates"][-1]))
-    message = f"<p><strong>{first}—{last} 食谱分析</strong>：此页只展示ERP食谱结构及每名幼儿计划毛重。</p><p>点击“生成临时AI营养分析”，由大模型完成当次营养估算、查看及Excel下载。营养结果只在内存临时保留15分钟，不写入ERP或聊天记录。原固定分类代表值已停用。</p>"
+    source_payload = source_data(source["details"], source["dates"], source["source"])
+    message = '<div class="tjy-inline-analysis"><p class="tjy-inline-status" role="status">点击“生成AI营养分析”查看本周营养估算并下载Excel。结果临时保留15分钟。</p><div class="tjy-inline-sheet">' + render_sheet(source_payload) + '</div></div>'
     return columns(), data, message, None, [], 1
 
 

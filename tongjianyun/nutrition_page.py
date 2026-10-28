@@ -31,10 +31,7 @@ const response=await fetch(base+'result?report_id='+id,{credentials:'same-origin
 document.getElementById('expiry').textContent='临时结果有效至 '+new Date(p.expires_at*1000).toLocaleString('zh-CN')+'；过期后自动清除。下载到本机的文件由你保管。';clearTimeout(expiryTimer);expiryTimer=setTimeout(expire,Math.max(0,p.expires_at*1000-Date.now()));
 if(p.status==='pending'){status.textContent='大模型正在分析，请稍候。';timer=setTimeout(load,4000);return;}
 if(p.status!=='ready'){status.textContent='本次分析未成功。请返回膳食助手或食谱分析页重新生成。';return;}
-root.replaceChildren();const d=p.data,r=p.result;node('p',d.dates[0]+' 至 '+d.dates[4]+' · 每名幼儿计划毛重 · '+d.lines.length+'条原始食材明细',root);
-table('每日及五日日均营养估算',['营养素','单位',...d.dates,'五日日均','估算依据／缺项'],r.nutrients.map(n=>[p.nutrient_labels[n.key][0],p.nutrient_labels[n.key][1],...n.daily.map(range),range(n.average),n.basis]));
-const categories=new Map(r.categories.map(x=>[x.food,x.category]));table('食材带量与模型分类',['食物分类','食材','原单位','周人均带量','人均日均带量'],d.foods.map(x=>[categories.get(x.index),x.name,x.unit,x.weekly,x.daily]));
-for(const [title,items] of [['主要假设',r.assumptions],['缺项及未覆盖说明',r.missing]]){node('h2',title,root);const ul=node('ul',undefined,root);(items.length?items:['模型未另列缺项；仍属于估算，不能据此判断数据完整或营养达标。']).forEach(x=>node('li',x,ul));}
+const markup=document.createElement('template');markup.innerHTML=p.sheet_html;markup.content.querySelectorAll('style').forEach(e=>e.nonce='NONCE');root.replaceChildren(markup.content);
 const a=document.getElementById('download');a.href=base+'download?report_id='+id;a.hidden=false;status.textContent='分析完成。预览和Excel使用同一份临时结果。';
 }catch{root.replaceChildren();document.getElementById('download').hidden=true;status.textContent='结果已过期、食谱已变化、登录失效或服务暂时不可用。请重新登录后生成报告。';}finally{busy=false;}}
 document.getElementById('refresh').onclick=load;

@@ -44,7 +44,7 @@ class WeeklyNutritionTests(unittest.TestCase):
         self.assertIn("每名幼儿", model_messages(data)[0]["content"])
         self.assertIs(validate_result(result, data), result)
         sheet = load_workbook(BytesIO(workbook_bytes(data, result))).active
-        self.assertEqual(sheet["N5"].value, "124–144")
+        self.assertEqual(sheet["T4"].value, "124–144")
         name = next(cell for row in sheet for cell in row if cell.value == "=1+1")
         self.assertEqual(name.data_type, "s")
         self.assertFalse(any(cell.data_type == "f" for row in sheet for cell in row))
