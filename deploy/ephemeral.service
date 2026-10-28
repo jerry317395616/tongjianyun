@@ -1,0 +1,32 @@
+[Unit]
+Description=Tongjianyun temporary model nutrition analysis
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=frappe
+Group=frappe
+# Adjust these two installation paths and service account for the existing bench.
+WorkingDirectory=/path/to/bench/apps/tongjianyun
+Environment=TONGJIANYUN_EPHEMERAL_CONFIG=/etc/tongjianyun/ephemeral.json
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/path/to/bench/env/bin/python -m tongjianyun.ephemeral_nutrition
+RuntimeDirectory=tongjianyun-nutrition
+RuntimeDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5
+LimitCORE=0
+MemorySwapMax=0
+MemoryMax=256M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/tongjianyun-nutrition
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

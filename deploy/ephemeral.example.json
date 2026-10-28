@@ -1,0 +1,12 @@
+{
+  "enabled": false,
+  "socket": "/run/tongjianyun-nutrition/worker.sock",
+  "base_url": "https://api.deepseek.com/v1",
+  "api_key": "",
+  "model": "",
+  "ttl": 900,
+  "max_reports": 16,
+  "max_concurrent": 2,
+  "request_timeout": 180,
+  "max_tokens": 10000
+}

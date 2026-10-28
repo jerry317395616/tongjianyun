@@ -1,12 +1,5 @@
-from frappe.model.document import Document
-from tongjianyun.health_registration import access, record_name, validate
+from tongjianyun.archive import ReadOnlyArchive
 
-class TongjianyunStudentHealth(Document):
-    def autoname(self):
-        self.name = record_name(self.student, self.month)
 
-    def validate(self):
-        validate(self)
-
-    def onload(self):
-        access()
+class TongjianyunStudentHealth(ReadOnlyArchive):
+    pass

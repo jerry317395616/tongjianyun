@@ -1,30 +1,36 @@
 {
- "add_total_row": 0,
- "add_translate_data": 0,
- "columns": [],
- "creation": "2026-08-17 21:40:00.000000",
- "disabled": 0,
- "docstatus": 0,
  "doctype": "Report",
- "filters": [],
- "idx": 0,
- "is_standard": "Yes",
- "modified": "2026-08-17 21:40:00.000000",
- "modified_by": "Administrator",
- "module": "Tongjianyun",
  "name": "Weekly Recipe Nutrition Analysis",
- "owner": "Administrator",
- "prepared_report": 0,
- "ref_doctype": "Tongjianyun Recipe",
  "report_name": "Weekly Recipe Nutrition Analysis",
+ "is_standard": "Yes",
+ "module": "Tongjianyun",
+ "ref_doctype": "Meal Planning Week",
  "report_type": "Script Report",
  "roles": [
   {
    "role": "System Manager"
   },
   {
-   "role": "Tongjianyun Business Operator"
+   "role": "食谱编排员"
+  },
+  {
+   "role": "食谱审核员"
+  },
+  {
+   "role": "Purchase Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "膳食业务经办员"
   }
  ],
- "timeout": 0
+ "prepared_report": 0,
+ "disable_prepared_report_automation": 1,
+ "disabled": 0,
+ "add_total_row": 0
 }

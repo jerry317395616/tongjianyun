@@ -1,0 +1,37 @@
+{
+ "doctype": "Report",
+ "name": "Tongjianyun Weekly Menu",
+ "report_name": "Tongjianyun Weekly Menu",
+ "is_standard": "Yes",
+ "module": "Tongjianyun",
+ "ref_doctype": "Meal Planning Week",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "食谱编排员"
+  },
+  {
+   "role": "食谱审核员"
+  },
+  {
+   "role": "Purchase Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "膳食业务经办员"
+  }
+ ],
+ "prepared_report": 0,
+ "disable_prepared_report_automation": 1,
+ "disabled": 0,
+ "add_total_row": 0,
+ "reference_report": null
+}

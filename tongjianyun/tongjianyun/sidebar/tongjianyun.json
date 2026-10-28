@@ -1,0 +1,25 @@
+{
+ "doctype": "Sidebar",
+ "name": "Tongjianyun",
+ "title": "Tongjianyun",
+ "module": "Tongjianyun",
+ "app": "tongjianyun",
+ "standard": 1,
+ "header_icon": "salad",
+ "items": [
+  {
+   "type": "Link",
+   "link_type": "Report",
+   "link_to": "Tongjianyun Weekly Menu",
+   "label": "周食谱表",
+   "is_default_module": 1
+  },
+  {
+   "type": "Link",
+   "link_type": "Report",
+   "link_to": "Weekly Recipe Nutrition Analysis",
+   "label": "食谱分析",
+   "is_default_module": 1
+  }
+ ]
+}

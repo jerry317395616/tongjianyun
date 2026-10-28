@@ -7,10 +7,7 @@ description = "Tongjianyun backend app for Frappe"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = [
-    "defusedxml>=0.7.1,<0.8",
-    "openpyxl>=3.1.5,<4",
-]
+dependencies = ["openpyxl>=3.1,<4", "requests>=2.31,<3"]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]

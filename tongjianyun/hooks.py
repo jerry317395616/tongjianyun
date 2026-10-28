@@ -1,145 +1,19 @@
+"""Two read-only ERP-backed reports; no legacy business integrations."""
+from tongjianyun.archive import LEGACY_DOCTYPES as _LEGACY_DOCTYPES
+
 app_name = "tongjianyun"
-app_title = "\u7ae5\u5065\u4e91"
+app_title = "童健云"
 app_publisher = "Local"
-app_description = "\u7ae5\u5065\u4e91 Frappe \u540e\u53f0\u5e94\u7528"
+app_description = "ERP 周食谱与食谱分析"
 app_email = "admin@example.com"
 app_license = "mit"
-use_json_request_body = True
-required_apps = ["education"]
-
-# Register the domain-specific nutrition rule tools on I-ONE Core's MCP endpoint.
-ione_mcp_tool_modules = ["tongjianyun.mcp_tools"]
-
-app_home = "/tongjianyun-entry"
+required_apps = ["erpnext", "ione_core"]
+app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo.svg"
-app_include_js = [
-    "/assets/tongjianyun/js/page_cache_buster.js?v=meal-flow-20260926-3",
-    "/assets/tongjianyun/js/teacher_entry_compat.js?v=meal-flow-20260926-3",
-    "/assets/tongjianyun/js/meal_manager_desktop.js?v=20260928-1",
-]
+add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]
+after_install = "tongjianyun.reports_setup.install"
+after_migrate = "tongjianyun.reports_setup.install"
 
-# Preserve the restricted management Page; route old teacher bookmarks safely.
-update_website_context = ["tongjianyun.legacy_entry.redirect_legacy_teacher_page"]
-
-add_to_apps_screen = [
-    {
-        "name": app_name,
-        "title": app_title,
-        "route": app_home,
-        "logo": app_logo_url,
-    }
-]
-
-before_migrate = "tongjianyun.education_integration.before_migrate"
-
-after_migrate = [
-    "tongjianyun.video_attendance.setup.install",
-    "tongjianyun.education_integration.install",
-    "tongjianyun.student_identity.install",
-    "tongjianyun.meal_attendance_setup.install",
-    "tongjianyun.recipe_storage.install",
-    "tongjianyun.nutrition_rule_setup.install",
-    "tongjianyun.workbench.install",
-    "tongjianyun.patches.v1_0.add_recipe_price_fields.execute",
-    "tongjianyun.meal_attendance_roles.install",
-    "tongjianyun.meal_manager_role.install",
-]
-
-boot_session = "tongjianyun.meal_manager_role.limit_app_launcher"
-
-override_doctype_class = {
-    "Student": "tongjianyun.education_integration.TongjianyunStudent",
-}
-
-extend_doctype_class = {
-    "Purchase Receipt": ["tongjianyun.asset_history.PreserveAssetHistory"],
-    "Purchase Invoice": ["tongjianyun.asset_history.PreserveAssetHistory"],
-}
-
-doctype_js = {
-    "Tongjianyun Daily Meal Confirmation": "public/js/student_meals.js",
-    "Student": "public/js/student.js",
-    "Student Group": "public/js/student_group.js",
-    "Tongjianyun Recipe Ingredient": "public/js/recipe_ingredient_price.js",
-}
-
-override_whitelisted_methods = {
-    "frappe.model.workflow.apply_workflow": "tongjianyun.business_blueprint_workflow.apply_workflow",
-    "frappe.model.workflow.get_transitions": "tongjianyun.business_blueprint_workflow.get_transitions",
-    "frappe.model.workflow.bulk_workflow_approval": "tongjianyun.business_blueprint_workflow.bulk_workflow_approval",
-    "education.education.doctype.student_group.student_group.get_students": (
-        "tongjianyun.education_integration.get_unassigned_students_for_group"
-    ),
-}
-
-doc_events = {
-    "Workflow": {
-        "before_insert": "tongjianyun.business_blueprint_workflow.validate_workflow_metadata",
-        "before_validate": "tongjianyun.business_blueprint_workflow.validate_workflow_metadata",
-        "on_trash": "tongjianyun.business_blueprint_workflow.validate_workflow_metadata",
-    },
-    "Workflow Transition": {
-        "before_insert": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
-        "before_validate": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
-        "on_trash": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
-    },
-    "Workflow Document State": {
-        "before_insert": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
-        "before_validate": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
-        "on_trash": "tongjianyun.business_blueprint_workflow.validate_workflow_child_metadata",
-    },
-    "*": {
-        "before_validate": "tongjianyun.business_blueprints_v2.validate_document",
-        "before_cancel": "tongjianyun.business_blueprints_v2.validate_document",
-        "before_update_after_submit": "tongjianyun.business_blueprints_v2.validate_document",
-    },
-    "Material Request": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
-    "Purchase Order": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
-    "Purchase Receipt": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
-    "Purchase Invoice": {"before_validate": "tongjianyun.procurement_precision.before_validate"},
-    "Student": {
-        "after_delete": "tongjianyun.education_data_notifications.notify_missing_education_data",
-    },
-    "Student Group": {
-        "after_delete": "tongjianyun.education_data_notifications.notify_missing_education_data",
-    },
-    "Student Attendance": {
-        "after_insert": "tongjianyun.daily_meals.refresh_confirmation_from_event",
-        "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_event",
-        "on_submit": "tongjianyun.daily_meals.refresh_confirmation_from_event",
-        "on_cancel": "tongjianyun.daily_meals.refresh_confirmation_from_event",
-    },
-    "Student Leave Application": {
-        "after_insert": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
-        "on_update": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
-        "on_submit": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
-        "on_cancel": "tongjianyun.daily_meals.refresh_confirmations_from_leave",
-    },
-    "Tongjianyun Daily Meal Adjustment": {
-        "after_insert": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
-        "on_update": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
-        "on_trash": "tongjianyun.daily_meals.refresh_confirmation_from_adjustment",
-    },
-}
-
-scheduler_events = {
-    "cron": {"*/2 * * * *": ["tongjianyun.video_attendance.jobs.tick"]},
-    "daily": [
-        "tongjianyun.daily_meals.prepare_today_confirmation",
-        "tongjianyun.education_data_notifications.notify_missing_education_data",
-    ],
-}
-
-# Application-level teacher row restrictions; no DocType permission metadata changes.
-permission_query_conditions = {
-    doctype: "tongjianyun.teacher_permissions.query_condition"
-    for doctype in ("Student Group", "Student", "Student Attendance", "Student Leave Application")
-}
-has_permission = {
-    doctype: "tongjianyun.teacher_permissions.document_permission"
-    for doctype in ("Student Group", "Student", "Student Attendance", "Student Leave Application")
-}
-permission_query_conditions["Tongjianyun Class Meal Confirmation"] = "tongjianyun.student_meals.query_condition"
-has_permission["Tongjianyun Class Meal Confirmation"] = "tongjianyun.student_meals.document_permission"
-
-page_js = {"tongjianyun-workbench": "public/js/video_attendance_entry.js"}
+# Existing tables remain readable by administrators; no historical record can be mutated.
+permission_query_conditions = {name: "tongjianyun.archive.query_condition" for name in _LEGACY_DOCTYPES}
+has_permission = {name: "tongjianyun.archive.document_permission" for name in _LEGACY_DOCTYPES}
