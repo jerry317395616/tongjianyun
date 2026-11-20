@@ -26,6 +26,7 @@ add_to_apps_screen = [
 before_migrate = "tongjianyun.education_integration.before_migrate"
 
 after_migrate = [
+    "tongjianyun.video_attendance.setup.install",
     "tongjianyun.education_integration.install",
     "tongjianyun.meal_attendance_setup.install",
     "tongjianyun.recipe_storage.install",
@@ -39,6 +40,12 @@ override_doctype_class = {
 
 doctype_js = {
     "Student Group": "public/js/student_group.js",
+}
+
+override_whitelisted_methods = {
+    "education.education.doctype.student_group.student_group.get_students": (
+        "tongjianyun.education_integration.get_unassigned_students_for_group"
+    ),
 }
 
 doc_events = {
@@ -68,8 +75,11 @@ doc_events = {
 }
 
 scheduler_events = {
+    "cron": {"*/2 * * * *": ["tongjianyun.video_attendance.jobs.tick"]},
     "daily": [
         "tongjianyun.daily_meals.prepare_today_confirmation",
         "tongjianyun.education_data_notifications.notify_missing_education_data",
     ],
 }
+
+page_js = {"tongjianyun-workbench": "public/js/video_attendance_entry.js"}

@@ -1,0 +1,14 @@
+{
+  "server": "https://child.myyr.top",
+  "camera_id": "teacher-entrance-01",
+  "api_key": "REPLACE_WITH_DEDICATED_UPLOADER_KEY",
+  "api_secret": "REPLACE_WITH_DEDICATED_UPLOADER_SECRET",
+  "rtsp_url": "rtsp://CAMERA_USER:CAMERA_PASSWORD@192.168.1.64:554/Streaming/Channels/101",
+  "ffmpeg": "C:\\TongjianyunTools\\ffmpeg\\bin\\ffmpeg.exe",
+  "spool": "C:\\ProgramData\\TongjianyunVideo\\spool",
+  "segment_seconds": 60,
+  "upload_interval": 60,
+  "max_spool_gb": 20,
+  "weekdays": [0, 1, 2, 3, 4],
+  "recording_windows": [["06:30", "19:30"]]
+}
