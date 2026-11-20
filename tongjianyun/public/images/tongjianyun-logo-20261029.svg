@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="童健云">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#127F8E"/><stop offset="1" stop-color="#2AA36B"/>
+    </linearGradient>
+    <linearGradient id="bw" x1="26" y1="82" x2="102" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFC86F"/><stop offset="1" stop-color="#F09A2F"/>
+    </linearGradient>
+    <linearGradient id="lf2" x1="86" y1="60" x2="112" y2="86" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#CDF6C3"/><stop offset="1" stop-color="#5FC96B"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  <g fill="#FFFFFF">
+    <circle cx="45" cy="47" r="15"/>
+    <circle cx="64" cy="37" r="19"/>
+    <circle cx="83" cy="47" r="14"/>
+    <rect x="44" y="47" width="40" height="16" rx="8"/>
+  </g>
+  <path d="M24 86h80a4 4 0 0 1 4 4.6C105 107 87 117 64 117S23 107 20 90.6A4 4 0 0 1 24 86z" fill="url(#bw)"/>
+  <path d="M30 87h68" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+  <path d="M96 84c2-12 9-19 21-21-1 13-9 20-21 21z" fill="url(#lf2)"/>
+  <path d="M97 84c7-6 13-9 19-10" fill="none" stroke="#127F6E" stroke-width="2.4" stroke-linecap="round" opacity="0.45"/>
+</svg>

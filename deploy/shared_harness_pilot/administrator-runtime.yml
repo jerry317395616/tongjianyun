@@ -1,0 +1,50 @@
+# Full-project Harness overlay. Authentication and account ownership remain
+# mandatory, while the authenticated agent receives the normal native tools.
+- id: ui-settings
+  disabled: false
+- id: ui-model-selection
+  disabled: false
+- id: ui-commands
+  disabled: false
+- id: ui-attachment
+  disabled: false
+- id: attachment-local
+  config:
+    maxImageBytes: 256000
+    maxImagesPerMessage: 4
+    maxMessageImageBytes: 512000
+    normalizedImageMaxBytes: 512000
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+    workspaceRoot: /home/zyd/frappe
+    lockDeploymentPolicy: false
+- id: permission
+  config:
+    presets:
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+- insert:
+    - id: tongjianyun-native-harness-ui
+      name: /home/zyd/frappe/native-bench/apps/tongjianyun/deploy/shared_harness_pilot/native-ui.mjs
+    - id: employee-session-access
+      name: '@deepseek-ai/dsh-api-session-controller/employee-access'
+      config:
+        applicationPreviews: true
+        allowImages: true
+        maxPromptBytes: 800000
+        promptPreset: standard
+        publicOrigin: https://harness.myyr.top
+        identitySocketPath: /home/zyd/frappe/state/harness/authority.sock
+        ownersDirectory: !!js process.env.DSH_SHARED_OWNERS_DIRECTORY
+        timeoutMs: 90000
+        promptTimeoutMs: 600000
+        maxRequests: 16
+        maxOwnershipEntries: 10000
+        maxResponseBytes: 1000000
+- id: agent-presets
+  config:
+    default: standard
+    includeShippedRoot: true
+    includeUserRoot: false

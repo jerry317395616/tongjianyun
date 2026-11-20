@@ -1,0 +1,18 @@
+[Unit]
+Description=Frappe meal conversation SSE connections
+After=network-online.target mariadb.service frappe-native-redis-queue.service
+
+[Service]
+Type=simple
+User=zyd
+Group=zyd
+WorkingDirectory=/home/zyd/frappe/native-bench/sites
+Environment=PATH=/home/zyd/.local/bin:/home/zyd/.local/opt/node24/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/zyd/frappe/native-bench/env/bin/gunicorn --chdir=/home/zyd/frappe/native-bench/sites --bind=127.0.0.1:17810 --threads=32 --workers=1 --worker-class=tongjianyun.meal_sse_worker.SSEThreadWorker --worker-tmp-dir=/dev/shm --timeout=0 frappe.app:application
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,4 @@
+# Restore only the client settings-domain service required by locale/theme/chat.
+# Settings shells and all server-side endpoint/tool restrictions stay unchanged.
+- id: ui-settings
+  disabled: false

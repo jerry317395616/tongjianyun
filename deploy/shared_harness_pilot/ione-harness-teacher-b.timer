@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew shared Harness teacher-b every two minutes
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=2min
+Unit=ione-harness-teacher-b.service
+
+[Install]
+WantedBy=timers.target

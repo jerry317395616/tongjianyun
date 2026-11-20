@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "bench_root": "/home/zyd/frappe/native-bench",
+  "site": "child.myyr.top",
+  "user": "harness.test.teacher.a@example.invalid",
+  "assertion_file": "/home/zyd/.config/ione-harness-employees/teacher-a/identity/actor.assertion",
+  "ttl_seconds": 300
+}
