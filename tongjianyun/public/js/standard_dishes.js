@@ -29,10 +29,7 @@
 
 	async function copyRecipe(dish, source) {
 		const { message } = await frappe.call({
-			method: "tongjianyun.dish_library.copy_recipe",
-			type: "POST",
-			args: { dish, source },
-			freeze: true,
+			method: "tongjianyun.dish_library.copy_recipe", type: "POST", freeze: true, args: { dish, source },
 		});
 		return openRecipe(message.recipe);
 	}
@@ -58,6 +55,96 @@
 		}
 	}
 
+	function recipeLink($cell, fieldname, doctype, getQuery, change) {
+		return frappe.ui.form.make_control({
+			parent: $cell[0], render_input: true, only_input: true,
+			df: { fieldtype: "Link", fieldname, options: doctype, get_query: getQuery, change },
+		});
+	}
+
+	function ingredientEditorRow($body, dish, ingredient, remove) {
+		const $line = $("<tr>").appendTo($body);
+		const $item = $("<td>", { class: "w-25" }).appendTo($line);
+		const quantityInput = (value, label) => $("<input>", {
+			type: "number", min: 0, step: "any", "aria-label": label, class: "form-control input-xs",
+		}).val(value ?? "").appendTo($("<td>").appendTo($line));
+		const $gross = quantityInput(ingredient.gross, "每份采购毛用量");
+		const $net = quantityInput(ingredient.net, "每份可食净量");
+		const $unit = $("<td>", { class: "w-25" }).appendTo($line);
+		let item;
+		const itemCode = () => ingredient.item_code || item?.get_value();
+		const unit = recipeLink($unit, "uom", "UOM", () => ({
+			query: "erpnext.controllers.queries.get_item_uom_query", filters: { item_code: itemCode() },
+		}));
+		if (ingredient.item_code) {
+			$item.text(ingredient.name);
+			unit.set_value(ingredient.uom);
+		} else {
+			item = recipeLink($item, "item_code", "Item", () => ({
+				query: "erpnext.manufacturing.doctype.bom.bom.item_query",
+				filters: { name: ["!=", dish], disabled: 0, is_fixed_asset: 0, include_item_in_manufacturing: 1 },
+			}), async () => {
+				const code = itemCode();
+				await unit.set_value("");
+				if (!code) return;
+				const { message } = await frappe.db.get_value("Item", code, "stock_uom");
+				if (itemCode() === code && !unit.get_value()) await unit.set_value(message?.stock_uom || "");
+			});
+		}
+		const read = () => ({
+			row: ingredient.row, item_code: itemCode(), gross: $gross.val(), net: $net.val(), uom: unit.get_value(),
+		});
+		recipeAction($("<td>").appendTo($line), "删除", () => { remove(read); $line.remove(); });
+		return read;
+	}
+
+	function renderIngredientEditor($editor, dish, company, source, onClose, onSaved) {
+		const inputs = new Set();
+		$("<h6>", { class: "mb-2" }).text(source.mode === "revision" ? "编辑新版配方草稿" : "编辑配方草稿").appendTo($editor);
+		const $table = $("<table>", { class: "table table-bordered table-sm", "aria-label": "编辑食材明细" }).appendTo($editor);
+		const $head = $("<tr>").appendTo($("<thead>").appendTo($table));
+		for (const title of ["食材", "每份采购毛用量", "每份可食净量", "单位", "操作"]) {
+			$("<th>", { scope: "col" }).text(title).appendTo($head);
+		}
+		const $body = $("<tbody>").appendTo($table);
+		const addRow = (ingredient = {}) => inputs.add(ingredientEditorRow($body, dish, ingredient, (read) => inputs.delete(read)));
+		for (const ingredient of source.ingredients) addRow(ingredient);
+		if (!inputs.size) addRow();
+		recipeAction($editor, "添加食材", () => addRow());
+		recipeAction($editor, "取消", onClose);
+		const $status = $("<span>", { class: "text-muted", role: "status" });
+		const $save = recipeAction($editor, "保存配方草稿", async () => {
+			const ingredients = JSON.stringify(Array.from(inputs, (read) => read()));
+			$status.empty();
+			$save.prop("disabled", true);
+			try {
+				await frappe.call({
+					method: "tongjianyun.dish_recipe_editor.save_ingredients", type: "POST", freeze: true,
+					args: { dish, company, recipe: source.recipe, modified: source.modified, ingredients },
+				});
+				frappe.show_alert({ message: "配方草稿已保存", indicator: "green" });
+				return onSaved();
+			} catch {
+				$status.text("保存失败，当前修改仍可继续编辑。");
+			} finally {
+				$save.prop("disabled", false);
+			}
+		}, true);
+		$status.appendTo($editor);
+	}
+
+	async function loadIngredientEditor($editor, dish, company, onClose, onSaved) {
+		$editor.text("正在加载配方草稿…");
+		try {
+			const { message } = await frappe.call({
+				method: "tongjianyun.dish_recipe_editor.load_editor", type: "GET", args: { dish, company },
+			});
+			renderIngredientEditor($editor.empty(), dish, company, message, onClose, onSaved);
+		} catch {
+			onClose();
+		}
+	}
+
 	function renderPreview($content, $wrapper, dish, preview) {
 		const { current, draft, company, companies, can_create_recipe } = preview;
 		const $header = $("<div>", { class: "d-flex flex-wrap align-items-baseline justify-content-between" }).appendTo($content);
@@ -72,14 +159,28 @@
 		}
 
 		const $actions = $("<div>", { class: "ml-auto" }).appendTo($header);
+		const $editor = $("<div>", { class: "mt-3" });
+		const startEditor = (selectedCompany) => {
+			$header.find("button, select").prop("disabled", true);
+			return loadIngredientEditor($editor, dish.name, selectedCompany, () => {
+				$editor.empty();
+				$header.find("button, select").prop("disabled", false);
+			}, () => loadPreview($wrapper, dish, selectedCompany));
+		};
+		const openEditor = () => {
+			if (company) return startEditor(company);
+			return frappe.prompt([{ fieldname: "company", fieldtype: "Link", label: "机构", options: "Company", reqd: 1 }],
+				({ company: selectedCompany }) => startEditor(selectedCompany), "选择机构", "继续");
+		};
 		if (draft) {
-			const label = draft.can_edit ? "继续编辑" : draft.state === "待审核" ? "查看待审核配方" : "查看草稿";
-			recipeAction($actions, label, () => openRecipe(draft.name), true);
+			if (draft.can_edit && draft.inline_edit !== false) recipeAction($actions, "继续编辑", openEditor, true);
+			const label = draft.state === "待审核" ? "查看待审核配方" : "打开草稿";
+			recipeAction($actions, label, () => openRecipe(draft.name));
 		} else if (can_create_recipe && (company || !companies.length)) {
-			if (current) {
+			if (current?.inline_edit === false) {
 				recipeAction($actions, "复制为新版", () => copyRecipe(dish.name, current.name));
 			} else {
-				recipeAction($actions, "添加配方", () => addRecipe(dish, company), true);
+				recipeAction($actions, current ? "编辑配方" : "添加食材", openEditor, true);
 			}
 		}
 		recipeAction($actions, "查看配方", () => viewRecipes(dish.name, company));
@@ -95,12 +196,12 @@
 			if (current.ingredients?.length) ingredientTable($content, current.ingredients);
 			else $("<div>", { class: "text-muted" })
 				.text(current.ingredients ? "在用配方没有食材明细。" : "当前账号无权查看食材明细。").appendTo($content);
-			return;
+		} else {
+			const hint = draft ? `暂无在用配方，当前配方${draft.state === "草稿" ? "为草稿" : draft.state}。` :
+				!company && companies.length ? "请选择机构查看配方。" : "暂无在用配方。";
+			$("<div>", { class: "text-muted" }).text(hint).appendTo($content);
 		}
-
-		const hint = draft ? `暂无在用配方，当前配方${draft.state === "草稿" ? "为草稿" : draft.state}。` :
-			!company && companies.length ? "请选择机构查看配方。" : "暂无在用配方。";
-		$("<div>", { class: "text-muted" }).text(hint).appendTo($content);
+		$editor.appendTo($content);
 	}
 
 	async function loadPreview($wrapper, dish, company) {

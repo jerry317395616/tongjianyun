@@ -114,11 +114,37 @@ def enroll_from_recipe(doc, method=None):
         enroll_dish(doc.item, doc.get(CATEGORY))
 
 
-def _recipes(items):
-    return frappe.get_list(
-        "BOM", filters={MARKER: 1, "item": ["in", items]},
-        fields=list(BOM_FIELDS), order_by="creation desc, name desc", limit_page_length=0,
-    )
+def _recipes(items, *, company=None, lock=False):
+    filters = {MARKER: 1, "item": ["in", items]}
+    if company:
+        filters["company"] = company
+    if not lock:
+        return frappe.get_list(
+            "BOM", filters=filters, fields=list(BOM_FIELDS),
+            order_by="creation desc, name desc", limit_page_length=0,
+        )
+    return Engine().get_query(
+        "BOM", filters=filters, fields=list(BOM_FIELDS), ignore_permissions=False,
+        order_by="creation desc, name desc", for_update=True,
+    ).run(as_dict=True)
+
+
+def _recipe_versions(recipes, company):
+    scoped = [row for row in recipes if company and row.get("company") == company]
+    active = [row for row in scoped if row.docstatus == 1 and row.is_active]
+    current = max(active, key=lambda row: bool(row.get("is_default")), default=None)
+    drafts = [row for row in scoped if row.docstatus == 0]
+    draft = max(drafts, key=lambda row: row.get(STATE) == PENDING, default=None)
+    return current, draft
+
+
+def _can_select_company(company):
+    return bool((frappe.has_permission("Company", "select") or frappe.has_permission("Company", "read"))
+                and frappe.get_list("Company", filters={"name": company}, pluck="name", page_length=1))
+
+
+def _supports_inline_ingredients(bom):
+    return not (bom.get("set_qty_based_on_percentage") or bom.get("track_semi_finished_goods"))
 
 
 def _summary(dish, recipes):
@@ -196,9 +222,7 @@ def recipe_preview(dish: str, company: str | None = None):
     item, recipes = _check_dish(dish)
     companies = {row.company for row in recipes if row.get("company")}
     preferred = get_default_company()
-    if preferred and preferred not in companies and (
-        frappe.has_permission("Company", "select") or frappe.has_permission("Company", "read")
-    ) and frappe.get_list("Company", filters={"name": preferred}, pluck="name", page_length=1):
+    if preferred and preferred not in companies and _can_select_company(preferred):
         companies.add(preferred)
     if company and company not in companies:
         frappe.throw("当前账号无法访问该机构的配方。", frappe.PermissionError)
@@ -207,18 +231,16 @@ def recipe_preview(dish: str, company: str | None = None):
     if not company and len(companies) == 1:
         company = next(iter(companies))
 
-    scoped = [row for row in recipes if company and row.get("company") == company]
-    active = [row for row in scoped if row.docstatus == 1 and row.is_active]
-    current = max(active, key=lambda row: bool(row.get("is_default")), default=None)
-    drafts = [row for row in scoped if row.docstatus == 0]
-    draft = max(drafts, key=lambda row: row.get(STATE) == PENDING, default=None)
+    current, draft = _recipe_versions(recipes, company)
     preview = None
     if current:
         bom = _visible("BOM", current.name)
+        inline_edit = _supports_inline_ingredients(bom)
         bom.apply_fieldlevel_read_permissions()
         rows = bom.get("items")
         preview = {
             "name": bom.name,
+            "inline_edit": inline_edit,
             "ingredients": None if rows is None else [dict(
                 name=row.get("item_name") or row.get("item_code"),
                 gross=row.get("qty"), net=row.get(NET_QTY) or None, uom=row.get("uom"),
@@ -228,7 +250,9 @@ def recipe_preview(dish: str, company: str | None = None):
     if draft:
         bom = _visible("BOM", draft.name)
         state = draft.get(STATE) or DRAFT
-        draft_info = {"name": bom.name, "state": state, "can_edit": state == DRAFT and bom.has_permission("write")}
+        draft_info = {"name": bom.name, "state": state,
+                      "can_edit": state == DRAFT and _valid_production_item(item) and bom.has_permission("write"),
+                      "inline_edit": _supports_inline_ingredients(bom)}
     can_create = _valid_production_item(item) and frappe.has_permission("BOM", "create")
     return {
         "company": company, "companies": sorted(companies), "current": preview,
@@ -286,9 +310,14 @@ def copy_recipe(dish: str, source: str):
     ).run(as_dict=True)
     if waiting:
         return {"recipe": waiting[0].name}
+    recipe = _new_recipe_version(previous)
+    recipe.insert()
+    return {"recipe": recipe.name}
+
+
+def _new_recipe_version(previous):
     recipe = copy_doc(previous, ignore_no_copy=False)
     recipe.docstatus = 0
     recipe.set(MARKER, 1)
     recipe.set(REPLACES, previous.name)
-    recipe.insert()
-    return {"recipe": recipe.name}
+    return recipe

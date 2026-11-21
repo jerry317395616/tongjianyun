@@ -152,40 +152,63 @@ function element(tag, attributes = {}) {
 		tag, attributes, children: [], events: {}, content: "", value: attributes.value,
 		empty() { this.children.length = 0; this.content = ""; return this; },
 		text(content) { this.empty(); this.content = String(content); return this; },
-		appendTo(parent) { parent.children.push(this); return this; },
+		appendTo(parent) { parent.children.push(this); this.parent = parent; return this; },
+		remove() { this.parent.children = this.parent.children.filter((child) => child !== this); },
 		on(type, action) { this.events[type] = action; return this; },
 		val(...args) { if (!args.length) return this.value; this.value = args[0]; return this; },
+		prop(key, value) { this.attributes[key] = value; return this; },
+		find(selector) {
+			const nodes = selector.split(", ").flatMap((tag) => this.findAll(`<${tag}>`));
+			return { prop: (key, value) => nodes.forEach((node) => node.prop(key, value)) };
+		},
 		findAll(tag) {
 			return this.children.flatMap((child) => [...(child.tag === tag ? [child] : []), ...child.findAll(tag)]);
 		},
 	};
 }
 
-test("the native preview keeps published ingredients visible while a revision is pending", async () => {
+test("the dish form edits ingredient drafts inline and keeps published quantities visible", async () => {
 	let handlers;
 	const wrapper = element("<div>");
 	const routes = [];
-	const bom = { name: "new-bom" };
 	const queries = [];
+	const controls = [];
+	const alerts = [];
 	let draft = { name: "BOM-DRAFT", state: "待审核", can_edit: false };
+	let secondCompanyDraft;
 	const frappe = {
-		ui: { form: { on: (_doctype, events) => { handlers = events; } } },
-		model: {
-			can_read: () => true,
-			with_doctype: (_doctype, done) => done(),
-			get_new_doc: () => bom,
-		},
+		ui: { form: {
+			on: (_doctype, events) => { handlers = events; },
+			make_control({ df }) {
+				const control = {
+					name: df.fieldname, value: "", get_value() { return this.value; },
+					async set_value(value) { this.value = value; await df.change?.(); },
+				};
+				controls.push(control);
+				return control;
+			},
+		} },
+		model: { can_read: () => true },
+		db: { get_value: async () => ({ message: { stock_uom: "克" } }) },
+		show_alert: ({ message }) => alerts.push(message),
 		call: async ({ method, type, args }) => {
 			queries.push({ method, type, ...args });
-			if (method.endsWith("copy_recipe")) return { message: { recipe: "BOM-COPY" } };
 			const company = args.company || "甲园";
+			if (method.endsWith("load_editor")) return { message: company === "甲园" ? {
+				mode: "revision", recipe: "BOM-PUBLISHED", modified: "version-1",
+				ingredients: [{ row: "row-1", item_code: "TOMATO", name: "番茄", gross: 100, net: 85, uom: "克" }],
+			} : { mode: "new", recipe: null, modified: null, ingredients: [] } };
+			if (method.endsWith("save_ingredients")) {
+				secondCompanyDraft = { name: "BOM-NEW", state: "草稿", can_edit: true };
+				return { message: { recipe: "BOM-NEW" } };
+			}
 			return { message: {
 				company, companies: ["甲园", "乙园"], can_create_recipe: true,
 				current: company === "甲园" ? { name: "BOM-PUBLISHED", ingredients: [
 					{ name: "番茄", gross: 100, net: 85, uom: "克" },
 					{ name: "<食材>", gross: 1, net: null, uom: "克" },
 				] } : null,
-				draft: company === "甲园" ? draft : null,
+				draft: company === "甲园" ? draft : secondCompanyDraft,
 			} };
 		},
 		set_route(...args) { routes.push({ args, ...frappe.route_options }); },
@@ -209,15 +232,29 @@ test("the native preview keeps published ingredients visible while a revision is
 	await select.val("乙园").events.change();
 	assert.equal(queries.at(-1).company, "乙园");
 	assert.equal(wrapper.findAll("<table>").length, 0);
-	click("添加配方");
-	assert.equal(bom.company, "乙园");
-	assert.equal(bom.item, "DISH-QA");
+	await click("添加食材");
+	assert.equal(queries.at(-1).method, "tongjianyun.dish_recipe_editor.load_editor");
+	await controls.find((control) => control.name === "item_code").set_value("TOMATO");
+	assert.equal(controls.find((control) => control.name === "uom").get_value(), "克");
+	const [gross, net] = wrapper.findAll("<input>");
+	gross.val("100");
+	net.val("85");
+	await click("保存配方草稿");
+	const saved = queries.find((query) => query.method.endsWith("save_ingredients"));
+	assert.equal(saved.company, "乙园");
+	assert.equal(saved.dish, "DISH-QA");
+	assert.deepEqual(JSON.parse(saved.ingredients), [{ item_code: "TOMATO", gross: "100", net: "85", uom: "克" }]);
+	assert.deepEqual(alerts, ["配方草稿已保存"]);
+	assert.ok(wrapper.findAll("<button>").some((button) => button.content === "继续编辑"));
 
 	draft = null;
 	await handlers.refresh(form);
-	await click("复制为新版");
-	assert.deepEqual(queries.at(-1), {
-		method: "tongjianyun.dish_library.copy_recipe", type: "POST", dish: "DISH-QA", source: "BOM-PUBLISHED",
-	});
-	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-COPY"], layout: "标准菜品" });
+	await click("编辑配方");
+	assert.equal(wrapper.findAll("<h6>")[0].content, "编辑新版配方草稿");
+	assert.equal(wrapper.findAll("<table>").length, 2);
+	click("删除");
+	assert.equal(wrapper.findAll("<input>").length, 0);
+	click("取消");
+	assert.equal(wrapper.findAll("<table>").length, 1);
+	assert.equal(queries.filter((query) => query.method.endsWith("save_ingredients")).length, 1);
 });
