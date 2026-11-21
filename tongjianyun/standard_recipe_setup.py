@@ -7,6 +7,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.desk.doctype.custom_sidebar.custom_sidebar import add_site_sidebar_item
 from frappe.desk.doctype.dock.dock import get_dock, resolve_app_dock, save_site_dock
 
+from tongjianyun.dish_library import enroll_dish
 from tongjianyun.standard_recipes import (
     AGE, ALLERGENS, CATEGORIES, CATEGORY, DISH, DISH_CATEGORY, DRAFT, MARKER, METHOD, NET_QTY,
     PENDING, PUBLISHED, REPLACES, STATE,
@@ -16,11 +17,13 @@ APP = "tongjianyun"
 MODULE = "膳食与食堂"
 LAYOUT = "标准菜品"
 ITEM_LAYOUT = "标准菜品食材"
+DISH_LAYOUT = "标准菜品档案"
 LIBRARY = "标准菜品库"
 LIBRARY_PAGE = "standard-dish-library"
 CONDITION = f"doc.{MARKER} == 1"
 LIBRARY_OPTIONS = {"layout": LAYOUT, MARKER: 1}
 LIBRARY_URL = "/desk/bom?" + urlencode(LIBRARY_OPTIONS)
+DISH_OPTIONS = {"layout": DISH_LAYOUT, DISH: 1}
 
 FIELDS = {
     "Item": [
@@ -72,6 +75,14 @@ def install():
         STATE: {"in_list_view": 1, "in_standard_filter": 1},
         "item_name": {"label": "菜名", "in_list_view": 1},
     }, condition=CONDITION, child_tables=[{"table_fieldname": "items", "child_layout": ITEM_LAYOUT}])
+    _save_layout("Item", DISH_LAYOUT, {
+        "item_name": {"label": "菜名", "in_list_view": 1},
+        "item_code": {"label": "菜品编码", "read_only": 1},
+        "stock_uom": {"label": "默认单位", "in_list_view": 1},
+        "disabled": {"in_list_view": 1, "in_standard_filter": 1},
+        DISH_CATEGORY: {"in_list_view": 1, "in_standard_filter": 1, "reqd": 1},
+    }, condition=f"doc.{DISH} == 1")
+    enroll_legacy_dishes()
     _install_sidebar()
     frappe.clear_cache()
 
@@ -91,6 +102,8 @@ def _save_layout(doctype, title, overrides, **properties):
         **{name: df.get(name) for name in ("hidden", "reqd", "read_only", "in_list_view", "in_standard_filter")},
     ) for df in frappe.get_meta(doctype).fields]
     for field in fields:
+        if title == DISH_LAYOUT:
+            field["in_list_view"] = 0
         field.update(overrides.get(field["fieldname"], {}))
     if doctype == "BOM":
         for field in fields:
@@ -128,23 +141,36 @@ def _install_sidebar():
         })
         save_site_dock(APP, rows, [] if app else [MODULE])
     link = {
-        "type": "Link", "link_type": "Page", "link_to": LIBRARY_PAGE, "label": LIBRARY, "icon": "book-open",
+        "type": "Link", "link_type": "DocType", "link_to": "Item", "label": LIBRARY, "icon": "book-open",
+        "route_options": json.dumps(DISH_OPTIONS, ensure_ascii=False),
     }
     site_sidebar = frappe.db.get_value("Custom Sidebar", {"module": MODULE, "user": ""}, "name")
     if site_sidebar:
         sidebar = frappe.get_doc("Custom Sidebar", site_sidebar)
         for row in sidebar.sidebar_items:
-            if row.link_type == "Page" and row.link_to == LIBRARY_PAGE:
+            if row.link_type == "DocType" and row.link_to == "Item" and row.route_options == link["route_options"]:
                 return
         for row in sidebar.sidebar_items:
             legacy_link = row.link_type == "DocType" and row.link_to == "BOM" and (
                 row.route_options == json.dumps(LIBRARY_OPTIONS, ensure_ascii=False) or row.label == LIBRARY
             )
-            if legacy_link or (row.link_type == "URL" and row.url == LIBRARY_URL):
-                row.update({**link, "url": None, "route_options": None, "open_in_new_tab": 0})
+            legacy_page = row.link_type == "Page" and row.link_to == LIBRARY_PAGE
+            if legacy_page or legacy_link or (row.link_type == "URL" and row.url == LIBRARY_URL):
+                row.update({**link, "url": None, "open_in_new_tab": 0})
                 sidebar.save()
                 return
     add_site_sidebar_item(MODULE, link)
+
+
+def enroll_legacy_dishes():
+    categories = {}
+    for row in frappe.get_all("BOM", filters={MARKER: 1}, fields=["item", CATEGORY], distinct=True):
+        if row.item:
+            values = categories.setdefault(row.item, set())
+            if row.get(CATEGORY) in CATEGORIES:
+                values.add(row.get(CATEGORY))
+    for item, values in categories.items():
+        enroll_dish(item, next(iter(values)) if len(values) == 1 else None)
 
 
 def mark_existing_meal_recipes():
@@ -163,4 +189,6 @@ def mark_existing_meal_recipes():
     """)
     for name in names:
         frappe.db.set_value("BOM", name, {MARKER: 1, STATE: PUBLISHED}, update_modified=False)
+    if names:
+        enroll_legacy_dishes()
     return len(names)

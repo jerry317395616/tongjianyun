@@ -9,8 +9,23 @@ frappe.ui.form.on("BOM", {
 		if (!frm.doc.custom_tjy_standard_recipe) {
 			return;
 		}
-		frm.add_custom_button("返回菜品库", () => frappe.set_route("standard-dish-library"));
+		frm.add_custom_button("返回菜品库", () => {
+			frappe.route_options = { layout: "标准菜品档案", custom_tjy_standard_dish: 1 };
+			return frappe.set_route("List", "Item");
+		});
 		frm.fields_dict.items?.grid.set_column_disp_in_list_view("custom_tjy_recipe_net_qty", true);
+		if (frm.doc.docstatus === 1 && frm.doc.is_active && frappe.model.can_create("BOM")) {
+			frm.add_custom_button("复制为新版", async () => {
+				const { message } = await frappe.call({
+					method: "tongjianyun.dish_library.copy_recipe",
+					type: "POST",
+					args: { dish: frm.doc.item, source: frm.doc.name },
+					freeze: true,
+				});
+				frappe.route_options = { layout: "标准菜品" };
+				return frappe.set_route("Form", "BOM", message.recipe);
+			});
+		}
 		if (frm.is_new() || frm.doc.docstatus !== 0) {
 			return;
 		}

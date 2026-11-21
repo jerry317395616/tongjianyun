@@ -13,13 +13,15 @@ app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
 add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]
 after_install = ["tongjianyun.reports_setup.install", "tongjianyun.standard_recipe_setup.install"]
 after_migrate = after_install
-doctype_js = {"BOM": "public/js/standard_recipes.js"}
-doctype_list_js = {"BOM": "public/js/standard_recipe_list.js"}
+doctype_js = {"BOM": "public/js/standard_recipes.js", "Item": "public/js/standard_dishes.js"}
+doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js"}
 doc_events = {
+    "Item": {"before_insert": "tongjianyun.dish_library.validate_new_dish"},
     "BOM": {
         "validate": "tongjianyun.standard_recipes.validate_recipe",
         "before_save": "tongjianyun.standard_recipes.save_draft",
         "before_submit": "tongjianyun.standard_recipes.publish_recipe",
+        "on_update": "tongjianyun.dish_library.enroll_from_recipe",
     },
 }
 

@@ -36,6 +36,68 @@ def _valid_production_item(item):
     return not (item.disabled or item.is_purchase_item)
 
 
+def _available_unit():
+    return "份" if frappe.db.exists("UOM", {"name": "份", "enabled": 1}) else ""
+
+
+def _new_item_code():
+    return f"DISH-{uuid4().hex[:12].upper()}"
+
+
+def _same_name_items(label, *, lock=False):
+    if lock:
+        # Hold the native metadata row until the insert transaction completes.
+        frappe.db.get_value("DocType", "Item", "name", for_update=True)
+    candidates = Engine().get_query(
+        "Item", fields=["name", "item_name", "item_group", "stock_uom"],
+        filters={"item_name": label, "disabled": 0, "is_purchase_item": 0},
+        ignore_permissions=False, for_update=lock, limit=20,
+    ).run(as_dict=True)
+    return [row for row in candidates if _same_name(row.item_name, label)]
+
+
+@frappe.whitelist(methods=["GET"])
+def dish_options(label: str = ""):
+    _require("Item")
+    _require("Item", "create")
+    label = label.strip()[:140]
+    if label:
+        return {"matches": _same_name_items(label)}
+    return {"item_code": _new_item_code(), "default_unit": _available_unit()}
+
+
+def validate_new_dish(doc, method=None):
+    if not doc.get(DISH):
+        return
+    doc.item_name = (doc.item_name or "").strip()
+    if not doc.item_name or len(doc.item_name) > 140 or doc.get(DISH_CATEGORY) not in CATEGORIES:
+        frappe.throw("请填写有效的菜名和菜品分类。")
+    if _same_name_items(doc.item_name, lock=True):
+        frappe.throw("已有同名自制菜品，请核对后使用现有菜品。")
+    if not doc.stock_uom or not frappe.db.exists("UOM", {"name": doc.stock_uom, "enabled": 1}):
+        frappe.throw("请选择启用的默认单位。")
+    doc.item_code = doc.item_code or _new_item_code()
+    doc.is_purchase_item = 0
+
+
+def enroll_dish(item, category=None):
+    current = frappe.db.get_value("Item", item, [DISH, DISH_CATEGORY], as_dict=True, for_update=True)
+    if not current:
+        return
+    changes = {}
+    if not current.get(DISH):
+        changes[DISH] = 1
+    if not current.get(DISH_CATEGORY) and category in CATEGORIES:
+        changes[DISH_CATEGORY] = category
+    if changes:
+        frappe.db.set_value("Item", item, changes, update_modified=False)
+
+
+def enroll_from_recipe(doc, method=None):
+    if doc.get(MARKER):
+        enroll_dish(doc.item, doc.get(CATEGORY))
+
+
 def _recipes(items):
     return frappe.get_list(
         "BOM", filters={MARKER: 1, "item": ["in", items]},
@@ -94,7 +156,7 @@ def dishes(search: str = "", start: int = 0):
         "has_more": len(found) > PAGE_SIZE, "page_size": PAGE_SIZE,
         "can_create_dish": bool(frappe.has_permission("Item", "create")),
         "can_create_recipe": bool(frappe.has_permission("BOM", "create")),
-        "categories": list(CATEGORIES), "default_unit": "份" if frappe.db.exists("UOM", {"name": "份", "enabled": 1}) else "",
+        "categories": list(CATEGORIES), "default_unit": _available_unit(),
     }
 
 
@@ -132,21 +194,14 @@ def save_dish(label: str, category: str, unit: str | None = None,
         return {"dish": item.name}
 
     _require("Item", "create")
-    # Serialize same-name catalog creation through the native Item metadata row.
-    frappe.db.get_value("DocType", "Item", "name", for_update=True)
-    candidates = Engine().get_query(
-        "Item", fields=["name", "item_name", "item_group", "stock_uom"],
-        filters={"item_name": label, "disabled": 0, "is_purchase_item": 0},
-        ignore_permissions=False, for_update=True, limit=20,
-    ).run(as_dict=True)
-    matches = [row for row in candidates if _same_name(row.item_name, label)]
+    matches = _same_name_items(label, lock=True)
     if matches:
         return {"matches": matches}
     if not unit or not item_group:
         frappe.throw("请为新菜品选择默认单位和物料组。")
     if not frappe.db.exists("UOM", {"name": unit, "enabled": 1}):
         frappe.throw("请选择启用的默认单位。")
-    item = frappe.new_doc("Item", item_code=f"DISH-{uuid4().hex[:12].upper()}", item_name=label,
+    item = frappe.new_doc("Item", item_code=_new_item_code(), item_name=label,
                           item_group=item_group, stock_uom=unit, is_purchase_item=0, disabled=0)
     item.set(DISH, 1)
     item.set(DISH_CATEGORY, category)
