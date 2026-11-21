@@ -205,6 +205,11 @@ def _install_sidebar():
             "link_type": "Sidebar", "link_to": MODULE, "title": MODULE, "icon": "utensils", "added": 1,
         })
         save_site_dock(APP, rows, [] if app else [MODULE])
+    _install_dish_link()
+    _install_week_link()
+
+
+def _install_dish_link():
     link = {
         "type": "Link", "link_type": "DocType", "link_to": "Item", "label": LIBRARY, "icon": "book-open",
         "route_options": json.dumps(DISH_OPTIONS, ensure_ascii=False),
@@ -225,6 +230,18 @@ def _install_sidebar():
                 sidebar.save()
                 return
     add_site_sidebar_item(MODULE, link)
+
+
+def _install_week_link():
+    site_sidebar = frappe.db.get_value("Custom Sidebar", {"module": MODULE, "user": ""}, "name")
+    if site_sidebar:
+        sidebar = frappe.get_doc("Custom Sidebar", site_sidebar)
+        if any(row.link_type == "DocType" and row.link_to == "Meal Planning Week" for row in sidebar.sidebar_items):
+            return
+    add_site_sidebar_item(MODULE, {
+        "type": "Link", "link_type": "DocType", "link_to": "Meal Planning Week",
+        "label": "自定义周食谱", "icon": "calendar",
+    })
 
 
 def enroll_legacy_dishes():

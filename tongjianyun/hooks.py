@@ -13,10 +13,16 @@ app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
 add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]
 after_install = ["tongjianyun.reports_setup.install", "tongjianyun.standard_recipe_setup.install"]
 after_migrate = after_install
-doctype_js = {"BOM": "public/js/standard_recipes.js", "Item": "public/js/standard_dishes.js"}
+doctype_js = {
+    "BOM": "public/js/standard_recipes.js",
+    "Item": "public/js/standard_dishes.js",
+    "Meal Planning Week": "public/js/weekly_menu_editor.js",
+}
 doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js"}
+extend_doctype_class = {"Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"]}
 doc_events = {
     "Item": {"before_insert": "tongjianyun.dish_library.validate_new_dish"},
+    "Meal Planning Week": {"validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission"},
     "BOM": {
         "validate": "tongjianyun.standard_recipes.validate_recipe",
         "before_save": "tongjianyun.standard_recipes.save_draft",
