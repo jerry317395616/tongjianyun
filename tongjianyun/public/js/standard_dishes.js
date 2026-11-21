@@ -39,8 +39,12 @@
 			.text(label).on("click", action).appendTo($container);
 	}
 
-	function ingredientTable($container, rows) {
-		const $table = $("<table>", { class: "table table-bordered table-sm mb-0", "aria-label": "每份食材带量" })
+	function ingredientTable($container, rows, label) {
+		if (!rows?.length) {
+			$("<div>", { class: "text-muted" }).text(rows ? "暂无食材明细。" : "当前账号无权查看食材明细。").appendTo($container);
+			return;
+		}
+		const $table = $("<table>", { class: "table table-bordered table-sm mb-0", "aria-label": label })
 			.appendTo($("<div>", { class: "table-responsive" }).appendTo($container));
 		const $head = $("<tr>").appendTo($("<thead>").appendTo($table));
 		for (const title of ["食材名称", "每份采购毛用量", "每份可食净量", "单位"]) {
@@ -190,16 +194,16 @@
 			$("<span>", { class: "indicator-pill green mr-2" }).text("在用配方").appendTo($status);
 			$("<button>", { type: "button", class: "btn btn-link btn-xs mr-2" })
 				.text(current.name).on("click", () => openRecipe(current.name)).appendTo($status);
-			if (draft) {
-				$("<span>", { class: "indicator-pill orange" }).text(`新版${draft.state}`).appendTo($status);
-			}
-			if (current.ingredients?.length) ingredientTable($content, current.ingredients);
-			else $("<div>", { class: "text-muted" })
-				.text(current.ingredients ? "在用配方没有食材明细。" : "当前账号无权查看食材明细。").appendTo($content);
+			ingredientTable($content, current.ingredients, "在用配方食材");
 		} else {
-			const hint = draft ? `暂无在用配方，当前配方${draft.state === "草稿" ? "为草稿" : draft.state}。` :
-				!company && companies.length ? "请选择机构查看配方。" : "暂无在用配方。";
+			const hint = !company && companies.length ? "请选择机构查看配方。" : "暂无在用配方。";
 			$("<div>", { class: "text-muted" }).text(hint).appendTo($content);
+		}
+		if (draft) {
+			const label = draft.state === "待审核" ? "待审核配方" : "配方草稿";
+			const $draft = $("<div>", { class: "mt-3" }).appendTo($content);
+			$("<span>", { class: "indicator-pill orange mb-2" }).text(label).appendTo($draft);
+			ingredientTable($draft, draft.ingredients, `${label}食材`);
 		}
 		$editor.appendTo($content);
 	}

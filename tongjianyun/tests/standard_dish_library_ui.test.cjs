@@ -174,7 +174,8 @@ test("the dish form edits ingredient drafts inline and keeps published quantitie
 	const queries = [];
 	const controls = [];
 	const alerts = [];
-	let draft = { name: "BOM-DRAFT", state: "待审核", can_edit: false };
+	let draft = { name: "BOM-DRAFT", state: "待审核", can_edit: false,
+		ingredients: [{ name: "番茄", gross: 120, net: 100, uom: "克" }] };
 	let secondCompanyDraft;
 	const frappe = {
 		ui: { form: {
@@ -199,7 +200,8 @@ test("the dish form edits ingredient drafts inline and keeps published quantitie
 				ingredients: [{ row: "row-1", item_code: "TOMATO", name: "番茄", gross: 100, net: 85, uom: "克" }],
 			} : { mode: "new", recipe: null, modified: null, ingredients: [] } };
 			if (method.endsWith("save_ingredients")) {
-				secondCompanyDraft = { name: "BOM-NEW", state: "草稿", can_edit: true };
+				secondCompanyDraft = { name: "BOM-NEW", state: "草稿", can_edit: true,
+					ingredients: [{ name: "番茄", gross: 100, net: 85, uom: "克" }] };
 				return { message: { recipe: "BOM-NEW" } };
 			}
 			return { message: {
@@ -222,9 +224,14 @@ test("the dish form edits ingredient drafts inline and keeps published quantitie
 		set_df_property() {},
 	};
 	const click = (label) => wrapper.findAll("<button>").find((button) => button.content === label).events.click();
+	const tableData = () => wrapper.findAll("<table>").map((table) => [
+		table.attributes["aria-label"], table.findAll("<td>").map((cell) => cell.content),
+	]);
 	await handlers.refresh(form);
-	assert.deepEqual(wrapper.findAll("<td>").map((cell) => cell.content), ["番茄", "100", "85", "克", "<食材>", "1", "—", "克"]);
-	assert.ok(wrapper.findAll("<span>").some((node) => node.content === "新版待审核"));
+	assert.deepEqual(tableData(), [
+		["在用配方食材", ["番茄", "100", "85", "克", "<食材>", "1", "—", "克"]],
+		["待审核配方食材", ["番茄", "120", "100", "克"]],
+	]);
 	click("查看待审核配方");
 	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-DRAFT"], layout: "标准菜品" });
 
@@ -246,6 +253,7 @@ test("the dish form edits ingredient drafts inline and keeps published quantitie
 	assert.deepEqual(JSON.parse(saved.ingredients), [{ item_code: "TOMATO", gross: "100", net: "85", uom: "克" }]);
 	assert.deepEqual(alerts, ["配方草稿已保存"]);
 	assert.ok(wrapper.findAll("<button>").some((button) => button.content === "继续编辑"));
+	assert.deepEqual(tableData(), [["配方草稿食材", ["番茄", "100", "85", "克"]]]);
 
 	draft = null;
 	await handlers.refresh(form);

@@ -147,6 +147,17 @@ def _supports_inline_ingredients(bom):
     return not (bom.get("set_qty_based_on_percentage") or bom.get("track_semi_finished_goods"))
 
 
+def _preview_ingredients(bom):
+    bom.apply_fieldlevel_read_permissions()
+    rows = bom.get("items")
+    if rows is None:
+        return None
+    return [dict(
+        name=row.get("item_name") or row.get("item_code"),
+        gross=row.get("qty"), net=row.get(NET_QTY) or None, uom=row.get("uom"),
+    ) for row in rows]
+
+
 def _summary(dish, recipes):
     current = next((row for row in recipes if row.docstatus == 1 and row.is_active), None)
     draft = next((row for row in recipes if row.docstatus == 0), None)
@@ -235,16 +246,10 @@ def recipe_preview(dish: str, company: str | None = None):
     preview = None
     if current:
         bom = _visible("BOM", current.name)
-        inline_edit = _supports_inline_ingredients(bom)
-        bom.apply_fieldlevel_read_permissions()
-        rows = bom.get("items")
         preview = {
             "name": bom.name,
-            "inline_edit": inline_edit,
-            "ingredients": None if rows is None else [dict(
-                name=row.get("item_name") or row.get("item_code"),
-                gross=row.get("qty"), net=row.get(NET_QTY) or None, uom=row.get("uom"),
-            ) for row in rows],
+            "inline_edit": _supports_inline_ingredients(bom),
+            "ingredients": _preview_ingredients(bom),
         }
     draft_info = None
     if draft:
@@ -252,7 +257,7 @@ def recipe_preview(dish: str, company: str | None = None):
         state = draft.get(STATE) or DRAFT
         draft_info = {"name": bom.name, "state": state,
                       "can_edit": state == DRAFT and _valid_production_item(item) and bom.has_permission("write"),
-                      "inline_edit": _supports_inline_ingredients(bom)}
+                      "inline_edit": _supports_inline_ingredients(bom), "ingredients": _preview_ingredients(bom)}
     can_create = _valid_production_item(item) and frappe.has_permission("BOM", "create")
     return {
         "company": company, "companies": sorted(companies), "current": preview,
