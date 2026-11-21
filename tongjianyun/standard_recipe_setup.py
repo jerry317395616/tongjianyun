@@ -207,6 +207,7 @@ def _install_sidebar():
         save_site_dock(APP, rows, [] if app else [MODULE])
     _install_dish_link()
     _install_week_link()
+    _install_meal_ledger_link()
 
 
 def _install_dish_link():
@@ -233,14 +234,21 @@ def _install_dish_link():
 
 
 def _install_week_link():
+    _install_sidebar_link("DocType", "Meal Planning Week", "自定义周食谱", "calendar")
+
+
+def _install_meal_ledger_link():
+    _install_sidebar_link("Report", "Tongjianyun Meal Ledger", "膳食台账", "book-open")
+
+
+def _install_sidebar_link(link_type, target, label, icon):
     site_sidebar = frappe.db.get_value("Custom Sidebar", {"module": MODULE, "user": ""}, "name")
     if site_sidebar:
         sidebar = frappe.get_doc("Custom Sidebar", site_sidebar)
-        if any(row.link_type == "DocType" and row.link_to == "Meal Planning Week" for row in sidebar.sidebar_items):
+        if any(row.link_type == link_type and row.link_to == target for row in sidebar.sidebar_items):
             return
     add_site_sidebar_item(MODULE, {
-        "type": "Link", "link_type": "DocType", "link_to": "Meal Planning Week",
-        "label": "自定义周食谱", "icon": "calendar",
+        "type": "Link", "link_type": link_type, "link_to": target, "label": label, "icon": icon,
     })
 
 

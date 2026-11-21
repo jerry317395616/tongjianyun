@@ -3,7 +3,7 @@ from pathlib import Path
 
 import frappe
 
-REPORTS = ("Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis")
+REPORTS = ("Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger")
 
 
 def install():
@@ -16,7 +16,8 @@ def install():
     root = Path(__file__).parent / "tongjianyun"
     # These are declared application metadata files. Use the framework importer,
     # including its standard Sidebar provenance handling, rather than raw SQL.
-    files = [root / "report" / slug / (slug + ".json") for slug in ("tongjianyun_weekly_menu", "weekly_recipe_nutrition_analysis")]
+    report_slugs = map(frappe.scrub, REPORTS)
+    files = [root / "report" / slug / f"{slug}.json" for slug in report_slugs]
     files.extend((root / "workspace/tongjianyun/tongjianyun.json", root / "sidebar/tongjianyun.json"))
     previous = frappe.flags.get("in_migrate")
     frappe.flags.in_migrate = True
