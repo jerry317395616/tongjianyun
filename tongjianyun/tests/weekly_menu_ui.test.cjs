@@ -10,6 +10,7 @@ function element(tag, attrs = {}) {
 		text(text) { this.content = text; return this; },
 		empty() { for (const child of this.children) child.host = null; this.children = []; this.content = ""; return this; },
 		css() { return this; }, hide() { this.hidden = true; return this; }, show() { this.hidden = false; return this; },
+		addClass(name) { this.attrs.class = `${this.attrs.class || ""} ${name}`.trim(); return this; },
 		prop(key, value) { this.attrs[key] = value; return this; },
 		find() { return this; }, on(type, action) { this.events[type] = action; return this; },
 		appendTo(host) { this.host = host; host.children.push(this); return this; },
@@ -27,22 +28,26 @@ test("native week lays out 25 cells and saves ordered menu and stop information 
 	const days = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
 	const slots = ["早餐", "早点", "午餐", "午点", "晚餐"];
 	const calls = [];
+	const assets = [];
 	class Dialog {
 		constructor(options) {
 			this.options = options;
 			this.$wrapper = element("<div>");
 			this.primary = element("<button>");
+			this.values = Object.fromEntries(options.fields.map((field) => [field.fieldname, field.default]));
 			this.fields_dict = Object.fromEntries(options.fields.map((field) => [field.fieldname,
 				{ $wrapper: element("<div>"), $input: element("<input>") }]));
 			options.fields.find((field) => field.fieldname === "category").onchange();
 			dialog = this;
 		}
-		show() {} hide() { this.hidden = true; } get_value() { return ""; }
+		show() {} hide() { this.hidden = true; } get_value(name) { return this.values[name]; }
 		get_primary_btn() { return this.primary; }
 	}
 	const frappe = {
 		ui: { Dialog, form: { on(doctype, events) { assert.equal(doctype, "Meal Planning Week"); hooks = events; } } },
 		utils: { debounce: (fn) => fn },
+		datetime: { get_today: () => days[1] },
+		require: async (path) => assets.push(path),
 		msgprint(message) { assert.fail(message); },
 		async call({ method, type, args }) {
 			const operation = method.split(".").at(-1);
@@ -73,9 +78,20 @@ test("native week lays out 25 cells and saves ordered menu and stop information 
 	await page.all("<button>").find((node) => node.content === "复制上周").events.click();
 	assert.equal(calls.find(([operation]) => operation === "initialize")[2].copy_previous, 1);
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
-	assert.ok(page.all("<div>").some((node) => node.content === "园所活动"));
+	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
+	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css"]);
+	assert.equal(page.all("<progress>")[0].attrs.value, 1);
+	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();
 	await new Promise(setImmediate);
+	assert.equal(dialog.$wrapper.attrs.class, "tgy-week-picker");
+	dialog.values.excluded_count = 3;
+	dialog.options.fields.find((field) => field.fieldname === "excluded_count").onchange();
+	assert.equal(dialog.fields_dict.counts_summary.$wrapper.all("<strong>")[0].content, "计划供餐 37 人");
+	dialog.values.stopped = 1;
+	dialog.options.fields.find((field) => field.fieldname === "stopped").onchange();
+	assert.equal(dialog.fields_dict.counts_summary.$wrapper.all("<strong>")[0].content, "计划供餐 0 人");
 	const options = dialog.fields_dict.options.$wrapper;
 	assert.ok(options.all("<div>").some((node) => node.content === "配方待审核"));
 	assert.ok(options.all("<button>").some((node) => node.content === "已选" && node.attrs.disabled));
