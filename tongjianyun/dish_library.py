@@ -14,6 +14,7 @@ from tongjianyun.standard_recipes import (
 
 PAGE_SIZE = 20
 BOM_FIELDS = ("name", "item", "company", "docstatus", "is_active", CATEGORY, STATE, REPLACES)
+DEFAULT_DISH_GROUP = "食谱样例菜品"
 
 
 def _require(doctype, action="read"):
@@ -40,6 +41,16 @@ def _available_unit():
     return "份" if frappe.db.exists("UOM", {"name": "份", "enabled": 1}) else ""
 
 
+def _available_dish_group():
+    if not (frappe.has_permission("Item Group", "select") or frappe.has_permission("Item Group", "read")):
+        return ""
+    groups = frappe.get_list(
+        "Item Group", filters={"name": DEFAULT_DISH_GROUP, "is_group": 0},
+        pluck="name", limit_page_length=1,
+    )
+    return groups[0] if groups else ""
+
+
 def _new_item_code():
     return f"DISH-{uuid4().hex[:12].upper()}"
 
@@ -63,7 +74,11 @@ def dish_options(label: str = ""):
     label = label.strip()[:140]
     if label:
         return {"matches": _same_name_items(label)}
-    return {"item_code": _new_item_code(), "default_unit": _available_unit()}
+    return {
+        "item_code": _new_item_code(),
+        "default_unit": _available_unit(),
+        "default_item_group": _available_dish_group(),
+    }
 
 
 def validate_new_dish(doc, method=None):

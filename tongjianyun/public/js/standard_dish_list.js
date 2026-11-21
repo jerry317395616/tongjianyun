@@ -20,6 +20,7 @@
 				doc.is_purchase_item = 0;
 				doc.disabled = 0;
 				if (options.default_unit) doc.stock_uom = options.default_unit;
+				if (options.default_item_group) doc.item_group = options.default_item_group;
 				frappe.route_options = { layout };
 				return frappe.set_route("Form", "Item", doc.name);
 			});

@@ -25,12 +25,14 @@ test("the previous bookmark takes users to the native dish list", () => {
 });
 
 test("the library creates an Item with dish defaults and leaves the general Item action available", async () => {
-	const doc = { name: "new-item" };
+	const doc = { name: "new-item", item_group: "Products" };
 	const routes = [];
 	const frappe = {
 		listview_settings: { Item: {} },
 		router: { doctype_layout: null },
-		call: async () => ({ message: { item_code: "DISH-QA", default_unit: "份" } }),
+		call: async () => ({ message: {
+			item_code: "DISH-QA", default_unit: "份", default_item_group: "食谱样例菜品",
+		} }),
 		model: {
 			with_doctype(doctype, done) {
 				assert.equal(doctype, "Item");
@@ -44,6 +46,7 @@ test("the library creates an Item with dish defaults and leaves the general Item
 	const list = { make_new_doc: () => "normal Item" };
 	frappe.listview_settings.Item.onload(list);
 	assert.equal(await list.make_new_doc(), "normal Item");
+	assert.equal(doc.item_group, "Products");
 	frappe.router.doctype_layout = "标准菜品档案";
 	await list.make_new_doc();
 	assert.deepEqual(routes, [["Form", "Item", "new-item"]]);
@@ -52,6 +55,7 @@ test("the library creates an Item with dish defaults and leaves the general Item
 	assert.equal(doc.is_purchase_item, 0);
 	assert.equal(doc.item_code, "DISH-QA");
 	assert.equal(doc.stock_uom, "份");
+	assert.equal(doc.item_group, "食谱样例菜品");
 });
 
 test("a native dish form opens a scoped BOM list and prefilled recipe form", () => {
