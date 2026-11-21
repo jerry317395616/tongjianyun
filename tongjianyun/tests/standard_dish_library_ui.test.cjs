@@ -6,8 +6,8 @@ const { runInNewContext } = require("node:vm");
 
 const app = resolve(__dirname, "..");
 
-function load(file, frappe) {
-	runInNewContext(readFileSync(resolve(app, file), "utf8"), { frappe });
+function load(file, frappe, globals = {}) {
+	runInNewContext(readFileSync(resolve(app, file), "utf8"), { frappe, ...globals });
 }
 
 test("the previous bookmark takes users to the native dish list", () => {
@@ -90,4 +90,79 @@ test("a native dish form opens a scoped BOM list and prefilled recipe form", () 
 	assert.equal(bom.quantity, 1);
 	assert.equal(bom.custom_tjy_recipe_category, "素菜");
 	assert.equal(bom.custom_tjy_standard_recipe, 1);
+});
+
+function element(tag, attributes = {}) {
+	return {
+		tag, attributes, children: [], events: {}, content: "", value: attributes.value,
+		empty() { this.children.length = 0; this.content = ""; return this; },
+		text(content) { this.empty(); this.content = String(content); return this; },
+		appendTo(parent) { parent.children.push(this); return this; },
+		on(type, action) { this.events[type] = action; return this; },
+		val(...args) { if (!args.length) return this.value; this.value = args[0]; return this; },
+		findAll(tag) {
+			return this.children.flatMap((child) => [...(child.tag === tag ? [child] : []), ...child.findAll(tag)]);
+		},
+	};
+}
+
+test("the native preview keeps published ingredients visible while a revision is pending", async () => {
+	let handlers;
+	const wrapper = element("<div>");
+	const routes = [];
+	const bom = { name: "new-bom" };
+	const queries = [];
+	let draft = { name: "BOM-DRAFT", state: "待审核", can_edit: false };
+	const frappe = {
+		ui: { form: { on: (_doctype, events) => { handlers = events; } } },
+		model: {
+			can_read: () => true,
+			with_doctype: (_doctype, done) => done(),
+			get_new_doc: () => bom,
+		},
+		call: async ({ method, type, args }) => {
+			queries.push({ method, type, ...args });
+			if (method.endsWith("copy_recipe")) return { message: { recipe: "BOM-COPY" } };
+			const company = args.company || "甲园";
+			return { message: {
+				company, companies: ["甲园", "乙园"], can_create_recipe: true,
+				current: company === "甲园" ? { name: "BOM-PUBLISHED", ingredients: [
+					{ name: "番茄", gross: 100, net: 85, uom: "克" },
+					{ name: "<食材>", gross: 1, net: null, uom: "克" },
+				] } : null,
+				draft: company === "甲园" ? draft : null,
+			} };
+		},
+		set_route(...args) { routes.push({ args, ...frappe.route_options }); },
+	};
+	load("public/js/standard_dishes.js", frappe, { $: element });
+	const form = {
+		doc: { name: "DISH-QA", custom_tjy_standard_dish: 1, custom_tjy_dish_category: "素菜" },
+		doctype_layout: { name: "标准菜品档案" },
+		fields_dict: { custom_tjy_dish_recipe_preview: { $wrapper: wrapper } },
+		is_new: () => false,
+		set_df_property() {},
+	};
+	const click = (label) => wrapper.findAll("<button>").find((button) => button.content === label).events.click();
+	await handlers.refresh(form);
+	assert.deepEqual(wrapper.findAll("<td>").map((cell) => cell.content), ["番茄", "100", "85", "克", "<食材>", "1", "—", "克"]);
+	assert.ok(wrapper.findAll("<span>").some((node) => node.content === "新版待审核"));
+	click("查看待审核配方");
+	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-DRAFT"], layout: "标准菜品" });
+
+	const select = wrapper.findAll("<select>")[0];
+	await select.val("乙园").events.change();
+	assert.equal(queries.at(-1).company, "乙园");
+	assert.equal(wrapper.findAll("<table>").length, 0);
+	click("添加配方");
+	assert.equal(bom.company, "乙园");
+	assert.equal(bom.item, "DISH-QA");
+
+	draft = null;
+	await handlers.refresh(form);
+	await click("复制为新版");
+	assert.deepEqual(queries.at(-1), {
+		method: "tongjianyun.dish_library.copy_recipe", type: "POST", dish: "DISH-QA", source: "BOM-PUBLISHED",
+	});
+	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-COPY"], layout: "标准菜品" });
 });

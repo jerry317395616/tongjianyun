@@ -26,7 +26,14 @@ LIBRARY_URL = "/desk/bom?" + urlencode(LIBRARY_OPTIONS)
 DISH_OPTIONS = {"layout": DISH_LAYOUT, DISH: 1}
 DISH_MEAL_COLUMN = "custom_tjy_dish_meal_column"
 DISH_ADVANCED_COLUMN = "custom_tjy_dish_advanced_column"
-DISH_LAYOUT_COLUMNS = (DISH_MEAL_COLUMN, DISH_ADVANCED_COLUMN)
+DISH_RECIPE_SECTION = "custom_tjy_dish_recipe_section"
+DISH_RECIPE_PREVIEW = "custom_tjy_dish_recipe_preview"
+DISH_LAYOUT_FIELDS = {
+    DISH_MEAL_COLUMN: {"fieldtype": "Column Break"},
+    DISH_ADVANCED_COLUMN: {"fieldtype": "Column Break"},
+    DISH_RECIPE_SECTION: {"fieldtype": "Section Break", "label": "配方与食材"},
+    DISH_RECIPE_PREVIEW: {"fieldtype": "HTML"},
+}
 
 FIELDS = {
     "Item": [
@@ -69,7 +76,7 @@ def install():
         for doctype, fields in FIELDS.items()
     })
     install_meal_slot_fields(DISH, DISH_CATEGORY)
-    _install_dish_layout_columns()
+    _install_dish_layout_fields()
     _save_layout("BOM Item", ITEM_LAYOUT, {
         "item_code": {"label": "食材"},
         "qty": {"label": "每份采购毛用量"},
@@ -92,7 +99,7 @@ def install():
         "disabled": {"in_list_view": 1, "in_standard_filter": 1},
         DISH_CATEGORY: {"in_list_view": 1, "in_standard_filter": 1, "reqd": 1},
         **{field: {"in_standard_filter": 1} for field in SLOT_FIELDS.values()},
-        **{field: {"depends_on": "eval:true"} for field in DISH_LAYOUT_COLUMNS},
+        **{field: {"depends_on": "eval:true"} for field in DISH_LAYOUT_FIELDS},
     }, condition=f"doc.{DISH} == 1")
     enroll_legacy_dishes()
     classify_existing_dishes(DISH)
@@ -100,15 +107,15 @@ def install():
     frappe.clear_cache()
 
 
-def _install_dish_layout_columns():
+def _install_dish_layout_fields():
     metadata = frappe.get_meta("Item", cached=False).fields
-    # Append the layout-only columns to the base form, where they stay hidden.
-    anchor = next(row.fieldname for row in reversed(metadata) if row.fieldname not in DISH_LAYOUT_COLUMNS)
+    # Append the layout-only fields to the base form, where they stay hidden.
+    anchor = next(row.fieldname for row in reversed(metadata) if row.fieldname not in DISH_LAYOUT_FIELDS)
     fields = []
-    for name in DISH_LAYOUT_COLUMNS:
+    for name, properties in DISH_LAYOUT_FIELDS.items():
         fields.append({
-            "fieldname": name, "fieldtype": "Column Break", "module": "Tongjianyun",
-            "insert_after": anchor, "depends_on": "eval:false",
+            "fieldname": name, "module": "Tongjianyun", "insert_after": anchor,
+            "depends_on": "eval:false", **properties,
         })
         anchor = name
     create_custom_fields({"Item": fields})
@@ -132,6 +139,7 @@ def _arrange_dish_details(metadata, fields):
     ):
         names.extend((column, meal))
     names.extend((
+        DISH_RECIPE_SECTION, DISH_RECIPE_PREVIEW,
         "section_break_11", "item_code", "naming_series", "disabled", "is_stock_item",
         "is_fixed_asset", "auto_create_assets", "is_grouped_asset", "asset_category", "asset_naming_series",
         DISH_ADVANCED_COLUMN,
@@ -139,7 +147,7 @@ def _arrange_dish_details(metadata, fields):
     placed = set(names)
     advanced = [rows[row.fieldname] for row in metadata[start + 1:stop]
                 if row.fieldname not in placed and row.fieldtype not in {"Section Break", "Column Break"}]
-    other_tabs = [row for row in fields[stop:] if row["fieldname"] not in DISH_LAYOUT_COLUMNS]
+    other_tabs = [row for row in fields[stop:] if row["fieldname"] not in DISH_LAYOUT_FIELDS]
     return [*fields[:start + 1], *(rows[name] for name in names), *advanced, *other_tabs]
 
 

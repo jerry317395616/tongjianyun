@@ -4,16 +4,17 @@ from unicodedata import normalize
 from uuid import uuid4
 
 import frappe
+from erpnext import get_default_company
 from frappe.database.query import Engine
 from frappe.model.document import copy_doc
 from frappe.utils import cint
 
 from tongjianyun.standard_recipes import (
-    CATEGORY, CATEGORIES, DISH, DISH_CATEGORY, DRAFT, MARKER, PUBLISHED, REPLACES, STATE,
+    CATEGORY, CATEGORIES, DISH, DISH_CATEGORY, DRAFT, MARKER, NET_QTY, PENDING, PUBLISHED, REPLACES, STATE,
 )
 
 PAGE_SIZE = 20
-BOM_FIELDS = ("name", "item", "company", "docstatus", "is_active", CATEGORY, STATE, REPLACES)
+BOM_FIELDS = ("name", "item", "company", "docstatus", "is_active", "is_default", CATEGORY, STATE, REPLACES)
 DEFAULT_DISH_GROUP = "食谱样例菜品"
 
 
@@ -187,6 +188,51 @@ def detail(dish: str):
             active=bool(row.is_active), can_copy=row.docstatus == 1 and bool(row.is_active),
         ) for row in recipes],
         "can_create_recipe": bool(can_create),
+    }
+
+
+@frappe.whitelist(methods=["GET"])
+def recipe_preview(dish: str, company: str | None = None):
+    item, recipes = _check_dish(dish)
+    companies = {row.company for row in recipes if row.get("company")}
+    preferred = get_default_company()
+    if preferred and preferred not in companies and (
+        frappe.has_permission("Company", "select") or frappe.has_permission("Company", "read")
+    ) and frappe.get_list("Company", filters={"name": preferred}, pluck="name", page_length=1):
+        companies.add(preferred)
+    if company and company not in companies:
+        frappe.throw("当前账号无法访问该机构的配方。", frappe.PermissionError)
+    if not company and preferred in companies:
+        company = preferred
+    if not company and len(companies) == 1:
+        company = next(iter(companies))
+
+    scoped = [row for row in recipes if company and row.get("company") == company]
+    active = [row for row in scoped if row.docstatus == 1 and row.is_active]
+    current = max(active, key=lambda row: bool(row.get("is_default")), default=None)
+    drafts = [row for row in scoped if row.docstatus == 0]
+    draft = max(drafts, key=lambda row: row.get(STATE) == PENDING, default=None)
+    preview = None
+    if current:
+        bom = _visible("BOM", current.name)
+        bom.apply_fieldlevel_read_permissions()
+        rows = bom.get("items")
+        preview = {
+            "name": bom.name,
+            "ingredients": None if rows is None else [dict(
+                name=row.get("item_name") or row.get("item_code"),
+                gross=row.get("qty"), net=row.get(NET_QTY) or None, uom=row.get("uom"),
+            ) for row in rows],
+        }
+    draft_info = None
+    if draft:
+        bom = _visible("BOM", draft.name)
+        state = draft.get(STATE) or DRAFT
+        draft_info = {"name": bom.name, "state": state, "can_edit": state == DRAFT and bom.has_permission("write")}
+    can_create = _valid_production_item(item) and frappe.has_permission("BOM", "create")
+    return {
+        "company": company, "companies": sorted(companies), "current": preview,
+        "draft": draft_info, "can_create_recipe": bool(can_create),
     }
 
 
