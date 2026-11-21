@@ -73,6 +73,7 @@ test("a native dish form opens a scoped BOM list and prefilled recipe form", () 
 	handlers.refresh({
 		doc: { name: "DISH-QA", custom_tjy_standard_dish: 1, custom_tjy_dish_category: "素菜" },
 		is_new: () => false,
+		set_df_property() {},
 		add_custom_button: (label, action) => { buttons[label] = action; },
 	});
 	buttons["查看配方"]();

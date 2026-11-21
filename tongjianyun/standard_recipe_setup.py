@@ -54,6 +54,9 @@ FIELDS = {
 
 def install():
     frappe.only_for("System Manager")
+    from ione_core.meal_dish_catalog import classify_existing_dishes, install_meal_slot_fields
+    from ione_core.meal_planning import SLOT_FIELDS
+
     create_custom_fields({
         doctype: [
             dict(field, module="Tongjianyun", **({"depends_on": f"eval:doc.{MARKER}"} if doctype == "BOM"
@@ -62,6 +65,7 @@ def install():
         ]
         for doctype, fields in FIELDS.items()
     })
+    install_meal_slot_fields(DISH, DISH_CATEGORY)
     _save_layout("BOM Item", ITEM_LAYOUT, {
         "item_code": {"label": "食材"},
         "qty": {"label": "每份采购毛用量"},
@@ -81,8 +85,10 @@ def install():
         "stock_uom": {"label": "默认单位", "in_list_view": 1},
         "disabled": {"in_list_view": 1, "in_standard_filter": 1},
         DISH_CATEGORY: {"in_list_view": 1, "in_standard_filter": 1, "reqd": 1},
+        **{field: {"in_standard_filter": 1} for field in SLOT_FIELDS.values()},
     }, condition=f"doc.{DISH} == 1")
     enroll_legacy_dishes()
+    classify_existing_dishes(DISH)
     _install_sidebar()
     frappe.clear_cache()
 

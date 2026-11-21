@@ -33,7 +33,9 @@
 
 	frappe.ui.form.on("Item", {
 		refresh(frm) {
-			if (!frm.doc.custom_tjy_standard_dish || frm.is_new()) return;
+			if (!frm.doc.custom_tjy_standard_dish) return;
+			frm.set_df_property("item_name", "description", "填写菜品本名，例如小米粥。供餐时段在「适用餐次」设置。");
+			if (frm.is_new()) return;
 			if (frappe.model.can_read("BOM")) {
 				frm.add_custom_button("查看配方", () => {
 					frappe.route_options = {
