@@ -24,6 +24,9 @@ CONDITION = f"doc.{MARKER} == 1"
 LIBRARY_OPTIONS = {"layout": LAYOUT, MARKER: 1}
 LIBRARY_URL = "/desk/bom?" + urlencode(LIBRARY_OPTIONS)
 DISH_OPTIONS = {"layout": DISH_LAYOUT, DISH: 1}
+DISH_MEAL_COLUMN = "custom_tjy_dish_meal_column"
+DISH_ADVANCED_COLUMN = "custom_tjy_dish_advanced_column"
+DISH_LAYOUT_COLUMNS = (DISH_MEAL_COLUMN, DISH_ADVANCED_COLUMN)
 
 FIELDS = {
     "Item": [
@@ -66,6 +69,7 @@ def install():
         for doctype, fields in FIELDS.items()
     })
     install_meal_slot_fields(DISH, DISH_CATEGORY)
+    _install_dish_layout_columns()
     _save_layout("BOM Item", ITEM_LAYOUT, {
         "item_code": {"label": "食材"},
         "qty": {"label": "每份采购毛用量"},
@@ -80,17 +84,63 @@ def install():
         "item_name": {"label": "菜名", "in_list_view": 1},
     }, condition=CONDITION, child_tables=[{"table_fieldname": "items", "child_layout": ITEM_LAYOUT}])
     _save_layout("Item", DISH_LAYOUT, {
-        "item_name": {"label": "菜名", "in_list_view": 1},
+        "section_break_zlmj": {"label": "菜品信息"},
+        "section_break_11": {"label": "更多物料属性"},
+        "item_name": {"label": "菜名", "in_list_view": 1, "reqd": 1},
         "item_code": {"label": "菜品编码", "read_only": 1},
         "stock_uom": {"label": "默认单位", "in_list_view": 1},
         "disabled": {"in_list_view": 1, "in_standard_filter": 1},
         DISH_CATEGORY: {"in_list_view": 1, "in_standard_filter": 1, "reqd": 1},
         **{field: {"in_standard_filter": 1} for field in SLOT_FIELDS.values()},
+        **{field: {"depends_on": "eval:true"} for field in DISH_LAYOUT_COLUMNS},
     }, condition=f"doc.{DISH} == 1")
     enroll_legacy_dishes()
     classify_existing_dishes(DISH)
     _install_sidebar()
     frappe.clear_cache()
+
+
+def _install_dish_layout_columns():
+    metadata = frappe.get_meta("Item", cached=False).fields
+    # Append the layout-only columns to the base form, where they stay hidden.
+    anchor = next(row.fieldname for row in reversed(metadata) if row.fieldname not in DISH_LAYOUT_COLUMNS)
+    fields = []
+    for name in DISH_LAYOUT_COLUMNS:
+        fields.append({
+            "fieldname": name, "fieldtype": "Column Break", "module": "Tongjianyun",
+            "insert_after": anchor, "depends_on": "eval:false",
+        })
+        anchor = name
+    create_custom_fields({"Item": fields})
+
+
+def _arrange_dish_details(metadata, fields):
+    from ione_core.meal_dish_catalog import SECTION
+    from ione_core.meal_planning import SLOT_FIELDS
+
+    rows = {row["fieldname"]: row for row in fields}
+    start = next(i for i, row in enumerate(metadata) if row.fieldname == "details")
+    stop = next(i for i, row in enumerate(metadata) if i > start and row.fieldtype == "Tab Break")
+    first_meal, *other_meals = SLOT_FIELDS.values()
+    names = [
+        "section_break_zlmj", "item_name", "item_group", "column_break0", DISH_CATEGORY, "stock_uom",
+        SECTION, first_meal,
+    ]
+    for column, meal in zip(
+        ("column_break_kpmi", "column_break_ixrh", "column_break_wugd", DISH_MEAL_COLUMN),
+        other_meals, strict=True,
+    ):
+        names.extend((column, meal))
+    names.extend((
+        "section_break_11", "item_code", "naming_series", "disabled", "is_stock_item",
+        "is_fixed_asset", "auto_create_assets", "is_grouped_asset", "asset_category", "asset_naming_series",
+        DISH_ADVANCED_COLUMN,
+    ))
+    placed = set(names)
+    advanced = [rows[row.fieldname] for row in metadata[start + 1:stop]
+                if row.fieldname not in placed and row.fieldtype not in {"Section Break", "Column Break"}]
+    other_tabs = [row for row in fields[stop:] if row["fieldname"] not in DISH_LAYOUT_COLUMNS]
+    return [*fields[:start + 1], *(rows[name] for name in names), *advanced, *other_tabs]
 
 
 def _save_layout(doctype, title, overrides, **properties):
@@ -102,11 +152,12 @@ def _save_layout(doctype, title, overrides, **properties):
         "is_standard": 1,
         **properties,
     }
+    metadata = frappe.get_meta(doctype).fields
     fields = [dict(
         fieldname=df.fieldname,
         label=df.label,
         **{name: df.get(name) for name in ("hidden", "reqd", "read_only", "in_list_view", "in_standard_filter")},
-    ) for df in frappe.get_meta(doctype).fields]
+    ) for df in metadata]
     for field in fields:
         if title == DISH_LAYOUT:
             field["in_list_view"] = 0
@@ -117,7 +168,7 @@ def _save_layout(doctype, title, overrides, **properties):
                                       "bom_configuration_section", "operations_section",
                                       "operations_section_section", "operations"}:
                 field["hidden"] = 1
-    values["fields"] = fields
+    values["fields"] = _arrange_dish_details(metadata, fields) if title == DISH_LAYOUT else fields
     existing = frappe.db.exists("DocType Layout", title)
     if existing:
         layout = frappe.get_doc("DocType Layout", existing)
