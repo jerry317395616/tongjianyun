@@ -5,6 +5,10 @@ from frappe.utils import cint, flt
 
 MARKER = "custom_tjy_standard_recipe"
 CATEGORY = "custom_tjy_recipe_category"
+DISH = "custom_tjy_standard_dish"
+DISH_CATEGORY = "custom_tjy_dish_category"
+CATEGORIES = ("主食", "荤菜", "素菜", "汤羹", "点心", "水果", "饮品", "其他")
+REPLACES = "custom_tjy_recipe_previous_version"
 AGE = "custom_tjy_recipe_age"
 ALLERGENS = "custom_tjy_recipe_allergens"
 METHOD = "custom_tjy_recipe_method"
@@ -23,6 +27,20 @@ def validate_recipe(doc, method=None):
     dish = frappe.db.get_value("Item", doc.item, ["disabled", "is_purchase_item"], as_dict=True)
     if not dish or dish.disabled or dish.is_purchase_item:
         frappe.throw(_("请选择启用的自制菜品作为成品物料。"))
+    previous = doc.get_doc_before_save()
+    source = doc.get(REPLACES)
+    if previous and source != previous.get(REPLACES):
+        frappe.throw(_("配方来源在建立版本时确定。"))
+    if source:
+        if not previous:
+            frappe.has_permission("BOM", "read", doc=source, throw=True)
+        origin = frappe.db.get_value(
+            "BOM", source, ["item", "company", "docstatus", MARKER], as_dict=True,
+        )
+        if not origin or not origin.get(MARKER) or origin.docstatus != 1 or (
+            origin.item, origin.company
+        ) != (doc.item, doc.company):
+            frappe.throw(_("新版配方的菜品、所属机构必须与来源版本一致。"))
     for row in doc.items:
         net = flt(row.get(NET_QTY))
         if net < 0 or net > flt(row.qty):
@@ -74,7 +92,7 @@ def publish_recipe(doc, method=None):
 
 
 def _recipe_values(doc):
-    fields = ("company", "item", "quantity", "uom", CATEGORY, AGE, ALLERGENS, METHOD)
+    fields = ("company", "item", "quantity", "uom", CATEGORY, AGE, ALLERGENS, METHOD, REPLACES)
     materials = tuple(
         (row.item_code, flt(row.qty), row.uom, flt(row.conversion_factor), row.bom_no or "", flt(row.get(NET_QTY)))
         for row in doc.items

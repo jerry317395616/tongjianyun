@@ -8,7 +8,8 @@ from frappe.desk.doctype.custom_sidebar.custom_sidebar import add_site_sidebar_i
 from frappe.desk.doctype.dock.dock import get_dock, resolve_app_dock, save_site_dock
 
 from tongjianyun.standard_recipes import (
-    AGE, ALLERGENS, CATEGORY, DRAFT, MARKER, METHOD, NET_QTY, PENDING, PUBLISHED, STATE,
+    AGE, ALLERGENS, CATEGORIES, CATEGORY, DISH, DISH_CATEGORY, DRAFT, MARKER, METHOD, NET_QTY,
+    PENDING, PUBLISHED, REPLACES, STATE,
 )
 
 APP = "tongjianyun"
@@ -16,21 +17,30 @@ MODULE = "膳食与食堂"
 LAYOUT = "标准菜品"
 ITEM_LAYOUT = "标准菜品食材"
 LIBRARY = "标准菜品库"
+LIBRARY_PAGE = "standard-dish-library"
 CONDITION = f"doc.{MARKER} == 1"
 LIBRARY_OPTIONS = {"layout": LAYOUT, MARKER: 1}
 LIBRARY_URL = "/desk/bom?" + urlencode(LIBRARY_OPTIONS)
 
 FIELDS = {
+    "Item": [
+        {"fieldname": DISH, "label": "标准菜品", "fieldtype": "Check",
+         "insert_after": "item_name", "default": "0", "hidden": 1, "no_copy": 1},
+        {"fieldname": DISH_CATEGORY, "label": "菜品分类", "fieldtype": "Select", "insert_after": DISH,
+         "options": "\n" + "\n".join(CATEGORIES), "depends_on": f"eval:doc.{DISH}"},
+    ],
     "BOM": [
         {"fieldname": MARKER, "label": "标准菜品", "fieldtype": "Check",
          "insert_after": "item", "default": "0", "hidden": 1},
         {"fieldname": CATEGORY, "label": "菜品分类", "fieldtype": "Select", "insert_after": MARKER,
-         "options": "\n主食\n荤菜\n素菜\n汤羹\n点心\n水果\n饮品\n其他"},
+         "options": "\n" + "\n".join(CATEGORIES)},
         {"fieldname": AGE, "label": "适用年龄", "fieldtype": "Data", "insert_after": CATEGORY},
         {"fieldname": ALLERGENS, "label": "过敏原", "fieldtype": "Small Text", "insert_after": AGE},
         {"fieldname": METHOD, "label": "做法", "fieldtype": "Small Text", "insert_after": ALLERGENS},
         {"fieldname": STATE, "label": "审核状态", "fieldtype": "Select", "insert_after": METHOD,
          "options": f"\n{DRAFT}\n{PENDING}\n{PUBLISHED}", "read_only": 1, "no_copy": 1},
+        {"fieldname": REPLACES, "label": "来源配方", "fieldtype": "Link", "options": "BOM",
+         "insert_after": STATE, "read_only": 1, "no_copy": 1},
     ],
     "BOM Item": [
         {"fieldname": NET_QTY, "label": "每份可食净量", "fieldtype": "Float", "insert_after": "qty",
@@ -52,6 +62,7 @@ def install():
     _save_layout("BOM Item", ITEM_LAYOUT, {
         "item_code": {"label": "食材"},
         "qty": {"label": "每份采购毛用量"},
+        NET_QTY: {"hidden": 0, "in_list_view": 1},
     }, is_child_table=1)
     _save_layout("BOM", LAYOUT, {
         "item": {"label": "菜品物料"},
@@ -117,17 +128,20 @@ def _install_sidebar():
         })
         save_site_dock(APP, rows, [] if app else [MODULE])
     link = {
-        "type": "Link", "link_type": "DocType", "link_to": "BOM", "label": LIBRARY, "icon": "book-open",
-        "route_options": json.dumps(LIBRARY_OPTIONS, ensure_ascii=False),
+        "type": "Link", "link_type": "Page", "link_to": LIBRARY_PAGE, "label": LIBRARY, "icon": "book-open",
     }
     site_sidebar = frappe.db.get_value("Custom Sidebar", {"module": MODULE, "user": ""}, "name")
     if site_sidebar:
         sidebar = frappe.get_doc("Custom Sidebar", site_sidebar)
         for row in sidebar.sidebar_items:
-            if row.link_type == "DocType" and row.link_to == "BOM" and row.route_options == link["route_options"]:
+            if row.link_type == "Page" and row.link_to == LIBRARY_PAGE:
                 return
-            if row.link_type == "URL" and row.url == LIBRARY_URL:
-                row.update({**link, "url": None, "open_in_new_tab": 0})
+        for row in sidebar.sidebar_items:
+            legacy_link = row.link_type == "DocType" and row.link_to == "BOM" and (
+                row.route_options == json.dumps(LIBRARY_OPTIONS, ensure_ascii=False) or row.label == LIBRARY
+            )
+            if legacy_link or (row.link_type == "URL" and row.url == LIBRARY_URL):
+                row.update({**link, "url": None, "route_options": None, "open_in_new_tab": 0})
                 sidebar.save()
                 return
     add_site_sidebar_item(MODULE, link)

@@ -62,4 +62,6 @@ class ArchiveBoundaryTests(unittest.TestCase):
         self.assertFalse(list((root / "tongjianyun/doctype").rglob("*.json")))
         for file in ("recipe_storage.py", "recipe_import.py", "meal_scene.py", "meal_chat.py", "daily_meals.py", "mcp_tools.py", "education_integration.py"):
             self.assertFalse((root / file).exists(), file)
-        self.assertFalse(list((root / "tongjianyun/page").rglob("*.json")))
+        pages = root / "tongjianyun/page"
+        self.assertEqual([path.relative_to(pages).as_posix() for path in pages.rglob("*.json")],
+                         ["standard_dish_library/standard_dish_library.json"])

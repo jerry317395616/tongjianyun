@@ -9,6 +9,7 @@ frappe.ui.form.on("BOM", {
 		if (!frm.doc.custom_tjy_standard_recipe) {
 			return;
 		}
+		frm.add_custom_button("返回菜品库", () => frappe.set_route("standard-dish-library"));
 		frm.fields_dict.items?.grid.set_column_disp_in_list_view("custom_tjy_recipe_net_qty", true);
 		if (frm.is_new() || frm.doc.docstatus !== 0) {
 			return;

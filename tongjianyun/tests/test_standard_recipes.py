@@ -32,6 +32,7 @@ class StandardRecipeTests(unittest.TestCase):
         self.frappe.PermissionError = Rejected
         self.frappe.session = SimpleNamespace(user="reviewer")
         self.frappe.get_roles = Mock(return_value=["Manufacturing Manager"])
+        self.frappe.has_permission = Mock(return_value=True)
         self.frappe.db = SimpleNamespace(get_value=Mock(return_value=SimpleNamespace(disabled=0, is_purchase_item=0)))
         utils = ModuleType("frappe.utils")
         utils.flt = lambda value: float(value or 0)
@@ -67,6 +68,23 @@ class StandardRecipeTests(unittest.TestCase):
         self.rules.publish_recipe(doc)
         self.assertNotIn(self.rules.STATE, doc)
         self.frappe.db.get_value.assert_not_called()
+
+    def test_recipe_revision_belongs_to_same_dish_and_company(self):
+        rules = self.rules
+        doc = self.recipe()
+        doc.update(company="Kitchen A", **{rules.REPLACES: "BOM-ORIGINAL"})
+        self.frappe.db.get_value.side_effect = [
+            Recipe(disabled=0, is_purchase_item=0),
+            Recipe(item="DISH", company="Kitchen B", docstatus=1, **{rules.MARKER: 1}),
+        ]
+        with self.assertRaises(Rejected):
+            rules.validate_recipe(doc)
+        previous = self.recipe()
+        previous[rules.REPLACES] = "BOM-BASE"
+        doc["previous"] = previous
+        self.frappe.db.get_value.side_effect = None
+        with self.assertRaises(Rejected):
+            rules.validate_recipe(doc)
 
     def test_pending_draft_cannot_be_changed_in_place(self):
         rules = self.rules

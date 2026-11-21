@@ -1,0 +1,10 @@
+{
+ "doctype": "Page",
+ "name": "standard-dish-library",
+ "page_name": "standard-dish-library",
+ "title": "标准菜品库",
+ "module": "Tongjianyun",
+ "standard": "Yes",
+ "system_page": 0,
+ "roles": []
+}

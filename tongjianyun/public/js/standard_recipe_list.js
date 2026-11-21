@@ -8,9 +8,12 @@
 			if (frappe.router.doctype_layout !== "标准菜品") {
 				return make_new_doc();
 			}
-			return frappe.new_doc("BOM", { layout: "标准菜品" }, (doc) => {
+			return frappe.model.with_doctype("BOM", () => {
+				const doc = frappe.model.get_new_doc("BOM", null, null, true);
 				doc.custom_tjy_standard_recipe = 1;
 				doc.quantity = 1;
+				frappe.route_options = { layout: "标准菜品" };
+				return frappe.set_route("Form", "BOM", doc.name);
 			});
 		};
 	};
