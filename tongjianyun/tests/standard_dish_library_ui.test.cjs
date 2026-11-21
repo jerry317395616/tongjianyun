@@ -10,6 +10,19 @@ function load(file, frappe, globals = {}) {
 	runInNewContext(readFileSync(resolve(app, file), "utf8"), { frappe, ...globals });
 }
 
+function nativeList() {
+	const list = {
+		make_new_doc: () => "normal Item",
+		get_form_link: (doc) => `/desk/native/${encodeURIComponent(doc.name)}`,
+		$result: [{ addEventListener(type, handler, capture) {
+			assert.equal(type, "click");
+			assert.equal(capture, true);
+			list.clickRow = handler;
+		} }],
+	};
+	return list;
+}
+
 test("the previous bookmark takes users to the native dish list", () => {
 	const page = {};
 	const calls = [];
@@ -43,7 +56,7 @@ test("the library creates an Item with dish defaults and leaves the general Item
 		set_route(...args) { routes.push(args); },
 	};
 	load("public/js/standard_dish_list.js", frappe);
-	const list = { make_new_doc: () => "normal Item" };
+	const list = nativeList();
 	frappe.listview_settings.Item.onload(list);
 	assert.equal(await list.make_new_doc(), "normal Item");
 	assert.equal(doc.item_group, "Products");
@@ -56,6 +69,48 @@ test("the library creates an Item with dish defaults and leaves the general Item
 	assert.equal(doc.item_code, "DISH-QA");
 	assert.equal(doc.stock_uom, "份");
 	assert.equal(doc.item_group, "食谱样例菜品");
+});
+
+test("dish and recipe row links retain the layout on canonical native forms", () => {
+	for (const [doctype, layout, file] of [
+		["Item", "标准菜品档案", "standard_dish_list.js"],
+		["BOM", "标准菜品", "standard_recipe_list.js"],
+	]) {
+		const calls = [];
+		const frappe = {
+			listview_settings: {},
+			router: { doctype_layout: null },
+			utils: { get_form_link: (type, name, _html, _text, query) =>
+				`/desk/${type.toLowerCase()}/${encodeURIComponent(name)}?${new URLSearchParams(query)}` },
+			set_route: (...args) => calls.push(args),
+		};
+		const list = nativeList();
+		load(`public/js/${file}`, frappe);
+		frappe.listview_settings[doctype].onload(list);
+		const row = { name: "测试/A & B" };
+		assert.equal(list.get_form_link(row), `/desk/native/${encodeURIComponent(row.name)}`);
+
+		frappe.router.doctype_layout = layout;
+		const href = list.get_form_link(row);
+		const url = new URL(href, "https://child.example");
+		assert.equal(url.pathname, `/desk/${doctype.toLowerCase()}/${encodeURIComponent(row.name)}`);
+		assert.equal(url.searchParams.get("layout"), layout);
+
+		const interaction = {
+			target: { closest: (selector) => selector.startsWith(".list-row") ?
+				{ querySelector: () => url } : null },
+			preventDefault: () => calls.push("preventDefault"),
+			stopPropagation: () => calls.push("stopPropagation"),
+		};
+		list.clickRow({ ...interaction, ctrlKey: true });
+		list.clickRow({ ...interaction, target: { closest: () => ({}) } });
+		assert.deepEqual(calls, []);
+		list.clickRow(interaction);
+		assert.deepEqual(calls, ["preventDefault", "stopPropagation", [href]]);
+		frappe.router.doctype_layout = null;
+		list.clickRow(interaction);
+		assert.equal(calls.length, 3);
+	}
 });
 
 test("a native dish form opens a scoped BOM list and prefilled recipe form", () => {

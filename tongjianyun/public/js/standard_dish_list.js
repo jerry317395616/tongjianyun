@@ -4,6 +4,26 @@
 	const onload = settings.onload;
 	settings.onload = function (list) {
 		onload?.call(this, list);
+		const getFormLink = list.get_form_link.bind(list);
+		list.get_form_link = function (doc) {
+			if (frappe.router.doctype_layout === layout) {
+				return frappe.utils.get_form_link("Item", doc.name, false, null, { layout });
+			}
+			return getFormLink(doc);
+		};
+		// The native row handler only forwards the pathname, dropping the layout query.
+		list.$result[0].addEventListener("click", (event) => {
+			if (frappe.router.doctype_layout !== layout || event.ctrlKey || event.metaKey) return;
+			if (event.target.closest(
+				"a, button, input, [data-toggle='dropdown'], .filterable, .select-like, .file-select, .list-row-like"
+			)) return;
+			const row = event.target.closest(".list-row, .image-view-header, .file-header");
+			const link = row?.querySelector(".list-subject a");
+			if (!link) return;
+			event.preventDefault();
+			event.stopPropagation();
+			frappe.set_route(link.pathname + link.search);
+		}, true);
 		const makeNew = list.make_new_doc.bind(list);
 		list.make_new_doc = async function () {
 			if (frappe.router.doctype_layout !== layout) {
