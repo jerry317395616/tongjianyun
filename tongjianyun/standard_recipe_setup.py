@@ -209,6 +209,7 @@ def _install_sidebar():
     _install_week_link()
     _install_meal_ledger_link()
     _install_ingredient_analysis_link()
+    _install_staffing_links()
     _install_sidebar_link("DocType", "Tongjianyun Nutrition Improvement Plan", "营养改善计划", "list-checks")
 
 
@@ -245,6 +246,11 @@ def _install_meal_ledger_link():
 
 def _install_ingredient_analysis_link():
     _install_sidebar_link("Report", "Tongjianyun Ingredient Analysis", "食材采购与消耗分析", "chart-bar")
+
+
+def _install_staffing_links():
+    _install_sidebar_link("DocType", "Tongjianyun Canteen Staffing Rule", "食堂岗位配置", "users")
+    _install_sidebar_link("Report", "Tongjianyun Canteen Staffing Analysis", "人员配置分析", "chart-bar")
 
 
 def _install_sidebar_link(link_type, target, label, icon):

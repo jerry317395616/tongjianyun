@@ -5,7 +5,7 @@ import frappe
 
 REPORTS = (
     "Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger",
-    "Tongjianyun Ingredient Analysis",
+    "Tongjianyun Ingredient Analysis", "Tongjianyun Canteen Staffing Analysis",
 )
 
 
