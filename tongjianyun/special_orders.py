@@ -30,7 +30,7 @@ def install():
         for child in ("Material Request Item", "Purchase Order Item", "Purchase Receipt Item")
     }
     fields[REQUEST] = [dict(fieldname=PROOF, label="食材拆分审核依据", fieldtype="Long Text",
-                            read_only=1, hidden=1, insert_after="custom_meal_week")]
+                            read_only=1, hidden=1, insert_after="company")]
     fields[ORDER] = [dict(purpose, insert_after="supplier", in_standard_filter=1), dict(plan, insert_after=USE)]
     create_custom_fields({doctype: [dict(field, module="Tongjianyun") for field in rows] for doctype, rows in fields.items()})
 
