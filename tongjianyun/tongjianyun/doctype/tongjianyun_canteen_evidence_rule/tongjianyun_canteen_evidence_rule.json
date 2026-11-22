@@ -1,0 +1,45 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Evidence Rule",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "istable": 1,
+ "editable_grid": 1,
+ "permissions": [],
+ "field_order": [
+  "item_group",
+  "evidence_type",
+  "require_matching_batch",
+  "require_expiry"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_group",
+   "label": "食材分类",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "evidence_type",
+   "label": "所需票证类型",
+   "fieldtype": "Select",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "送货单\n产品合格证明\n同批次检验报告\n检疫证明\n肉品品质检验合格证\n食品经营资质\n其他票证"
+  },
+  {
+   "fieldname": "require_matching_batch",
+   "label": "须填写并核对批号",
+   "fieldtype": "Check",
+   "default": "1"
+  },
+  {
+   "fieldname": "require_expiry",
+   "label": "须填写票证有效期",
+   "fieldtype": "Check"
+  }
+ ]
+}

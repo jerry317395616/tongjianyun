@@ -1,0 +1,152 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Price Review",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-PRICE-{#####}",
+ "title_field": "purchase_order",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食财政监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "purchase_order",
+  "quotation_request",
+  "contract",
+  "decision_reason",
+  "basis",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "purchase_order",
+   "label": "待提交采购订单",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "Purchase Order"
+  },
+  {
+   "fieldname": "quotation_request",
+   "label": "询价单",
+   "fieldtype": "Link",
+   "options": "Request for Quotation"
+  },
+  {
+   "fieldname": "contract",
+   "label": "框架采购协议",
+   "fieldtype": "Link",
+   "options": "Blanket Order"
+  },
+  {
+   "fieldname": "decision_reason",
+   "label": "价格差异、选商或例外说明",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "basis",
+   "label": "核对依据",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Price Review"
+  }
+ ]
+}

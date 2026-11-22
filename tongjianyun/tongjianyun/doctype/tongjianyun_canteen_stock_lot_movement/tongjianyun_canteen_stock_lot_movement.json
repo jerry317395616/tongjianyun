@@ -1,0 +1,193 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Stock Lot Movement",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-LOT-{#####}",
+ "title_field": "lot_number",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食食品安全监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen",
+  "lot_key",
+  "lot_number",
+  "item_code",
+  "supplier",
+  "manufactured_on",
+  "expires_on",
+  "posting_date",
+  "from_warehouse",
+  "to_warehouse",
+  "quantity",
+  "source_type",
+  "source",
+  "native_line",
+  "receiving"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "lot_key",
+   "label": "追溯编号",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "lot_number",
+   "label": "供应商批号",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "item_code",
+   "label": "食材",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Item"
+  },
+  {
+   "fieldname": "supplier",
+   "label": "供应商",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "manufactured_on",
+   "label": "生产日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "expires_on",
+   "label": "效期",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "label": "流转日期",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "from_warehouse",
+   "label": "出库仓",
+   "fieldtype": "Link",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "to_warehouse",
+   "label": "入库仓",
+   "fieldtype": "Link",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "quantity",
+   "label": "库存单位数量",
+   "fieldtype": "Float",
+   "reqd": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "source_type",
+   "label": "关联单据类型",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "DocType"
+  },
+  {
+   "fieldname": "source",
+   "label": "原生库存单据",
+   "fieldtype": "Dynamic Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "source_type"
+  },
+  {
+   "fieldname": "native_line",
+   "label": "原生库存明细号",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "receiving",
+   "label": "批次验收",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen Receiving"
+  }
+ ]
+}

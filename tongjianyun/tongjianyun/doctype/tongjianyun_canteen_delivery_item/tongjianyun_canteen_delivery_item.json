@@ -1,0 +1,69 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Delivery Item",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "istable": 1,
+ "editable_grid": 1,
+ "permissions": [],
+ "field_order": [
+  "order_item",
+  "item_code",
+  "uom",
+  "quantity",
+  "lot_number",
+  "manufactured_on",
+  "expires_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_item",
+   "label": "订单明细编号",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_code",
+   "label": "食材",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "Item"
+  },
+  {
+   "fieldname": "uom",
+   "label": "采购单位",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "UOM"
+  },
+  {
+   "fieldname": "quantity",
+   "label": "发货数量",
+   "fieldtype": "Float",
+   "reqd": 1,
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "lot_number",
+   "label": "供应商批号",
+   "fieldtype": "Data",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "manufactured_on",
+   "label": "生产日期",
+   "fieldtype": "Date"
+  },
+  {
+   "fieldname": "expires_on",
+   "label": "有效期",
+   "fieldtype": "Date"
+  }
+ ]
+}

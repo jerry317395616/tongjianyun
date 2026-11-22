@@ -1,0 +1,176 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Finance Request",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-FIN-{#####}",
+ "title_field": "operation",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食财政监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "operation",
+  "posting_date",
+  "nutrition_plan",
+  "financial_project",
+  "external_reference",
+  "amount",
+  "evidence",
+  "debit_account",
+  "credit_account",
+  "policy",
+  "journal_entry",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "operation",
+   "label": "业务类型",
+   "fieldtype": "Select",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "专项补助到账\n食堂资金调整"
+  },
+  {
+   "fieldname": "posting_date",
+   "label": "拟入账日期",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "nutrition_plan",
+   "label": "营养改善计划",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Nutrition Improvement Plan"
+  },
+  {
+   "fieldname": "financial_project",
+   "label": "会计项目",
+   "fieldtype": "Link",
+   "options": "Project"
+  },
+  {
+   "fieldname": "external_reference",
+   "label": "拨付文号 / 业务依据编号",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "amount",
+   "label": "确认金额",
+   "fieldtype": "Currency",
+   "reqd": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "evidence",
+   "label": "资金依据附件",
+   "fieldtype": "Attach"
+  },
+  {
+   "fieldname": "debit_account",
+   "label": "借方科目",
+   "fieldtype": "Link",
+   "options": "Account"
+  },
+  {
+   "fieldname": "credit_account",
+   "label": "贷方科目",
+   "fieldtype": "Link",
+   "options": "Account"
+  },
+  {
+   "fieldname": "policy",
+   "label": "财务规则",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "options": "Tongjianyun Canteen Policy"
+  },
+  {
+   "fieldname": "journal_entry",
+   "label": "原生记账凭证",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Journal Entry",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "remarks",
+   "label": "说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Finance Request"
+  }
+ ]
+}

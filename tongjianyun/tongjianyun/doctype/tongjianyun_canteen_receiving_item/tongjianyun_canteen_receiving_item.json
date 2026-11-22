@@ -1,0 +1,127 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Receiving Item",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "istable": 1,
+ "editable_grid": 1,
+ "permissions": [],
+ "field_order": [
+  "delivery_item",
+  "item_code",
+  "expected_qty",
+  "uom",
+  "lot_number",
+  "expires_on",
+  "evidence_status",
+  "gross_weight",
+  "tare_weight",
+  "net_weight",
+  "accepted_qty",
+  "rejected_qty",
+  "batch_no",
+  "reason",
+  "evidence_verified"
+ ],
+ "fields": [
+  {
+   "fieldname": "delivery_item",
+   "label": "配送明细编号",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_code",
+   "label": "食材",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1,
+   "options": "Item"
+  },
+  {
+   "fieldname": "expected_qty",
+   "label": "随货数量",
+   "fieldtype": "Float",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "uom",
+   "label": "采购单位",
+   "fieldtype": "Link",
+   "options": "UOM",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lot_number",
+   "label": "随货批号",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_on",
+   "label": "随货效期",
+   "fieldtype": "Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence_status",
+   "label": "票证核对结果",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gross_weight",
+   "label": "实称毛重（公斤）",
+   "fieldtype": "Float",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "tare_weight",
+   "label": "实称皮重（公斤）",
+   "fieldtype": "Float",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "net_weight",
+   "label": "净重（公斤）",
+   "fieldtype": "Float",
+   "read_only": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "accepted_qty",
+   "label": "合格数量（采购单位）",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "rejected_qty",
+   "label": "拒收数量（采购单位）",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "label": "食材追溯批号",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason",
+   "label": "差异或拒收原因",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "evidence_verified",
+   "label": "已人工核对该批票证",
+   "fieldtype": "Check"
+  }
+ ]
+}

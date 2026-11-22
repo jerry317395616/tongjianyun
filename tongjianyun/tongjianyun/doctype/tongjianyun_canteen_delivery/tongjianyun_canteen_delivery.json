@@ -1,0 +1,217 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Delivery",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-DEL-{#####}",
+ "title_field": "purchase_order",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食食品安全监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食供应商",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "supplier",
+  "purchase_order",
+  "expected_on",
+  "package_reference",
+  "qr_token",
+  "progress",
+  "progress_at",
+  "progress_note",
+  "items",
+  "evidence",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "supplier",
+   "label": "供应商",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "purchase_order",
+   "label": "采购订单",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "Purchase Order"
+  },
+  {
+   "fieldname": "expected_on",
+   "label": "预计到货日",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "package_reference",
+   "label": "随货单号",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "qr_token",
+   "label": "随货二维码令牌",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "progress",
+   "label": "配送状态",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "read_only": 1,
+   "options": "待接单\n已接单\n备货\n分拣\n配送\n到货\n拒接",
+   "default": "待接单",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "progress_at",
+   "label": "状态更新时间",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "progress_note",
+   "label": "缺货、延迟或拒接说明",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "items",
+   "label": "配送批次明细",
+   "fieldtype": "Table",
+   "options": "Tongjianyun Canteen Delivery Item"
+  },
+  {
+   "fieldname": "evidence",
+   "label": "随货票证及检验报告",
+   "fieldtype": "Table",
+   "options": "Tongjianyun Canteen Delivery Evidence",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "remarks",
+   "label": "说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Delivery"
+  }
+ ]
+}

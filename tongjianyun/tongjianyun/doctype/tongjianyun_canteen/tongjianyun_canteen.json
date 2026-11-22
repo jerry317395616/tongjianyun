@@ -1,0 +1,201 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:CANTEEN-{#####}",
+ "title_field": "canteen_name",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "HR User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "HR Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食食品安全监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食财政监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食供应商",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen_name",
+  "region",
+  "district",
+  "location_column",
+  "raw_warehouse",
+  "kitchen_warehouse",
+  "quarantine_warehouse",
+  "manager",
+  "site_address",
+  "disabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen_name",
+   "label": "食堂名称",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "region",
+   "label": "市级行政区",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "district",
+   "label": "区县",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "location_column",
+   "label": "",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "raw_warehouse",
+   "label": "原料仓",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "kitchen_warehouse",
+   "label": "厨房仓",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "quarantine_warehouse",
+   "label": "隔离仓",
+   "fieldtype": "Link",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "manager",
+   "label": "食堂责任人",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "site_address",
+   "label": "验收地址",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "disabled",
+   "label": "停用",
+   "fieldtype": "Check"
+  }
+ ]
+}

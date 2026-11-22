@@ -1,0 +1,27 @@
+{
+ "doctype": "Report",
+ "name": "Tongjianyun Canteen Quotation Comparison",
+ "report_name": "Tongjianyun Canteen Quotation Comparison",
+ "is_standard": "Yes",
+ "module": "Tongjianyun",
+ "ref_doctype": "Tongjianyun Canteen",
+ "report_type": "Script Report",
+ "disabled": 0,
+ "prepared_report": 0,
+ "disable_prepared_report_automation": 1,
+ "add_total_row": 0,
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Purchase User"
+  },
+  {
+   "role": "Purchase Manager"
+  },
+  {
+   "role": "膳食财政监管"
+  }
+ ]
+}

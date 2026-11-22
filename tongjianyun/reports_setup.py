@@ -3,10 +3,13 @@ from pathlib import Path
 
 import frappe
 
+from tongjianyun.canteen_ops.setup import report_names
+from tongjianyun.canteen_ops.reminders import METHOD as _EXPIRY_REMINDER
+
 REPORTS = (
     "Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger",
     "Tongjianyun Ingredient Analysis", "Tongjianyun Canteen Staffing Analysis",
-)
+) + report_names()
 
 
 def install():
@@ -31,7 +34,7 @@ def install():
             for name in frappe.get_all("Desktop Icon", filters={"app": "tongjianyun"}, pluck="name"):
                 frappe.db.set_value("Desktop Icon", name, "link", "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu")
         for row in frappe.get_all("Scheduled Job Type", filters={"method": ["like", "tongjianyun.%"]}, fields=["name", "stopped"]):
-            if not row.stopped:
+            if row.method != _EXPIRY_REMINDER and not row.stopped:
                 frappe.db.set_value("Scheduled Job Type", row.name, "stopped", 1)
         for row in frappe.get_all("Report", filters={"module": "Tongjianyun"}, fields=["name", "disabled"]):
             if row.name not in REPORTS and not row.disabled:

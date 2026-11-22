@@ -1,0 +1,170 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Training",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-TRAIN-{#####}",
+ "title_field": "topic",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食食品安全监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "HR User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "HR Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "employee",
+  "designation",
+  "topic",
+  "training_date",
+  "trainer",
+  "result",
+  "hours",
+  "evidence",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "employee",
+   "label": "员工",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Employee"
+  },
+  {
+   "fieldname": "designation",
+   "label": "岗位",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "options": "Designation"
+  },
+  {
+   "fieldname": "topic",
+   "label": "培训主题",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "training_date",
+   "label": "培训日期",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "trainer",
+   "label": "培训单位或讲师",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "result",
+   "label": "考核结果",
+   "fieldtype": "Select",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "合格\n待补训\n未通过"
+  },
+  {
+   "fieldname": "hours",
+   "label": "培训时长（小时）",
+   "fieldtype": "Float",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "evidence",
+   "label": "证明或签到表",
+   "fieldtype": "Attach"
+  },
+  {
+   "fieldname": "remarks",
+   "label": "说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Training"
+  }
+ ]
+}

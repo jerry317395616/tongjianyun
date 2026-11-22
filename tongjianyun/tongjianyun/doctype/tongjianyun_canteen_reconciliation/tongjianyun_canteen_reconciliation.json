@@ -1,0 +1,189 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Reconciliation",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-RECNC-{#####}",
+ "title_field": "supplier",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食财政监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食供应商",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "supplier",
+  "from_date",
+  "to_date",
+  "currency",
+  "supplier_statement_no",
+  "supplier_response",
+  "supplier_confirmed_at",
+  "net_total",
+  "policy",
+  "items",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "supplier",
+   "label": "供应商",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "from_date",
+   "label": "起始日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "to_date",
+   "label": "结束日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "currency",
+   "label": "币种",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "Currency"
+  },
+  {
+   "fieldname": "supplier_statement_no",
+   "label": "供应商对账回执号",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "supplier_response",
+   "label": "供应商书面确认",
+   "fieldtype": "Attach"
+  },
+  {
+   "fieldname": "supplier_confirmed_at",
+   "label": "供应商确认时间",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "net_total",
+   "label": "本期无争议税前金额",
+   "fieldtype": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "policy",
+   "label": "财务流程规则",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "options": "Tongjianyun Canteen Policy"
+  },
+  {
+   "fieldname": "items",
+   "label": "按验收明细核对",
+   "fieldtype": "Table",
+   "options": "Tongjianyun Canteen Reconciliation Item",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "remarks",
+   "label": "说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Reconciliation"
+  }
+ ]
+}

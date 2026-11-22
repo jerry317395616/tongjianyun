@@ -1,0 +1,235 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Finding",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-FIND-{#####}",
+ "title_field": "finding_title",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "HR User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "HR Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食食品安全监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食财政监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen",
+  "finding_title",
+  "category",
+  "finding_key",
+  "source_type",
+  "source",
+  "due_date",
+  "assigned_to",
+  "description",
+  "progress",
+  "rectification",
+  "evidence",
+  "review_note"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "finding_title",
+   "label": "问题",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "category",
+   "label": "类型",
+   "fieldtype": "Select",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "采购与验收\n库存\n供餐\n人员与证照\n食品安全\n专项与财务"
+  },
+  {
+   "fieldname": "finding_key",
+   "label": "规则命中编号",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "source_type",
+   "label": "来源类型",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "DocType"
+  },
+  {
+   "fieldname": "source",
+   "label": "来源单据",
+   "fieldtype": "Dynamic Link",
+   "reqd": 1,
+   "options": "source_type"
+  },
+  {
+   "fieldname": "due_date",
+   "label": "整改期限",
+   "fieldtype": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "assigned_to",
+   "label": "整改责任人",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "description",
+   "label": "问题事实",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "progress",
+   "label": "整改进度",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "read_only": 1,
+   "options": "待整改\n待复核\n已销项",
+   "default": "待整改"
+  },
+  {
+   "fieldname": "rectification",
+   "label": "整改说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "evidence",
+   "label": "整改证据",
+   "fieldtype": "Attach"
+  },
+  {
+   "fieldname": "review_note",
+   "label": "复核意见",
+   "fieldtype": "Small Text"
+  }
+ ]
+}

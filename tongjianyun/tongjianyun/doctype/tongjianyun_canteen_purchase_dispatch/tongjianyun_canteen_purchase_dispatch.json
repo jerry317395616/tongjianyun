@@ -1,0 +1,175 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Purchase Dispatch",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-DISPATCH-{#####}",
+ "title_field": "material_request",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "meal_week",
+  "meal_adjustment",
+  "material_request",
+  "procurement_mode",
+  "policy",
+  "assigned_to",
+  "order_by",
+  "needed_by",
+  "dispatched_at",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "meal_week",
+   "label": "周食谱",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Meal Planning Week"
+  },
+  {
+   "fieldname": "meal_adjustment",
+   "label": "来源单餐变更",
+   "fieldtype": "Link",
+   "options": "Meal Plan Adjustment"
+  },
+  {
+   "fieldname": "material_request",
+   "label": "采购申请",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "Material Request"
+  },
+  {
+   "fieldname": "procurement_mode",
+   "label": "采购模式",
+   "fieldtype": "Select",
+   "reqd": 1,
+   "read_only": 1,
+   "options": "校内采购\n框架协议采购\n区域集中采购"
+  },
+  {
+   "fieldname": "policy",
+   "label": "执行规则",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "read_only": 1,
+   "options": "Tongjianyun Canteen Policy"
+  },
+  {
+   "fieldname": "assigned_to",
+   "label": "采购受理人",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "read_only": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "order_by",
+   "label": "建议下单日期",
+   "fieldtype": "Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "needed_by",
+   "label": "最早到货日期",
+   "fieldtype": "Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dispatched_at",
+   "label": "下发时间",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "remarks",
+   "label": "说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Purchase Dispatch"
+  }
+ ]
+}

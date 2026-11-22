@@ -1,0 +1,240 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Receiving",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-REC-{#####}",
+ "title_field": "delivery",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Purchase User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食食品安全监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "delivery",
+  "supplier",
+  "arrived_at",
+  "field_section",
+  "photo",
+  "position",
+  "accuracy",
+  "location_at",
+  "location_note",
+  "received_at",
+  "inspector",
+  "reviewer",
+  "purchase_receipt",
+  "items",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "delivery",
+   "label": "随货配送批次",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "Tongjianyun Canteen Delivery"
+  },
+  {
+   "fieldname": "supplier",
+   "label": "供应商",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "arrived_at",
+   "label": "实际到货时间",
+   "fieldtype": "Datetime",
+   "reqd": 1
+  },
+  {
+   "fieldname": "field_section",
+   "label": "现场证据",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "photo",
+   "label": "验收照片",
+   "fieldtype": "Attach Image"
+  },
+  {
+   "fieldname": "position",
+   "label": "验收定位（经纬度）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "accuracy",
+   "label": "定位精度（米）",
+   "fieldtype": "Float",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "location_at",
+   "label": "定位时间",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "location_note",
+   "label": "定位缺失说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "received_at",
+   "label": "服务器验收时间",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "inspector",
+   "label": "现场验收员",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "reviewer",
+   "label": "复核人",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "purchase_receipt",
+   "label": "原生采购收货单",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Purchase Receipt"
+  },
+  {
+   "fieldname": "items",
+   "label": "称重与验收数量",
+   "fieldtype": "Table",
+   "options": "Tongjianyun Canteen Receiving Item"
+  },
+  {
+   "fieldname": "remarks",
+   "label": "说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Receiving"
+  }
+ ]
+}

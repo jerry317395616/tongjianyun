@@ -1,0 +1,104 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Reconciliation Item",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "istable": 1,
+ "editable_grid": 1,
+ "permissions": [],
+ "field_order": [
+  "purchase_receipt",
+  "receipt_item",
+  "item_code",
+  "quantity",
+  "unit_rate",
+  "net_value",
+  "purpose",
+  "nutrition_plan",
+  "purchase_invoice",
+  "disputed",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "purchase_receipt",
+   "label": "采购收货单",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "Purchase Receipt"
+  },
+  {
+   "fieldname": "receipt_item",
+   "label": "收货明细编号",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_code",
+   "label": "食材",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "Item"
+  },
+  {
+   "fieldname": "quantity",
+   "label": "本次结算数量",
+   "fieldtype": "Float",
+   "reqd": 1,
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "unit_rate",
+   "label": "发票币种单价",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "net_value",
+   "label": "税前核对金额",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "purpose",
+   "label": "采购用途",
+   "fieldtype": "Select",
+   "read_only": 1,
+   "options": "普通\n专项\n未标识"
+  },
+  {
+   "fieldname": "nutrition_plan",
+   "label": "营养改善计划",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "options": "Tongjianyun Nutrition Improvement Plan"
+  },
+  {
+   "fieldname": "purchase_invoice",
+   "label": "原生采购发票",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Purchase Invoice",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "disputed",
+   "label": "争议行，暂缓结算",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "reason",
+   "label": "争议或差异说明",
+   "fieldtype": "Small Text"
+  }
+ ]
+}

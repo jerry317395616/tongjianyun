@@ -1,0 +1,171 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Subsidy Confirmation",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "autoname": "format:MEAL-SUBSIDY-{#####}",
+ "title_field": "meal_day",
+ "track_changes": 1,
+ "allow_rename": 0,
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食教育监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "role": "膳食财政监管",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "is_submittable": 1,
+ "field_order": [
+  "company",
+  "canteen",
+  "meal_day",
+  "meal_date",
+  "meal_type",
+  "nutrition_plan",
+  "confirmed_people",
+  "subsidy_rate",
+  "subsidy_total",
+  "evidence",
+  "remarks",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "meal_day",
+   "label": "厨房执行日",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Meal Kitchen Day"
+  },
+  {
+   "fieldname": "meal_date",
+   "label": "供餐日期",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "meal_type",
+   "label": "餐次",
+   "fieldtype": "Select",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "早餐\n早点\n午餐\n午点\n晚餐"
+  },
+  {
+   "fieldname": "nutrition_plan",
+   "label": "营养改善计划",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Nutrition Improvement Plan"
+  },
+  {
+   "fieldname": "confirmed_people",
+   "label": "核实受益人次",
+   "fieldtype": "Int",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "subsidy_rate",
+   "label": "每人次补助标准",
+   "fieldtype": "Currency",
+   "reqd": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "subsidy_total",
+   "label": "核实应享金额",
+   "fieldtype": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence",
+   "label": "人数核对依据",
+   "fieldtype": "Attach"
+  },
+  {
+   "fieldname": "remarks",
+   "label": "说明",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "amended_from",
+   "label": "修订自",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "no_copy": 1,
+   "options": "Tongjianyun Canteen Subsidy Confirmation"
+  }
+ ]
+}

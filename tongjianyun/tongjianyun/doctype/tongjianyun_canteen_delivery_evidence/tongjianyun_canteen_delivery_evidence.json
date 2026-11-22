@@ -1,0 +1,74 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Canteen Delivery Evidence",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "istable": 1,
+ "editable_grid": 1,
+ "permissions": [],
+ "field_order": [
+  "evidence_type",
+  "item_code",
+  "lot_number",
+  "reference_no",
+  "valid_until",
+  "attachment",
+  "added_by",
+  "added_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "evidence_type",
+   "label": "票证类型",
+   "fieldtype": "Select",
+   "reqd": 1,
+   "in_list_view": 1,
+   "options": "送货单\n产品合格证明\n同批次检验报告\n检疫证明\n肉品品质检验合格证\n食品经营资质\n其他票证"
+  },
+  {
+   "fieldname": "item_code",
+   "label": "对应食材",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "options": "Item"
+  },
+  {
+   "fieldname": "lot_number",
+   "label": "适用批号",
+   "fieldtype": "Data",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reference_no",
+   "label": "票证号",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "valid_until",
+   "label": "有效期",
+   "fieldtype": "Date"
+  },
+  {
+   "fieldname": "attachment",
+   "label": "票证或检验报告",
+   "fieldtype": "Attach",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "added_by",
+   "label": "补充人",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "added_at",
+   "label": "补充时间",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  }
+ ]
+}
