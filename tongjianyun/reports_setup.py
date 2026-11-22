@@ -3,7 +3,10 @@ from pathlib import Path
 
 import frappe
 
-REPORTS = ("Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger")
+REPORTS = (
+    "Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger",
+    "Tongjianyun Ingredient Analysis",
+)
 
 
 def install():
