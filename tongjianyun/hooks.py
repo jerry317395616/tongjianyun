@@ -11,13 +11,17 @@ required_apps = ["erpnext", "ione_core"]
 app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
 add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]
-after_install = ["tongjianyun.reports_setup.install", "tongjianyun.standard_recipe_setup.install"]
+after_install = [
+    "tongjianyun.reports_setup.install",
+    "tongjianyun.standard_recipe_setup.install",
+    "tongjianyun.special_orders.install",
+]
 after_migrate = after_install
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",
     "Item": "public/js/standard_dishes.js",
-    "Meal Planning Week": ["public/js/weekly_menu_editor.js", "public/js/special_ingredients.js"],
-    "Meal Plan Adjustment": "public/js/special_ingredients.js",
+    "Meal Planning Week": ["public/js/weekly_menu_editor.js", "public/js/special_ingredients.js", "public/js/special_orders.js"],
+    "Meal Plan Adjustment": ["public/js/special_ingredients.js", "public/js/special_orders.js"],
 }
 doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js"}
 extend_doctype_class = {"Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"]}
@@ -28,6 +32,18 @@ doc_events = {
         "on_submit": "tongjianyun.special_ingredients.freeze",
     },
     "Meal Plan Adjustment": {"on_submit": "tongjianyun.special_ingredients.freeze"},
+    "Material Request": {
+        event: "tongjianyun.special_orders.check_request"
+        for event in ("validate", "before_submit", "before_update_after_submit")
+    },
+    "Purchase Order": {
+        event: "tongjianyun.special_orders.check_order"
+        for event in ("validate", "before_submit", "before_update_after_submit")
+    },
+    "Purchase Receipt": {
+        event: "tongjianyun.special_orders.check_receipt"
+        for event in ("validate", "before_update_after_submit")
+    },
     "BOM": {
         "validate": "tongjianyun.standard_recipes.validate_recipe",
         "before_save": "tongjianyun.standard_recipes.save_draft",
