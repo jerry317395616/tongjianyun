@@ -59,7 +59,9 @@ class ArchiveBoundaryTests(unittest.TestCase):
 
     def test_legacy_schema_and_operational_endpoints_are_absent(self):
         root = Path(__file__).parents[1]
-        self.assertFalse(list((root / "tongjianyun/doctype").rglob("*.json")))
+        active = {json.loads(path.read_text(encoding="utf-8"))["name"]
+                  for path in (root / "tongjianyun/doctype").rglob("*.json")}
+        self.assertTrue(active.isdisjoint(self.module.LEGACY_DOCTYPES))
         for file in ("recipe_storage.py", "recipe_import.py", "meal_scene.py", "meal_chat.py", "daily_meals.py", "mcp_tools.py", "education_integration.py"):
             self.assertFalse((root / file).exists(), file)
         pages = root / "tongjianyun/page"

@@ -16,13 +16,18 @@ after_migrate = after_install
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",
     "Item": "public/js/standard_dishes.js",
-    "Meal Planning Week": "public/js/weekly_menu_editor.js",
+    "Meal Planning Week": ["public/js/weekly_menu_editor.js", "public/js/special_ingredients.js"],
+    "Meal Plan Adjustment": "public/js/special_ingredients.js",
 }
 doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js"}
 extend_doctype_class = {"Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"]}
 doc_events = {
     "Item": {"before_insert": "tongjianyun.dish_library.validate_new_dish"},
-    "Meal Planning Week": {"validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission"},
+    "Meal Planning Week": {
+        "validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission",
+        "on_submit": "tongjianyun.special_ingredients.freeze",
+    },
+    "Meal Plan Adjustment": {"on_submit": "tongjianyun.special_ingredients.freeze"},
     "BOM": {
         "validate": "tongjianyun.standard_recipes.validate_recipe",
         "before_save": "tongjianyun.standard_recipes.save_draft",

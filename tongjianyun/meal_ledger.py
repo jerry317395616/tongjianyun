@@ -9,9 +9,12 @@ from frappe.utils import cint, flt, getdate
 from ione_core import meal_kitchen
 from ione_core.meal_adjustments import get_effective_meals
 
+from tongjianyun import special_ingredients
+
 WEEK = "Meal Planning Week"
 DAY = "Meal Kitchen Day"
 SUMMARY, MEALS, STOCK, PURCHASE = "按日汇总", "餐次核对", "食材流水", "采购与日结"
+SPECIAL = "专项食材"
 NO_DAY, OPEN_DAY, CLOSED_DAY, UNVERIFIED_DAY = "暂无执行记录", "待日结", "已日结", "日结依据待核对"
 
 
@@ -55,6 +58,25 @@ def columns(view):
             *(_column(name, label, "Float", 100, precision=9) for name, label in amounts),
             _column("stock_entries", "来源库存单", width=235), _column("note", "核对说明", width=220), day,
         ]
+    if view == SPECIAL:
+        return shared + [
+            _column("meal_type", "餐次", width=75),
+            _column("item_code", "食材", "Link", 125, options="Item"),
+            _column("item_name", "食材名称", width=145),
+            _column("planned_people", "计划供餐人数", "Int", 110),
+            _column("eligible_people", "专项计划人数", "Int", 110),
+            _column("stock_uom", "库存单位", width=86),
+            _column("special_qty", "专项需求量", "Float", 108, precision=9),
+            _column("ordinary_qty", "普通需求量", "Float", 108, precision=9),
+            _column("purchase_qty", "合计拟采购量", "Float", 115, precision=9),
+            _column("purchase_uom", "采购单位", width=86),
+            _column("special_status", "用途归属", width=90),
+            _column("plan_title", "营养改善计划", width=145),
+            _column("plan_version", "计划版本时间", "Datetime", 155),
+            _column("basis_doctype", "审核来源类型", hidden=1),
+            _column("basis_source", "审核来源", "Dynamic Link", 160, options="basis_doctype"),
+            _column("reason", "人数核对依据", width=170),
+        ]
     return shared + [
         _column("kind", "记录类型", width=120),
         _column("source_doctype", "来源单据类型", hidden=1),
@@ -66,7 +88,7 @@ def columns(view):
 def execute(filters=None):
     filters = frappe._dict(filters or {})
     view = filters.get("view") or SUMMARY
-    if view not in (SUMMARY, MEALS, STOCK, PURCHASE):
+    if view not in (SUMMARY, MEALS, STOCK, PURCHASE, SPECIAL):
         frappe.throw("请选择有效的台账视图。")
     frappe.has_permission(WEEK, "read", throw=True)
     frappe.has_permission(DAY, "read", throw=True)
@@ -80,6 +102,11 @@ def execute(filters=None):
     rows = []
     for week, daily in _weeks(filters, start, end):
         visible_days = [day for day in daily if not filters.get("day_status") or day.status == filters.day_status]
+        if view == SPECIAL:
+            meals = [meal for context in visible_days for meal in context.plans.values()]
+            status = filters.get("special_status") or special_ingredients.SPECIAL
+            rows.extend(_special_rows(week, meals, status))
+            continue
         for context in visible_days:
             if view == SUMMARY:
                 rows.append(_summary(week, context))
@@ -92,6 +119,14 @@ def execute(filters=None):
         if view == PURCHASE and visible_days:
             rows.extend(_purchase(week))
     return columns(view), rows
+
+
+def _special_rows(week, meals, status):
+    for row in special_ingredients.ledger_rows(week, meals):
+        if status != "全部" and row["special_status"] != status:
+            continue
+        yield {**row, "company": week.company, "meal_week": week.name,
+               **{field: flt(row[field]) for field in ("special_qty", "ordinary_qty", "purchase_qty")}}
 
 
 def _weeks(filters, start, end):

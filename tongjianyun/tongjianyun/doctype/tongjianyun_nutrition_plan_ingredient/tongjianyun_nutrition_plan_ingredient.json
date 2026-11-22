@@ -1,0 +1,30 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Nutrition Plan Ingredient",
+ "module": "Tongjianyun",
+ "editable_grid": 1,
+ "fields": [
+  {
+   "fieldname": "meal_type",
+   "label": "餐次",
+   "fieldtype": "Select",
+   "options": "早餐\n早点\n午餐\n午点\n晚餐",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "item_code",
+   "label": "食材",
+   "fieldtype": "Link",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1
+  }
+ ],
+ "field_order": [
+  "meal_type",
+  "item_code"
+ ],
+ "istable": 1,
+ "permissions": []
+}

@@ -208,6 +208,7 @@ def _install_sidebar():
     _install_dish_link()
     _install_week_link()
     _install_meal_ledger_link()
+    _install_sidebar_link("DocType", "Tongjianyun Nutrition Improvement Plan", "营养改善计划", "list-checks")
 
 
 def _install_dish_link():

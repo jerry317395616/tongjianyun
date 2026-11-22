@@ -54,3 +54,11 @@ test("the ledger separates missing and zero counts and treats report text as tex
 	assert.equal(formatter("", null, { fieldname: "stock_entries" }, { stock_entry_names: ["STE-1/2"] }),
 		'<a href="/desk/stock-entry/STE-1%2F2">STE-1/2</a>');
 });
+
+test("the special ingredient view defaults to demand that includes programme quantities", () => {
+	const { filters } = reportSettings();
+	assert.ok(filters.find((field) => field.fieldname === "view").options.includes("专项食材"));
+	const status = filters.find((field) => field.fieldname === "special_status");
+	assert.equal(status.default, "含专项");
+	assert.deepEqual(Array.from(status.options), ["含专项", "普通", "全部"]);
+});
