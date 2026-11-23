@@ -16,7 +16,8 @@
 		}
 	});
 	function loadStyles() {
-		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-composer"))
+		// The Frappe asset loader looks for the file extension after the version query.
+		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-composer.css"))
 			.catch(() => { styles = undefined; });
 	}
 	function dateLabel(value, year = false) {
