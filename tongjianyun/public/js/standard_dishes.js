@@ -3,14 +3,20 @@
 	const recipeLayout = "标准菜品";
 	const reuseLabel = "使用同名菜品";
 	const previewField = "custom_tjy_dish_recipe_preview";
-	let activeEditor;
+	const ingredientColumns = [
+		{ id: "item_code", name: "食材", width: 30, link: "Item" },
+		{ id: "gross", name: "每份采购毛用量", width: 22, align: "right" },
+		{ id: "net", name: "每份可食净量", width: 22, align: "right" },
+		{ id: "uom", name: "单位", width: 17, link: "UOM" },
+	];
+	let activeRecipePanel;
 
-	function closeIngredientEditor() {
-		activeEditor?.dispose?.();
-		activeEditor = null;
+	function closeRecipePanel() {
+		activeRecipePanel?.dispose?.();
+		activeRecipePanel = null;
 	}
 
-	frappe.router?.on?.("change", closeIngredientEditor);
+	frappe.router?.on?.("change", closeRecipePanel);
 
 	function openRecipe(name) {
 		frappe.route_options = { layout: recipeLayout };
@@ -47,24 +53,19 @@
 			.text(label).on("click", action).appendTo($container);
 	}
 
-	function ingredientTable($container, rows, label) {
-		if (!rows?.length) {
-			$("<div>", { class: "text-muted" }).text(rows ? "暂无食材明细。" : "当前账号无权查看食材明细。").appendTo($container);
-			return;
-		}
-		const $table = $("<table>", { class: "table table-bordered table-sm mb-0", "aria-label": label })
-			.appendTo($("<div>", { class: "table-responsive" }).appendTo($container));
-		const $head = $("<tr>").appendTo($("<thead>").appendTo($table));
-		for (const title of ["食材名称", "每份采购毛用量", "每份可食净量", "单位"]) {
-			$("<th>", { scope: "col" }).text(title).appendTo($head);
-		}
-		const $body = $("<tbody>").appendTo($table);
-		for (const row of rows) {
-			const $line = $("<tr>").appendTo($body);
-			for (const value of [row.name, row.gross, row.net, row.uom]) {
-				$("<td>").text(value ?? "—").appendTo($line);
-			}
-		}
+	function escapeCell(value) {
+		return frappe.utils.escape_html(String(value ?? ""));
+	}
+
+	function mountIngredientTable($container, label, columns, data, options = {}) {
+		const $grid = $("<div>", { "aria-label": label, style: "min-width: 540px" })
+			.appendTo($("<div>", { class: "table-responsive mb-2" }).appendTo($container));
+		const table = new frappe.DataTable($grid[0], {
+			columns: columns.map((column) => ({ sortable: false, dropdown: false, ...column })),
+			data, layout: "ratio", serialNoColumn: false, disableReorderColumn: true,
+			clusterize: false, noDataMessage: "暂无食材明细", ...options,
+		});
+		return { $grid, table };
 	}
 
 	function positionLinkOptions(control) {
@@ -144,28 +145,21 @@
 		if (!rows.length) rows.push({});
 		const names = new Map(rows.filter((row) => row.name).map((row) => [row.item_code, row.name]));
 		const defaults = new Set();
-		const escape = (value) => frappe.utils.escape_html(String(value ?? ""));
 		let disposed = false;
 		let changingRows = false;
-		$("<h6>", { class: "mb-2" }).text(source.mode === "revision" ? "编辑新版配方草稿" : "编辑配方草稿").appendTo($editor);
 		$("<p>", { class: "text-muted small mb-2" }).text("双击单元格或按 Enter 编辑，按 Tab 切换。").appendTo($editor);
-		const $grid = $("<div>", { "aria-label": "编辑食材明细", style: "min-width: 540px" })
-			.appendTo($("<div>", { class: "table-responsive mb-2" }).appendTo($editor));
 		const columns = [
-			{ id: "item_code", name: "食材", width: 30, link: "Item", format: (code) => escape(names.get(code) || code) },
-			{ id: "gross", name: "每份采购毛用量", width: 22, format: escape },
-			{ id: "net", name: "每份可食净量", width: 22, format: escape },
-			{ id: "uom", name: "单位", width: 17, link: "UOM", format: escape },
+			...ingredientColumns.map((column) => ({
+				...column, format: column.id === "item_code" ? (code) => escapeCell(names.get(code) || code) : escapeCell,
+			})),
 			{ id: "remove", name: "操作", width: 9, editable: false, focusable: false,
 				format: (index) => `<button type="button" class="btn btn-xs btn-default text-nowrap" data-remove-ingredient="${Number(index)}">删除</button>` },
-		].map((column) => ({ sortable: false, dropdown: false, ...column }));
+		];
 		const gridData = () => rows.map((row, index) => [
 			{ content: row.item_code || "", editable: !row.row }, String(row.gross ?? ""), String(row.net ?? ""),
 			row.uom || "", index,
 		]);
-		const table = new frappe.DataTable($grid[0], {
-			columns, data: gridData(), layout: "ratio", serialNoColumn: false,
-			disableReorderColumn: true, clusterize: false, noDataMessage: "暂无食材明细",
+		const { $grid, table } = mountIngredientTable($editor, "编辑食材明细", columns, gridData(), {
 			getEditor(_column, index, _value, parent, column) {
 				const row = rows[index];
 				const acceptSelection = () => cells.deactivateEditing();
@@ -279,102 +273,128 @@
 		return () => {
 			disposed = true;
 			table.destroy();
-			$editor.empty();
 		};
 	}
 
-	async function loadIngredientEditor($editor, dish, company, onClose, onSaved) {
-		const session = {};
-		activeEditor = session;
-		$editor.text("正在加载配方草稿…");
-		try {
-			const [{ message }] = await Promise.all([
-				frappe.call({ method: "tongjianyun.dish_recipe_editor.load_editor", type: "GET", args: { dish, company } }),
-				frappe.require("report.bundle.css"),
-			]);
-			if (activeEditor === session) {
-				session.dispose = renderIngredientEditor($editor.empty(), dish, company, message, onClose, onSaved);
-			}
-		} catch {
-			if (activeEditor === session) {
-				onClose();
-				frappe.show_alert({ message: "无法加载配方草稿，请重试。", indicator: "red" });
-			}
-		}
-	}
-
-	function renderPreview($content, $wrapper, dish, preview) {
+	function renderPreview($content, $wrapper, dish, preview, panel) {
 		const { current, draft, company, companies, can_create_recipe } = preview;
-		const $header = $("<div>", { class: "d-flex flex-wrap align-items-baseline justify-content-between" }).appendTo($content);
+		const draftLabel = draft?.state === "待审核" ? "待审核配方" : "配方草稿";
+		let selected = draft || current;
+		const $header = $("<div>", { class: "d-flex flex-wrap align-items-center justify-content-between" }).appendTo($content);
+		const $context = $("<div>", { class: "d-flex flex-wrap align-items-center" }).appendTo($header);
 		if (companies.length > 1) {
-			const $label = $("<label>", { class: "d-flex align-items-center text-muted mb-2" }).text("机构").appendTo($header);
+			const $label = $("<label>", { class: "d-flex align-items-center text-muted mb-2 mr-2" }).text("机构").appendTo($context);
 			const $select = $("<select>", { class: "form-control input-xs ml-2" }).appendTo($label);
 			if (!company) $("<option>", { value: "", disabled: true }).text("请选择").appendTo($select);
 			for (const name of companies) $("<option>", { value: name }).text(name).appendTo($select);
 			$select.val(company || "").on("change", () => loadPreview($wrapper, dish, $select.val()));
 		} else if (company) {
-			$("<span>", { class: "text-muted mb-2" }).text(company).appendTo($header);
+			$("<span>", { class: "text-muted mb-2 mr-2" }).text(company).appendTo($context);
+		}
+		const $version = $("<div>", { class: "mb-2 mr-2" }).appendTo($context);
+		const $actions = $("<div>", { class: "ml-auto" }).appendTo($header);
+		const $body = $("<div>").appendTo($content);
+
+		function clearGrid() {
+			panel.dispose?.();
+			panel.dispose = null;
+			$body.empty();
 		}
 
-		const $actions = $("<div>", { class: "ml-auto" }).appendTo($header);
-		const $editor = $("<div>", { class: "mt-3" });
-		const startEditor = (selectedCompany) => {
-			$header.find("button, select").prop("disabled", true);
-			return loadIngredientEditor($editor, dish.name, selectedCompany, () => {
-				closeIngredientEditor();
-				$editor.empty();
-				$header.find("button, select").prop("disabled", false);
-			}, () => loadPreview($wrapper, dish, selectedCompany));
-		};
-		const openEditor = () => {
+		async function startEditor(selectedCompany) {
+			if (activeRecipePanel !== panel) return;
+			clearGrid();
+			$actions.empty();
+			$version.text("配方草稿");
+			$context.find("select").prop("disabled", true);
+			$body.text("正在加载配方草稿…");
+			try {
+				const { message } = await frappe.call({
+					method: "tongjianyun.dish_recipe_editor.load_editor", type: "GET",
+					args: { dish: dish.name, company: selectedCompany },
+				});
+				if (activeRecipePanel !== panel) return;
+				$version.text(message.mode === "revision" ? "新版配方草稿" : "配方草稿");
+				panel.dispose = renderIngredientEditor($body.empty(), dish.name, selectedCompany, message, renderVersion,
+					() => loadPreview($wrapper, dish, selectedCompany));
+			} catch {
+				if (activeRecipePanel !== panel) return;
+				renderVersion();
+				frappe.show_alert({ message: "无法加载配方草稿，请重试。", indicator: "red" });
+			}
+		}
+
+		function openEditor() {
 			if (company) return startEditor(company);
 			return frappe.prompt([{ fieldname: "company", fieldtype: "Link", label: "机构", options: "Company", reqd: 1 }],
 				({ company: selectedCompany }) => startEditor(selectedCompany), "选择机构", "继续");
-		};
-		if (draft) {
-			if (draft.can_edit && draft.inline_edit !== false) recipeAction($actions, "继续编辑", openEditor, true);
-			const label = draft.state === "待审核" ? "查看待审核配方" : "打开草稿";
-			recipeAction($actions, label, () => openRecipe(draft.name));
-		} else if (can_create_recipe && (company || !companies.length)) {
-			if (current?.inline_edit === false) {
-				recipeAction($actions, "复制为新版", () => copyRecipe(dish.name, current.name));
-			} else {
-				recipeAction($actions, current ? "编辑配方" : "添加食材", openEditor, true);
-			}
 		}
-		recipeAction($actions, "查看配方", () => viewRecipes(dish.name, company));
 
-		if (current) {
-			const $status = $("<div>", { class: "d-flex flex-wrap align-items-center mb-2" }).appendTo($content);
-			$("<span>", { class: "indicator-pill green mr-2" }).text("在用配方").appendTo($status);
-			$("<button>", { type: "button", class: "btn btn-link btn-xs mr-2" })
-				.text(current.name).on("click", () => openRecipe(current.name)).appendTo($status);
-			ingredientTable($content, current.ingredients, "在用配方食材");
-		} else {
-			const hint = !company && companies.length ? "请选择机构查看配方。" : "暂无在用配方。";
-			$("<div>", { class: "text-muted" }).text(hint).appendTo($content);
+		function renderVersion() {
+			clearGrid();
+			$actions.empty();
+			$version.empty();
+			$context.find("select").prop("disabled", false);
+			if (current && draft) {
+				const $select = $("<select>", { class: "form-control input-xs", "aria-label": "配方版本" }).appendTo($version);
+				$("<option>", { value: current.name }).text("在用配方").appendTo($select);
+				$("<option>", { value: draft.name }).text(draftLabel).appendTo($select);
+				$select.val(selected.name).on("change", () => {
+					selected = $select.val() === current.name ? current : draft;
+					renderVersion();
+					$version.find("select")[0]?.focus();
+				});
+			} else if (selected) {
+				const isDraft = selected === draft;
+				$("<span>", { class: `indicator-pill ${isDraft ? "orange" : "green"}` })
+					.text(isDraft ? draftLabel : "在用配方").appendTo($version);
+			}
+
+			if (draft && selected === draft) {
+				if (draft.can_edit && draft.inline_edit !== false) recipeAction($actions, "继续编辑", openEditor, true);
+				const label = draft.state === "待审核" ? "查看待审核配方" : "打开草稿";
+				recipeAction($actions, label, () => openRecipe(draft.name));
+			} else {
+				if (!draft && can_create_recipe && (company || !companies.length)) {
+					if (current?.inline_edit === false) {
+						recipeAction($actions, "复制为新版", () => copyRecipe(dish.name, current.name));
+					} else {
+						recipeAction($actions, current ? "编辑配方" : "添加食材", openEditor, true);
+					}
+				}
+				if (current) recipeAction($actions, "打开在用配方", () => openRecipe(current.name));
+			}
+			recipeAction($actions, "查看配方", () => viewRecipes(dish.name, company));
+
+			if (!selected || !selected.ingredients) {
+				const hint = selected ? "当前账号无权查看食材明细。" :
+					!company && companies.length ? "请选择机构查看配方。" : "暂无配方。";
+				$("<div>", { class: "text-muted" }).text(hint).appendTo($body);
+				return;
+			}
+			const columns = ingredientColumns.map((column) => ({ ...column, editable: false, format: escapeCell }));
+			const rows = selected.ingredients.map(({ name, gross, net, uom }) => [name, gross ?? "—", net ?? "—", uom ?? "—"]);
+			const { table } = mountIngredientTable($body, "配方食材明细", columns, rows);
+			panel.dispose = () => table.destroy();
 		}
-		if (draft) {
-			const label = draft.state === "待审核" ? "待审核配方" : "配方草稿";
-			const $draft = $("<div>", { class: "mt-3" }).appendTo($content);
-			$("<span>", { class: "indicator-pill orange mb-2" }).text(label).appendTo($draft);
-			ingredientTable($draft, draft.ingredients, `${label}食材`);
-		}
-		$editor.appendTo($content);
+
+		renderVersion();
 	}
 
 	async function loadPreview($wrapper, dish, company) {
-		closeIngredientEditor();
+		closeRecipePanel();
+		const panel = {};
+		activeRecipePanel = panel;
 		const $content = $("<div>").appendTo($wrapper.empty());
 		$("<div>", { class: "text-muted", role: "status" }).text("正在加载配方…").appendTo($content);
 		try {
-			const { message } = await frappe.call({
-				method: "tongjianyun.dish_library.recipe_preview",
-				type: "GET",
-				args: { dish: dish.name, company },
-			});
-			renderPreview($content.empty(), $wrapper, dish, message);
+			const [{ message }] = await Promise.all([
+				frappe.call({ method: "tongjianyun.dish_library.recipe_preview", type: "GET", args: { dish: dish.name, company } }),
+				frappe.require("report.bundle.css"),
+			]);
+			if (activeRecipePanel === panel) renderPreview($content.empty(), $wrapper, dish, message, panel);
 		} catch {
+			if (activeRecipePanel !== panel) return;
 			$("<span>", { class: "text-muted mr-2" }).text("无法加载配方。").appendTo($content.empty());
 			recipeAction($content, "重试", () => loadPreview($wrapper, dish, company));
 		}

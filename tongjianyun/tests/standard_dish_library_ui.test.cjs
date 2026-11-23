@@ -161,7 +161,7 @@ function element(tag, attributes = {}) {
 		prop(key, value) { this.attributes[key] = value; return this; },
 		find(selector) {
 			const nodes = selector.split(", ").flatMap((tag) => this.findAll(`<${tag}>`));
-			return { prop: (key, value) => nodes.forEach((node) => node.prop(key, value)) };
+			return Object.assign(nodes, { prop: (key, value) => nodes.forEach((node) => node.prop(key, value)) });
 		},
 		findAll(tag) {
 			return this.children.flatMap((child) => [...(child.tag === tag ? [child] : []), ...child.findAll(tag)]);
@@ -218,8 +218,9 @@ class DataTable {
 	destroy() { this.destroyed = true; }
 }
 
-test("the dish DataTable saves the active cell, links units to the item and keeps published quantities visible", async () => {
+test("one native DataTable switches recipe versions and editing modes and saves the active cell", async () => {
 	let handlers;
+	let leaveRecipe;
 	const wrapper = element("<div>");
 	const routes = [];
 	const queries = [];
@@ -263,6 +264,7 @@ test("the dish DataTable saves the active cell, links units to the item and keep
 			},
 		} },
 		model: { can_read: () => true },
+		router: { on(event, action) { assert.equal(event, "change"); leaveRecipe = action; } },
 		db: { get_value: () => new Promise((resolve) => { completeLookup = resolve; }) },
 		DataTable: class extends DataTable {
 			constructor(...args) { super(...args); instances.push(this); }
@@ -306,24 +308,38 @@ test("the dish DataTable saves the active cell, links units to the item and keep
 		set_df_property() {},
 	};
 	const click = (label) => wrapper.findAll("<button>").find((button) => button.content === label).events.click();
-	const tableData = () => wrapper.findAll("<table>").map((table) => [
-		table.attributes["aria-label"], table.findAll("<td>").map((cell) => cell.content),
-	]);
+	const activeTables = () => instances.filter((table) => !table.destroyed);
+	const visibleTable = () => {
+		assert.equal(wrapper.findAll("<table>").length, 0);
+		assert.equal(activeTables().length, 1);
+		return activeTables()[0];
+	};
+	const tableData = (table = visibleTable()) => Array.from(table.data, (row) => Array.from(row));
 	await handlers.refresh(form);
-	assert.deepEqual(tableData(), [
-		["在用配方食材", ["番茄", "100", "85", "克", "<食材>", "1", "—", "克"]],
-		["待审核配方食材", ["番茄", "120", "100", "克"]],
+	assert.deepEqual(tableData(), [["番茄", 120, 100, "克"]]);
+	const version = () => wrapper.findAll("<select>").find((select) => select.attributes["aria-label"] === "配方版本");
+	version().val("BOM-PUBLISHED").events.change();
+	const published = visibleTable();
+	assert.deepEqual(tableData(published), [
+		["番茄", 100, 85, "克"],
+		["<食材>", 1, "—", "克"],
 	]);
+	assert.ok(published.columns.every((column) => column.editable === false));
+	assert.equal(published.columns[0].format("<食材>"), "&lt;食材&gt;");
+	click("打开在用配方");
+	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-PUBLISHED"], layout: "标准菜品" });
+	version().val("BOM-DRAFT").events.change();
+	assert.deepEqual(tableData(), [["番茄", 120, 100, "克"]]);
 	click("查看待审核配方");
 	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-DRAFT"], layout: "标准菜品" });
 
 	const select = wrapper.findAll("<select>")[0];
 	await select.val("乙园").events.change();
 	assert.equal(queries.at(-1).company, "乙园");
-	assert.equal(wrapper.findAll("<table>").length, 0);
+	assert.equal(activeTables().length, 0);
 	await click("添加食材");
 	assert.equal(queries.at(-1).method, "tongjianyun.dish_recipe_editor.load_editor");
-	const table = instances.at(-1);
+	const table = visibleTable();
 	table.edit(0, 0);
 	const ingredient = controls.at(-1);
 	assert.equal(ingredient.query().query, "tongjianyun.dish_recipe_editor.ingredient_query");
@@ -357,14 +373,13 @@ test("the dish DataTable saves the active cell, links units to the item and keep
 	assert.deepEqual(alerts, ["配方草稿已保存"]);
 	assert.equal(table.destroyed, true);
 	assert.ok(wrapper.findAll("<button>").some((button) => button.content === "继续编辑"));
-	assert.deepEqual(tableData(), [["配方草稿食材", ["番茄", "100", "85", "克"]]]);
+	assert.deepEqual(tableData(), [["番茄", 100, 85, "克"]]);
 
 	draft = null;
 	await handlers.refresh(form);
 	await click("编辑配方");
-	assert.equal(wrapper.findAll("<h6>")[0].content, "编辑新版配方草稿");
-	const revision = instances.at(-1);
-	assert.equal(wrapper.findAll("<table>").length, 1);
+	const revision = visibleTable();
+	assert.equal(revision.root.attributes["aria-label"], "编辑食材明细");
 	assert.equal(revision.data[0][0].editable, false);
 	await click("添加食材");
 	assert.equal(revision.data.length, 2);
@@ -372,6 +387,8 @@ test("the dish DataTable saves the active cell, links units to the item and keep
 	assert.equal(revision.data.length, 1);
 	click("取消");
 	assert.equal(revision.destroyed, true);
-	assert.equal(wrapper.findAll("<table>").length, 1);
+	assert.deepEqual(tableData(), tableData(published));
 	assert.equal(queries.filter((query) => query.method.endsWith("save_ingredients")).length, 2);
+	leaveRecipe();
+	assert.equal(activeTables().length, 0);
 });
