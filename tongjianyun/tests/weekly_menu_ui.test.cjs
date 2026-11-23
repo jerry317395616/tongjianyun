@@ -11,18 +11,26 @@ function element(tag, attrs = {}) {
 		empty() { for (const child of this.children) child.host = null; this.children = []; this.content = ""; return this; },
 		css() { return this; }, hide() { this.hidden = true; return this; }, show() { this.hidden = false; return this; },
 		addClass(name) { this.attrs.class = `${this.attrs.class || ""} ${name}`.trim(); return this; },
+		toggleClass(name, enabled) {
+			const classes = new Set((this.attrs.class || "").split(/\s+/).filter(Boolean));
+			if (typeof enabled !== "boolean") enabled = !classes.has(name);
+			if (enabled) classes.add(name);
+			else classes.delete(name);
+			this.attrs.class = [...classes].join(" ");
+			return this;
+		},
 		prop(key, value) { this.attrs[key] = value; return this; },
 		find() { return this; }, on(type, action) { this.events[type] = action; return this; },
 		appendTo(host) { this.host = host; host.children.push(this); return this; },
 		insertBefore(anchor) { this.host = anchor.host; this.host.children.splice(this.host.children.indexOf(anchor), 0, this); return this; },
 		parent() { return this.host || { length: 0 }; },
-		prev() { return this.host.children[this.host.children.indexOf(this) - 1] || { length: 0 }; },
+		prev() { return this.host.children[this.host.children.indexOf(this) - 1] || { length: 0, remove() {} }; },
 		all(type) { return this.children.flatMap((child) => [...(child.tag === type ? [child] : []), ...child.all(type)]); },
 	};
 }
 
-test("native week lays out 25 cells and saves ordered menu and stop information in the meal drawer", async () => {
-	let hooks, dialog, initialized = false, saved;
+test("native week keeps creation compact and shows the calendar and meal drawer after saving", async () => {
+	let hooks, dialog, initialized = false, saved, creating = true, intro;
 	const page = element("<div>");
 	const grid = element("<div>").appendTo(page);
 	const days = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
@@ -69,18 +77,27 @@ test("native week lays out 25 cells and saves ordered menu and stop information 
 	};
 	const form = {
 		doc: { name: "MEAL-WEEK-QA", docstatus: 0 }, perm: [{ write: 1 }],
-		fields_dict: { meals: { $wrapper: grid } }, is_new: () => false, is_dirty: () => false,
+		layout: { wrapper: page },
+		fields_dict: { meals: { $wrapper: grid } }, is_new: () => creating ? 1 : undefined, is_dirty: () => false,
+		set_intro(text) { intro = text; },
 		remove_custom_button() {}, reload_doc: async () => hooks.refresh(form),
 	};
 	runInNewContext(readFileSync(resolve(__dirname, "../public/js/weekly_menu_editor.js"), "utf8"), { frappe, $: element });
 	await hooks.refresh(form);
+	assert.equal(page.attrs.class, "tgy-week-create");
+	assert.equal(intro, "保存后，可选择空白编排或复制上周。");
+	assert.equal(calls.length, 0);
+	creating = false;
+	page.attrs.class = "";
+	await hooks.refresh(form);
+	assert.equal(page.attrs.class, "");
 	assert.equal(page.all("<td>").length, 25);
 	await page.all("<button>").find((node) => node.content === "复制上周").events.click();
 	assert.equal(calls.find(([operation]) => operation === "initialize")[2].copy_previous, 1);
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
 	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
 	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
-	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css"]);
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=week-create.css"]);
 	assert.equal(page.all("<progress>")[0].attrs.value, 1);
 	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();

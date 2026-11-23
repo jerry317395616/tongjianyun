@@ -4,7 +4,7 @@
 	const editable = (frm) => frm.doc.docstatus === 0 && !!frm.perm?.[0]?.write;
 	let styles;
 	function loadStyles() {
-		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css"))
+		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=week-create.css"))
 			.catch(() => { styles = undefined; });
 	}
 	function dateLabel(value, year = false) {
@@ -126,9 +126,16 @@
 	async function refresh(frm) {
 		const $grid = frm.fields_dict.meals?.$wrapper;
 		if (!$grid?.length) return;
+		const creating = Boolean(frm.is_new() && !frm.doc.amended_from);
 		loadStyles();
-		frm.fields_dict.company?.$wrapper?.closest(".form-section").addClass("tgy-week-settings");
+		frm.layout.wrapper.toggleClass("tgy-week-create", creating);
+		frm.fields_dict.company?.$wrapper?.closest(".form-section").toggleClass("tgy-week-settings", !creating);
 		let $panel = $grid.prev(".tgy-week-menu");
+		if (creating) {
+			$panel.remove();
+			frm.set_intro("保存后，可选择空白编排或复制上周。", "blue");
+			return;
+		}
 		if (!$panel.length) $panel = $("<div>", { class: "tgy-week-menu mb-3" }).insertBefore($grid);
 		const $content = $("<div>").appendTo($panel.empty());
 		if (frm.is_new()) {

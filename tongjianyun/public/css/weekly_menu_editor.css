@@ -1,3 +1,16 @@
+.tgy-week-create .form-section:not([data-fieldname="planning_section"], [data-fieldname="notes_section"]),
+.tgy-week-create .frappe-control:is(
+	[data-fieldname="title"],
+	[data-fieldname="kitchen_warehouse"],
+	[data-fieldname="week_end"],
+	[data-fieldname="template_week_start"],
+	[data-fieldname="revision"],
+	[data-fieldname="source_week"],
+	[data-fieldname="status"]
+) {
+	display: none !important;
+}
+
 .tgy-week-menu,
 .tgy-week-settings,
 .tgy-week-picker {
