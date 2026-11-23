@@ -13,28 +13,14 @@ frappe.ui.form.on("Item", {
 		}
 	},
 	refresh(frm) {
-		const active = frm.doctype_layout?.name === "标准食材档案";
-		frm.layout.wrapper.toggleClass("tjy-ingredient-layout", active);
-		if (!active) return;
+		if (frm.doctype_layout?.name !== "标准食材档案") return;
 
-		const fields = frm.fields_dict;
-		fields.item_name.$input?.attr("placeholder", "例如番茄");
-		fields.custom_tjy_ingredient_aliases.$input?.attr("placeholder", "例如西红柿");
-		fields.item_group.$input?.attr("placeholder", "请选择分类");
-		fields.stock_uom.$input?.attr("placeholder", "请选择库存单位");
-		fields.purchase_uom.$input?.attr("placeholder", "与库存单位一致");
-		fields.item_code.$wrapper.toggleClass("tjy-generated-code", /^TJY-AUTO-/.test(frm.doc.item_code || ""));
-
-		for (const [name, icon] of [["profile", "leaf"], ["units", "scale"]]) {
-			const heading = fields["custom_tjy_ing_" + name]?.$wrapper.find("h4");
-			if (heading?.length && !heading.find("svg").length) {
-				heading.prepend(frappe.utils.icon(icon, "sm"));
-			}
-		}
-		return frappe.require([
-			"/assets/tongjianyun/css/standard_ingredients.css",
-			"/assets/tongjianyun/js/nutrition_profiles.js",
-		]).then(() => frappe.tjy_food_nutrition.ingredient(frm));
+		const code = frm.fields_dict.item_code;
+		code.df.reqd = 0;
+		code.refresh();
+		frm.fields_dict.custom_tjy_ingredient_aliases.$input?.attr("rows", 2).css("height", "auto");
+		return frappe.require("/assets/tongjianyun/js/nutrition_profiles.js")
+			.then(() => frappe.tjy_food_nutrition.ingredient(frm));
 	},
 	item_code(frm) {
 		const { doc } = frm;
