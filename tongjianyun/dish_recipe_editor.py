@@ -18,17 +18,23 @@ from tongjianyun.dish_library import (
 from tongjianyun.standard_recipes import CATEGORY, DISH, DISH_CATEGORY, DRAFT, MARKER, NET_QTY, STATE
 
 
+INGREDIENT_GROUPS = (
+    "粮油及主食", "蔬菜", "水果", "肉禽水产", "蛋奶及豆制品", "干货", "调味品", "食谱样例食材",
+)
+
+
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def ingredient_query(
     doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict | None = None
 ):
-    """Keep the native ingredient search and return only the code and display name."""
+    """Search the food ingredient groups using the native BOM lookup."""
     from erpnext.manufacturing.doctype.bom.bom import item_query
 
     if doctype != "Item":
         return []
-    matches = item_query(doctype, txt, searchfield, start, page_len, filters)
+    ingredient_filters = {**(filters or {}), "item_group": ["in", INGREDIENT_GROUPS], DISH: 0}
+    matches = item_query(doctype, txt, searchfield, start, page_len, ingredient_filters)
     return [(code, item_name or code) for code, item_name, *_ in matches]
 
 
@@ -166,7 +172,7 @@ def _apply_ingredient(bom, existing, values, index):
 
     factor = float(row.conversion_factor or 0) if row and row.uom == unit else 0
     if factor <= 0:
-        factor = _checked_factor(code, unit, index)
+        factor = _checked_factor(code, unit, index, is_new=row is None)
     stock_qty = gross * factor
     if not isfinite(stock_qty):
         frappe.throw(f"第 {index} 行换算后的食材用量超出允许范围。")
@@ -177,8 +183,11 @@ def _apply_ingredient(bom, existing, values, index):
     line.set(NET_QTY, net)
 
 
-def _checked_factor(code, unit, index):
+def _checked_factor(code, unit, index, *, is_new):
     item = _visible("Item", code)
+    # Keep previously saved components available when editing or revising a recipe.
+    if is_new and (item.get(DISH) or item.item_group not in INGREDIENT_GROUPS):
+        frappe.throw(f"第 {index} 行须选择食材物料，请核对该物料的物料组。")
     if item.disabled or item.is_fixed_asset or not item.include_item_in_manufacturing:
         frappe.throw(f"第 {index} 行物料无法用于配方。")
     if not frappe.db.exists("UOM", {"name": unit, "enabled": 1}):
