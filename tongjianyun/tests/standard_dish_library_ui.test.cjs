@@ -148,13 +148,15 @@ test("a native dish form opens a scoped BOM list and prefilled recipe form", () 
 });
 
 function element(tag, attributes = {}) {
-	return {
+	if (typeof tag !== "string") return tag;
+	const node = {
 		tag, attributes, children: [], events: {}, content: "", value: attributes.value,
 		empty() { this.children.length = 0; this.content = ""; return this; },
 		text(content) { this.empty(); this.content = String(content); return this; },
 		appendTo(parent) { parent.children.push(this); this.parent = parent; return this; },
 		remove() { this.parent.children = this.parent.children.filter((child) => child !== this); },
-		on(type, action) { this.events[type] = action; return this; },
+		on(type, selector, action) { this.events[type] = action || selector; return this; },
+		focus() {},
 		val(...args) { if (!args.length) return this.value; this.value = args[0]; return this; },
 		prop(key, value) { this.attributes[key] = value; return this; },
 		find(selector) {
@@ -165,32 +167,90 @@ function element(tag, attributes = {}) {
 			return this.children.flatMap((child) => [...(child.tag === tag ? [child] : []), ...child.findAll(tag)]);
 		},
 	};
+	node[0] = node;
+	return node;
 }
 
-test("the dish form edits ingredient drafts inline and keeps published quantities visible", async () => {
+class DataTable {
+	constructor(root, options) {
+		this.root = root;
+		this.options = options;
+		this.columns = options.columns;
+		this.refresh(options.data);
+		this.cellmanager = {
+			getCell$: (column, row) => this.cells[row]?.[column],
+			updateCell: (column, row, value) => { this.data[row][column] = value; },
+			submitEditing: () => {
+				const active = this.active;
+				if (!active) return Promise.resolve();
+				return Promise.resolve(active.editor.getValue()).then((value) => {
+					const oldCell = this.data[active.row][active.column];
+					if ((oldCell.content ?? oldCell) === value) return;
+					const done = active.editor.setValue(value);
+					this.data[active.row][active.column] = value;
+					return done;
+				});
+			},
+			deactivateEditing: (submit = true) => {
+				const done = submit ? this.cellmanager.submitEditing() : undefined;
+				this.active = null;
+				this.cellmanager.$editingCell = null;
+				return done;
+			},
+		};
+	}
+	refresh(data) {
+		this.data = data;
+		this.cells = Array.from(data, (row) => Array.from(row, () => element("<div>")));
+	}
+	edit(row, column) {
+		const cell = this.data[row][column];
+		assert.notEqual(cell.editable, false);
+		assert.notEqual(this.columns[column].editable, false);
+		const parent = element("<div>");
+		const value = cell.content ?? cell;
+		const editor = this.options.getEditor(column, row, value, parent, this.columns[column]);
+		this.active = { row, column, editor };
+		this.cellmanager.$editingCell = this.cells[row][column];
+		editor.initValue(value);
+		return parent.children[0];
+	}
+	destroy() { this.destroyed = true; }
+}
+
+test("the dish DataTable saves the active cell, links units to the item and keeps published quantities visible", async () => {
 	let handlers;
 	const wrapper = element("<div>");
 	const routes = [];
 	const queries = [];
 	const controls = [];
 	const alerts = [];
+	const instances = [];
+	let completeLookup;
+	let failSave = true;
 	let draft = { name: "BOM-DRAFT", state: "待审核", can_edit: false,
 		ingredients: [{ name: "番茄", gross: 120, net: 100, uom: "克" }] };
 	let secondCompanyDraft;
 	const frappe = {
 		ui: { form: {
 			on: (_doctype, events) => { handlers = events; },
-			make_control({ df }) {
+			make_control({ parent, df }) {
+				const $input = element("<input>").appendTo(parent);
 				const control = {
-					name: df.fieldname, value: "", get_value() { return this.value; },
-					async set_value(value) { this.value = value; await df.change?.(); },
+					name: df.fieldname, $input, query: df.get_query, get_input_value: () => $input.val(),
+					select(code) { $input.events["awesomplete-selectcomplete"]({ originalEvent: { text: { value: code } } }); },
 				};
 				controls.push(control);
 				return control;
 			},
 		} },
 		model: { can_read: () => true },
-		db: { get_value: async () => ({ message: { stock_uom: "克" } }) },
+		db: { get_value: () => new Promise((resolve) => { completeLookup = resolve; }) },
+		DataTable: class extends DataTable {
+			constructor(...args) { super(...args); instances.push(this); }
+		},
+		require: async (asset) => assert.equal(asset, "report.bundle.css"),
+		utils: { escape_html: (value) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") },
 		show_alert: ({ message }) => alerts.push(message),
 		call: async ({ method, type, args }) => {
 			queries.push({ method, type, ...args });
@@ -200,6 +260,10 @@ test("the dish form edits ingredient drafts inline and keeps published quantitie
 				ingredients: [{ row: "row-1", item_code: "TOMATO", name: "番茄", gross: 100, net: 85, uom: "克" }],
 			} : { mode: "new", recipe: null, modified: null, ingredients: [] } };
 			if (method.endsWith("save_ingredients")) {
+				if (failSave) {
+					failSave = false;
+					throw new Error("Save rejected");
+				}
 				secondCompanyDraft = { name: "BOM-NEW", state: "草稿", can_edit: true,
 					ingredients: [{ name: "番茄", gross: 100, net: 85, uom: "克" }] };
 				return { message: { recipe: "BOM-NEW" } };
@@ -241,17 +305,31 @@ test("the dish form edits ingredient drafts inline and keeps published quantitie
 	assert.equal(wrapper.findAll("<table>").length, 0);
 	await click("添加食材");
 	assert.equal(queries.at(-1).method, "tongjianyun.dish_recipe_editor.load_editor");
-	await controls.find((control) => control.name === "item_code").set_value("TOMATO");
-	assert.equal(controls.find((control) => control.name === "uom").get_value(), "克");
-	const [gross, net] = wrapper.findAll("<input>");
-	gross.val("100");
-	net.val("85");
+	const table = instances.at(-1);
+	table.edit(0, 0);
+	controls.at(-1).select("TOMATO");
+	await Promise.resolve();
+	table.edit(0, 1).val("100");
+	await table.cellmanager.deactivateEditing();
+	table.edit(0, 2).val("85");
+	const saving = click("保存配方草稿");
+	await Promise.resolve();
+	assert.ok(!queries.some((query) => query.method.endsWith("save_ingredients")));
+	completeLookup({ message: { item_name: "<番茄>", stock_uom: "克" } });
+	await saving;
+	assert.equal(table.columns[0].format("TOMATO"), "&lt;番茄&gt;");
+	assert.equal(table.data[0][3], "克");
+	assert.equal(table.destroyed, undefined);
+	assert.equal(wrapper.findAll("<span>").at(-1).content, "保存失败，当前修改仍可继续编辑。");
+	table.edit(0, 3);
+	assert.equal(controls.at(-1).query().filters.item_code, "TOMATO");
 	await click("保存配方草稿");
-	const saved = queries.find((query) => query.method.endsWith("save_ingredients"));
+	const saved = queries.filter((query) => query.method.endsWith("save_ingredients")).at(-1);
 	assert.equal(saved.company, "乙园");
 	assert.equal(saved.dish, "DISH-QA");
 	assert.deepEqual(JSON.parse(saved.ingredients), [{ item_code: "TOMATO", gross: "100", net: "85", uom: "克" }]);
 	assert.deepEqual(alerts, ["配方草稿已保存"]);
+	assert.equal(table.destroyed, true);
 	assert.ok(wrapper.findAll("<button>").some((button) => button.content === "继续编辑"));
 	assert.deepEqual(tableData(), [["配方草稿食材", ["番茄", "100", "85", "克"]]]);
 
@@ -259,10 +337,15 @@ test("the dish form edits ingredient drafts inline and keeps published quantitie
 	await handlers.refresh(form);
 	await click("编辑配方");
 	assert.equal(wrapper.findAll("<h6>")[0].content, "编辑新版配方草稿");
-	assert.equal(wrapper.findAll("<table>").length, 2);
-	click("删除");
-	assert.equal(wrapper.findAll("<input>").length, 0);
-	click("取消");
+	const revision = instances.at(-1);
 	assert.equal(wrapper.findAll("<table>").length, 1);
-	assert.equal(queries.filter((query) => query.method.endsWith("save_ingredients")).length, 1);
+	assert.equal(revision.data[0][0].editable, false);
+	await click("添加食材");
+	assert.equal(revision.data.length, 2);
+	await revision.root.events.click({ currentTarget: { dataset: { removeIngredient: "1" } } });
+	assert.equal(revision.data.length, 1);
+	click("取消");
+	assert.equal(revision.destroyed, true);
+	assert.equal(wrapper.findAll("<table>").length, 1);
+	assert.equal(queries.filter((query) => query.method.endsWith("save_ingredients")).length, 2);
 });

@@ -3,6 +3,14 @@
 	const recipeLayout = "标准菜品";
 	const reuseLabel = "使用同名菜品";
 	const previewField = "custom_tjy_dish_recipe_preview";
+	let activeEditor;
+
+	function closeIngredientEditor() {
+		activeEditor?.dispose?.();
+		activeEditor = null;
+	}
+
+	frappe.router?.on?.("change", closeIngredientEditor);
 
 	function openRecipe(name) {
 		frappe.route_options = { layout: recipeLayout };
@@ -59,93 +67,222 @@
 		}
 	}
 
-	function recipeLink($cell, fieldname, doctype, getQuery, change) {
-		return frappe.ui.form.make_control({
-			parent: $cell[0], render_input: true, only_input: true,
-			df: { fieldtype: "Link", fieldname, options: doctype, get_query: getQuery, change },
+	function positionLinkOptions(control) {
+		const bounds = control.$input[0].getBoundingClientRect();
+		const width = Math.min(Math.max(230, bounds.width), window.innerWidth - 16);
+		const spaceBelow = window.innerHeight - bounds.bottom - 8;
+		const showAbove = spaceBelow < 150 && bounds.top > spaceBelow;
+		Object.assign(control.awesomplete.ul.style, {
+			position: "fixed", left: `${Math.max(8, Math.min(bounds.left, window.innerWidth - width - 8))}px`, right: "auto",
+			top: showAbove ? "auto" : `${bounds.bottom + 4}px`,
+			bottom: showAbove ? `${window.innerHeight - bounds.top + 4}px` : "auto",
+			minWidth: "0", width: `${width}px`, maxHeight: `${Math.max(64, Math.min(240, showAbove ? bounds.top - 8 : spaceBelow))}px`,
+			zIndex: "1051", overflowY: "auto",
 		});
 	}
 
-	function ingredientEditorRow($body, dish, ingredient, remove) {
-		const $line = $("<tr>").appendTo($body);
-		const $item = $("<td>", { class: "w-25" }).appendTo($line);
-		const quantityInput = (value, label) => $("<input>", {
-			type: "number", min: 0, step: "any", "aria-label": label, class: "form-control input-xs",
-		}).val(value ?? "").appendTo($("<td>").appendTo($line));
-		const $gross = quantityInput(ingredient.gross, "每份采购毛用量");
-		const $net = quantityInput(ingredient.net, "每份可食净量");
-		const $unit = $("<td>", { class: "w-25" }).appendTo($line);
-		let item;
-		const itemCode = () => ingredient.item_code || item?.get_value();
-		const unit = recipeLink($unit, "uom", "UOM", () => ({
-			query: "erpnext.controllers.queries.get_item_uom_query", filters: { item_code: itemCode() },
-		}));
-		if (ingredient.item_code) {
-			$item.text(ingredient.name);
-			unit.set_value(ingredient.uom);
-		} else {
-			item = recipeLink($item, "item_code", "Item", () => ({
-				query: "erpnext.manufacturing.doctype.bom.bom.item_query",
-				filters: { name: ["!=", dish], disabled: 0, is_fixed_asset: 0, include_item_in_manufacturing: 1 },
-			}), async () => {
-				const code = itemCode();
-				await unit.set_value("");
-				if (!code) return;
-				const { message } = await frappe.db.get_value("Item", code, "stock_uom");
-				if (itemCode() === code && !unit.get_value()) await unit.set_value(message?.stock_uom || "");
-			});
-		}
-		const read = () => ({
-			row: ingredient.row, item_code: itemCode(), gross: $gross.val(), net: $net.val(), uom: unit.get_value(),
+	function recipeLinkEditor(parent, column, getQuery, save, acceptSelection) {
+		const control = frappe.ui.form.make_control({
+			parent, render_input: true, only_input: true,
+			df: {
+				fieldtype: "Link", fieldname: column.id, label: column.name, options: column.link,
+				get_query: getQuery, only_select: 1,
+			},
 		});
-		recipeAction($("<td>").appendTo($line), "删除", () => { remove(read); $line.remove(); });
-		return read;
+		const $input = control.$input;
+		let selected;
+		$input.on("awesomplete-open", () => positionLinkOptions(control));
+		$input.on("awesomplete-selectcomplete", (event) => {
+			const value = event.originalEvent?.text?.value;
+			if (typeof value !== "string" || !value || value.includes("__link_option")) return;
+			selected = value;
+			acceptSelection();
+		});
+		$input.on("keydown", (event) => {
+			// Let the Link dropdown handle keys it consumes before the grid receives them.
+			if (event.isDefaultPrevented() || (control.awesomplete?.opened && ["ArrowUp", "ArrowDown", "Escape"].includes(event.key))) {
+				event.stopPropagation();
+			}
+		});
+		return {
+			initValue(value) { $input.val(value ?? ""); $input[0].focus(); },
+			getValue() { return (selected ?? control.get_input_value() ?? "").trim(); },
+			setValue: save,
+		};
+	}
+
+	function recipeQuantityEditor(parent, label, save) {
+		const $input = $("<input>", {
+			type: "number", min: 0, step: "any", "aria-label": label, class: "dt-input",
+		}).appendTo($(parent));
+		return {
+			initValue(value) { $input.val(value ?? ""); $input[0].focus(); },
+			getValue() { return String($input.val() ?? ""); },
+			setValue: save,
+		};
 	}
 
 	function renderIngredientEditor($editor, dish, company, source, onClose, onSaved) {
-		const inputs = new Set();
+		const rows = source.ingredients.map((ingredient) => ({ ...ingredient }));
+		if (!rows.length) rows.push({});
+		const names = new Map(rows.filter((row) => row.name).map((row) => [row.item_code, row.name]));
+		const defaults = new Set();
+		const escape = (value) => frappe.utils.escape_html(String(value ?? ""));
+		let disposed = false;
+		let changingRows = false;
 		$("<h6>", { class: "mb-2" }).text(source.mode === "revision" ? "编辑新版配方草稿" : "编辑配方草稿").appendTo($editor);
-		const $table = $("<table>", { class: "table table-bordered table-sm", "aria-label": "编辑食材明细" }).appendTo($editor);
-		const $head = $("<tr>").appendTo($("<thead>").appendTo($table));
-		for (const title of ["食材", "每份采购毛用量", "每份可食净量", "单位", "操作"]) {
-			$("<th>", { scope: "col" }).text(title).appendTo($head);
+		$("<p>", { class: "text-muted small mb-2" }).text("双击单元格或按 Enter 编辑，按 Tab 切换。").appendTo($editor);
+		const $grid = $("<div>", { "aria-label": "编辑食材明细", style: "min-width: 540px" })
+			.appendTo($("<div>", { class: "table-responsive mb-2" }).appendTo($editor));
+		const columns = [
+			{ id: "item_code", name: "食材", width: 30, link: "Item", format: (code) => escape(names.get(code) || code) },
+			{ id: "gross", name: "每份采购毛用量", width: 22, format: escape },
+			{ id: "net", name: "每份可食净量", width: 22, format: escape },
+			{ id: "uom", name: "单位", width: 17, link: "UOM", format: escape },
+			{ id: "remove", name: "操作", width: 9, editable: false, focusable: false,
+				format: (index) => `<button type="button" class="btn btn-xs btn-default text-nowrap" data-remove-ingredient="${Number(index)}">删除</button>` },
+		].map((column) => ({ sortable: false, dropdown: false, ...column }));
+		const gridData = () => rows.map((row, index) => [
+			{ content: row.item_code || "", editable: !row.row }, String(row.gross ?? ""), String(row.net ?? ""),
+			row.uom || "", index,
+		]);
+		const table = new frappe.DataTable($grid[0], {
+			columns, data: gridData(), layout: "ratio", serialNoColumn: false,
+			disableReorderColumn: true, clusterize: false, noDataMessage: "暂无食材明细",
+			getEditor(_column, index, _value, parent, column) {
+				const row = rows[index];
+				const acceptSelection = () => cells.deactivateEditing();
+				if (column.id === "item_code") {
+					return recipeLinkEditor(parent, column, () => ({
+						query: "erpnext.manufacturing.doctype.bom.bom.item_query",
+						filters: { name: ["!=", dish], disabled: 0, is_fixed_asset: 0, include_item_in_manufacturing: 1 },
+					}), (code) => selectIngredient(row, index, code), acceptSelection);
+				}
+				if (column.id === "uom") {
+					return recipeLinkEditor(parent, column, () => ({
+						query: "erpnext.controllers.queries.get_item_uom_query", filters: { item_code: row.item_code || "" },
+					}), (unit) => { row.uom = unit; }, acceptSelection);
+				}
+				return recipeQuantityEditor(parent, column.name, (value) => { row[column.id] = value; });
+			},
+		});
+		const cells = table.cellmanager;
+		const unitColumn = columns.findIndex((column) => column.id === "uom");
+
+		function refreshUnit(index, value) {
+			const cell = cells.getCell$(unitColumn, index);
+			if (cell === cells.$editingCell && cell) {
+				// The lookup may finish after the user opened this unit editor.
+				// Refresh its display without replacing the live Link control.
+				table.datamanager.updateCell(unitColumn, index, { content: value });
+				cell.querySelector(".dt-cell__content").textContent = value;
+				const input = cell.querySelector(".dt-cell__edit input");
+				if (input && !input.value) input.value = value;
+			} else if (cell) {
+				cells.updateCell(unitColumn, index, value);
+			}
 		}
-		const $body = $("<tbody>").appendTo($table);
-		const addRow = (ingredient = {}) => inputs.add(ingredientEditorRow($body, dish, ingredient, (read) => inputs.delete(read)));
-		for (const ingredient of source.ingredients) addRow(ingredient);
-		if (!inputs.size) addRow();
-		recipeAction($editor, "添加食材", () => addRow());
-		recipeAction($editor, "取消", onClose);
+
+		function selectIngredient(row, index, code) {
+			row.item_code = code;
+			row.uom = "";
+			refreshUnit(index, "");
+			if (!code) return;
+			const lookup = frappe.db.get_value("Item", code, ["item_name", "stock_uom"]).then(({ message }) => {
+				if (disposed || row.item_code !== code || !message) return;
+				if (message.item_name) names.set(code, message.item_name);
+				const itemCell = cells.getCell$(0, index);
+				if (itemCell && itemCell !== cells.$editingCell) cells.updateCell(0, index, code, true);
+				if (!row.uom && message.stock_uom) {
+					row.uom = message.stock_uom;
+					refreshUnit(index, row.uom);
+				}
+			}).catch(() => {
+				// Keep the typed item and allow the user to select its unit if lookup fails.
+			}).finally(() => defaults.delete(lookup));
+			defaults.add(lookup);
+			return lookup;
+		}
+
+		async function commitCell() {
+			// DataTable has no public API to commit the cell still being edited on an outside click.
+			const committed = cells.submitEditing();
+			cells.deactivateEditing(false);
+			$grid.prop("inert", true);
+			await committed;
+			await Promise.all(defaults);
+		}
+
 		const $status = $("<span>", { class: "text-muted", role: "status" });
+		async function changeRows(update) {
+			if (changingRows || disposed) return;
+			changingRows = true;
+			try {
+				await commitCell();
+				if (disposed) return;
+				update();
+				table.refresh(gridData());
+			} catch {
+				$status.text("请核对正在编辑的食材明细。");
+			} finally {
+				$grid.prop("inert", false);
+				changingRows = false;
+			}
+		}
+		$grid.on("click", "[data-remove-ingredient]", (event) =>
+			changeRows(() => rows.splice(Number(event.currentTarget.dataset.removeIngredient), 1)));
+		recipeAction($editor, "添加食材", () => changeRows(() => rows.push({})));
+		recipeAction($editor, "取消", onClose);
 		const $save = recipeAction($editor, "保存配方草稿", async () => {
-			const ingredients = JSON.stringify(Array.from(inputs, (read) => read()));
+			if (changingRows || disposed) return;
+			changingRows = true;
 			$status.empty();
 			$save.prop("disabled", true);
 			try {
+				await commitCell();
+				if (disposed) return;
+				const ingredients = JSON.stringify(rows.map(({ row, item_code, gross, net, uom }) =>
+					({ row, item_code, gross: String(gross ?? ""), net: String(net ?? ""), uom })));
 				await frappe.call({
 					method: "tongjianyun.dish_recipe_editor.save_ingredients", type: "POST", freeze: true,
 					args: { dish, company, recipe: source.recipe, modified: source.modified, ingredients },
 				});
+				if (disposed) return;
 				frappe.show_alert({ message: "配方草稿已保存", indicator: "green" });
 				return onSaved();
 			} catch {
 				$status.text("保存失败，当前修改仍可继续编辑。");
 			} finally {
+				$grid.prop("inert", false);
+				changingRows = false;
 				$save.prop("disabled", false);
 			}
 		}, true);
 		$status.appendTo($editor);
+		return () => {
+			disposed = true;
+			table.destroy();
+			$editor.empty();
+		};
 	}
 
 	async function loadIngredientEditor($editor, dish, company, onClose, onSaved) {
+		const session = {};
+		activeEditor = session;
 		$editor.text("正在加载配方草稿…");
 		try {
-			const { message } = await frappe.call({
-				method: "tongjianyun.dish_recipe_editor.load_editor", type: "GET", args: { dish, company },
-			});
-			renderIngredientEditor($editor.empty(), dish, company, message, onClose, onSaved);
+			const [{ message }] = await Promise.all([
+				frappe.call({ method: "tongjianyun.dish_recipe_editor.load_editor", type: "GET", args: { dish, company } }),
+				frappe.require("report.bundle.css"),
+			]);
+			if (activeEditor === session) {
+				session.dispose = renderIngredientEditor($editor.empty(), dish, company, message, onClose, onSaved);
+			}
 		} catch {
-			onClose();
+			if (activeEditor === session) {
+				onClose();
+				frappe.show_alert({ message: "无法加载配方草稿，请重试。", indicator: "red" });
+			}
 		}
 	}
 
@@ -167,6 +304,7 @@
 		const startEditor = (selectedCompany) => {
 			$header.find("button, select").prop("disabled", true);
 			return loadIngredientEditor($editor, dish.name, selectedCompany, () => {
+				closeIngredientEditor();
 				$editor.empty();
 				$header.find("button, select").prop("disabled", false);
 			}, () => loadPreview($wrapper, dish, selectedCompany));
@@ -209,6 +347,7 @@
 	}
 
 	async function loadPreview($wrapper, dish, company) {
+		closeIngredientEditor();
 		const $content = $("<div>").appendTo($wrapper.empty());
 		$("<div>", { class: "text-muted", role: "status" }).text("正在加载配方…").appendTo($content);
 		try {
