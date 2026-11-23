@@ -51,6 +51,32 @@ class IngredientLibraryTests(unittest.TestCase):
         library.set_ingredient_code(ordinary)
         self.assertEqual(ordinary.item_code, "")
 
+    def test_new_ingredient_name_must_be_filled_separately_from_its_code(self):
+        library = self.library
+        self.frappe.throw = Mock(side_effect=ValueError)
+        code = "TJY-AUTO-" + "B" * 20
+
+        class Item(SimpleNamespace):
+            def get(self, field):
+                return getattr(self, field, None)
+
+            def set(self, field, value):
+                setattr(self, field, value)
+
+            def is_new(self):
+                return True
+
+        doc = Item(item_code=code, item_name=code, is_fixed_asset=False, item_group="蔬菜",
+                   **{library.MARKER: 1})
+        for name in ("", " ", code):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                doc.item_name = name
+                library.validate_ingredient(doc)
+        doc.item_name = " 胡萝卜 "
+        library.validate_ingredient(doc)
+        self.assertEqual(doc.item_name, "胡萝卜")
+        self.assertEqual(doc.item_code, code)
+
     def test_conversion_uses_explicit_package_factor_and_native_mass_factor(self):
         library = self.library
         item = dict(name="X", stock_uom="Kg", variant_of="XT")

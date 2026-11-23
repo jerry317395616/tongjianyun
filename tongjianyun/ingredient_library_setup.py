@@ -37,7 +37,7 @@ def install():
 def _install_layout():
     _save_layout("Item", LAYOUT, {
         "section_break_zlmj": {"label": "食材信息"},
-        "item_name": {"label": "标准食材名称", "in_list_view": 1},
+        "item_name": {"label": "标准食材名称", "in_list_view": 1, "reqd": 1},
         "item_code": {"label": "食材编码"},
         "item_group": {"label": "食材分类", "in_list_view": 1, "in_standard_filter": 1},
         "stock_uom": {"label": "库存单位", "in_list_view": 1},

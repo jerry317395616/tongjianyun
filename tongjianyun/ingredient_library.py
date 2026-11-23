@@ -57,8 +57,13 @@ def validate_ingredient(doc, method=None):
         return
     if doc.get(DISH) or doc.is_fixed_asset:
         frappe.throw("标准食材须使用独立的食材物料。")
-    if doc.is_new() and doc.item_group not in CLASSIFIED_GROUPS:
-        frappe.throw("请选择粮油及主食、蔬菜、水果、肉禽水产、蛋奶及豆制品、干货或调味品物料组。")
+    if doc.is_new():
+        name = (doc.item_name or "").strip()
+        if not name or name == (doc.item_code or "").strip():
+            frappe.throw("请填写标准食材名称。")
+        doc.item_name = name
+        if doc.item_group not in CLASSIFIED_GROUPS:
+            frappe.throw("请选择粮油及主食、蔬菜、水果、肉禽水产、蛋奶及豆制品、干货或调味品物料组。")
     aliases = aliases_for(doc.get(ALIASES))
     aliases.pop(name_key(doc.item_name), None)
     doc.set(ALIASES, "\n".join(aliases.values()))
