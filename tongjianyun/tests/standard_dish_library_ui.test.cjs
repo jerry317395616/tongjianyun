@@ -228,7 +228,9 @@ test("one native DataTable switches recipe versions and editing modes and saves 
 	const alerts = [];
 	const instances = [];
 	let completeLookup;
+	let completeReview;
 	let failSave = true;
+	let failReview = true;
 	let draft = { name: "BOM-DRAFT", state: "待审核", can_edit: false,
 		ingredients: [{ name: "番茄", gross: 120, net: 100, uom: "克" }] };
 	let secondCompanyDraft;
@@ -275,6 +277,15 @@ test("one native DataTable switches recipe versions and editing modes and saves 
 		call: async ({ method, type, args }) => {
 			queries.push({ method, type, ...args });
 			const company = args.company || "甲园";
+			if (method.endsWith("set_review_pending")) {
+				if (failReview) {
+					failReview = false;
+					throw new Error("Review request rejected");
+				}
+				await new Promise((resolve) => { completeReview = resolve; });
+				secondCompanyDraft = { ...secondCompanyDraft, state: "待审核", can_edit: false };
+				return { message: { state: "待审核" } };
+			}
 			if (method.endsWith("load_editor")) return { message: company === "甲园" ? {
 				mode: "revision", recipe: "BOM-PUBLISHED", modified: "version-1",
 				ingredients: [{ row: "row-1", item_code: "TOMATO", name: "番茄", gross: 100, net: 85, uom: "克" }],
@@ -307,7 +318,8 @@ test("one native DataTable switches recipe versions and editing modes and saves 
 		is_new: () => false,
 		set_df_property() {},
 	};
-	const click = (label) => wrapper.findAll("<button>").find((button) => button.content === label).events.click();
+	const buttons = () => wrapper.findAll("<button>");
+	const click = (label) => buttons().find((button) => button.content === label).events.click();
 	const activeTables = () => instances.filter((table) => !table.destroyed);
 	const visibleTable = () => {
 		assert.equal(wrapper.findAll("<table>").length, 0);
@@ -330,7 +342,7 @@ test("one native DataTable switches recipe versions and editing modes and saves 
 	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-PUBLISHED"], layout: "标准菜品" });
 	version().val("BOM-DRAFT").events.change();
 	assert.deepEqual(tableData(), [["番茄", 120, 100, "克"]]);
-	click("查看待审核配方");
+	click("审核配方");
 	assert.deepEqual(routes.at(-1), { args: ["Form", "BOM", "BOM-DRAFT"], layout: "标准菜品" });
 
 	const select = wrapper.findAll("<select>")[0];
@@ -372,7 +384,28 @@ test("one native DataTable switches recipe versions and editing modes and saves 
 	assert.deepEqual(JSON.parse(saved.ingredients), [{ item_code: "TOMATO", gross: "100", net: "85", uom: "克" }]);
 	assert.deepEqual(alerts, ["配方草稿已保存"]);
 	assert.equal(table.destroyed, true);
-	assert.ok(wrapper.findAll("<button>").some((button) => button.content === "继续编辑"));
+	assert.deepEqual(buttons().map((button) => button.content), ["继续编辑", "提交审核"]);
+	assert.deepEqual(tableData(), [["番茄", 100, 85, "克"]]);
+
+	const routeCount = routes.length;
+	await click("提交审核");
+	assert.equal(alerts.at(-1), "提交审核失败，请重试。");
+	assert.ok(buttons().every((button) => !button.attributes.disabled));
+	const sending = click("提交审核");
+	assert.ok(buttons().every((button) => button.attributes.disabled));
+	await click("提交审核");
+	const reviewCalls = queries.filter((query) => query.method.endsWith("set_review_pending"));
+	assert.equal(reviewCalls.length, 2);
+	assert.deepEqual(reviewCalls.at(-1), {
+		method: "tongjianyun.standard_recipes.set_review_pending", type: "POST", name: "BOM-NEW", pending: 1,
+	});
+	completeReview();
+	await sending;
+	assert.equal(routes.length, routeCount);
+	assert.equal(alerts.at(-1), "配方已提交审核");
+	assert.equal(queries.at(-1).company, "乙园");
+	assert.deepEqual(buttons().map((button) => button.content), ["审核配方"]);
+	assert.equal(wrapper.findAll("<span>").at(-1).content, "待审核配方");
 	assert.deepEqual(tableData(), [["番茄", 100, 85, "克"]]);
 
 	draft = null;

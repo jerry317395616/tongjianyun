@@ -280,6 +280,7 @@
 		const { current, draft, company, companies, can_create_recipe } = preview;
 		const draftLabel = draft?.state === "待审核" ? "待审核配方" : "配方草稿";
 		let selected = draft || current;
+		let submittingReview = false;
 		const $header = $("<div>", { class: "d-flex flex-wrap align-items-center justify-content-between" }).appendTo($content);
 		const $context = $("<div>", { class: "d-flex flex-wrap align-items-center" }).appendTo($header);
 		if (companies.length > 1) {
@@ -330,6 +331,29 @@
 				({ company: selectedCompany }) => startEditor(selectedCompany), "选择机构", "继续");
 		}
 
+		async function submitReview() {
+			if (submittingReview || activeRecipePanel !== panel) return;
+			submittingReview = true;
+			const controls = $header.find("button, select");
+			controls.prop("disabled", true);
+			try {
+				await frappe.call({
+					method: "tongjianyun.standard_recipes.set_review_pending", type: "POST", freeze: true,
+					args: { name: draft.name, pending: 1 },
+				});
+				if (activeRecipePanel !== panel) return;
+				frappe.show_alert({ message: "配方已提交审核", indicator: "green" });
+				await loadPreview($wrapper, dish, company);
+			} catch {
+				if (activeRecipePanel === panel) {
+					frappe.show_alert({ message: "提交审核失败，请重试。", indicator: "red" });
+				}
+			} finally {
+				submittingReview = false;
+				controls.prop("disabled", false);
+			}
+		}
+
 		function renderVersion() {
 			clearGrid();
 			$actions.empty();
@@ -351,9 +375,13 @@
 			}
 
 			if (draft && selected === draft) {
-				if (draft.can_edit && draft.inline_edit !== false) recipeAction($actions, "继续编辑", openEditor, true);
-				const label = draft.state === "待审核" ? "查看待审核配方" : "打开草稿";
-				recipeAction($actions, label, () => openRecipe(draft.name));
+				if (draft.state === "待审核") {
+					recipeAction($actions, "审核配方", () => openRecipe(draft.name));
+				} else if (draft.can_edit) {
+					const edit = draft.inline_edit === false ? () => openRecipe(draft.name) : openEditor;
+					recipeAction($actions, "继续编辑", edit);
+					recipeAction($actions, "提交审核", submitReview, true);
+				}
 			} else {
 				if (!draft && can_create_recipe && (company || !companies.length)) {
 					if (current?.inline_edit === false) {
@@ -364,7 +392,6 @@
 				}
 				if (current) recipeAction($actions, "打开在用配方", () => openRecipe(current.name));
 			}
-			recipeAction($actions, "查看配方", () => viewRecipes(dish.name, company));
 
 			if (!selected || !selected.ingredients) {
 				const hint = selected ? "当前账号无权查看食材明细。" :
