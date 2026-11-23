@@ -90,6 +90,23 @@
 			},
 		});
 		const $input = control.$input;
+		if (column.id === "item_code") {
+			control.get_filter_description = () => "";
+			const renderOption = control.awesomplete.item;
+			control.awesomplete.item = function (item) {
+				const option = renderOption.call(this, item);
+				const suggestion = this.get_item(item.value);
+				const label = option.querySelector("p");
+				if (label && !suggestion.action) {
+					// Link treats the name as a description on sites that show the code as the title.
+					const name = suggestion.label !== suggestion.value
+						? suggestion.label : suggestion.description || suggestion.label;
+					label.textContent = name;
+					label.title = name;
+				}
+				return option;
+			};
+		}
 		let selected;
 		$input.on("awesomplete-open", () => positionLinkOptions(control));
 		$input.on("awesomplete-selectcomplete", (event) => {
@@ -154,7 +171,7 @@
 				const acceptSelection = () => cells.deactivateEditing();
 				if (column.id === "item_code") {
 					return recipeLinkEditor(parent, column, () => ({
-						query: "erpnext.manufacturing.doctype.bom.bom.item_query",
+						query: "tongjianyun.dish_recipe_editor.ingredient_query",
 						filters: { name: ["!=", dish], disabled: 0, is_fixed_asset: 0, include_item_in_manufacturing: 1 },
 					}), (code) => selectIngredient(row, index, code), acceptSelection);
 				}

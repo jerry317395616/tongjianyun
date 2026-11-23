@@ -238,6 +238,24 @@ test("the dish DataTable saves the active cell, links units to the item and keep
 				const $input = element("<input>").appendTo(parent);
 				const control = {
 					name: df.fieldname, $input, query: df.get_query, get_input_value: () => $input.val(),
+					get_filter_description: () => "原生筛选说明",
+					awesomplete: {
+						get_item() { return this.suggestion; },
+						item() {
+							const caption = { textContent: "编码和说明" };
+							return {
+								caption,
+								querySelector(tag) {
+									assert.equal(tag, "p");
+									return caption;
+								},
+							};
+						},
+					},
+					render(suggestion) {
+						this.awesomplete.suggestion = suggestion;
+						return this.awesomplete.item(suggestion).caption;
+					},
 					select(code) { $input.events["awesomplete-selectcomplete"]({ originalEvent: { text: { value: code } } }); },
 				};
 				controls.push(control);
@@ -307,7 +325,14 @@ test("the dish DataTable saves the active cell, links units to the item and keep
 	assert.equal(queries.at(-1).method, "tongjianyun.dish_recipe_editor.load_editor");
 	const table = instances.at(-1);
 	table.edit(0, 0);
-	controls.at(-1).select("TOMATO");
+	const ingredient = controls.at(-1);
+	assert.equal(ingredient.query().query, "tongjianyun.dish_recipe_editor.ingredient_query");
+	assert.equal(ingredient.get_filter_description(), "");
+	assert.deepEqual(ingredient.render({ value: "TOMATO", label: "TOMATO", description: "番茄, 鲜切" }),
+		{ textContent: "番茄, 鲜切", title: "番茄, 鲜切" });
+	assert.deepEqual(ingredient.render({ value: "TOMATO", label: "番茄", description: "TOMATO" }),
+		{ textContent: "番茄", title: "番茄" });
+	ingredient.select("TOMATO");
 	await Promise.resolve();
 	table.edit(0, 1).val("100");
 	await table.cellmanager.deactivateEditing();
@@ -323,6 +348,7 @@ test("the dish DataTable saves the active cell, links units to the item and keep
 	assert.equal(wrapper.findAll("<span>").at(-1).content, "保存失败，当前修改仍可继续编辑。");
 	table.edit(0, 3);
 	assert.equal(controls.at(-1).query().filters.item_code, "TOMATO");
+	assert.equal(controls.at(-1).get_filter_description(), "原生筛选说明");
 	await click("保存配方草稿");
 	const saved = queries.filter((query) => query.method.endsWith("save_ingredients")).at(-1);
 	assert.equal(saved.company, "乙园");

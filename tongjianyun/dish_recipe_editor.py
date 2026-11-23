@@ -18,6 +18,20 @@ from tongjianyun.dish_library import (
 from tongjianyun.standard_recipes import CATEGORY, DISH, DISH_CATEGORY, DRAFT, MARKER, NET_QTY, STATE
 
 
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def ingredient_query(
+    doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict | None = None
+):
+    """Keep the native ingredient search and return only the code and display name."""
+    from erpnext.manufacturing.doctype.bom.bom import item_query
+
+    if doctype != "Item":
+        return []
+    matches = item_query(doctype, txt, searchfield, start, page_len, filters)
+    return [(code, item_name or code) for code, item_name, *_ in matches]
+
+
 def _context(dish, company, *, lock=False):
     _require("BOM")
     if not company:
