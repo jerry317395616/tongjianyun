@@ -44,7 +44,7 @@
         const state = report.__nutrition;
         const {message} = await frappe.call({method: method + "calculate_profiles", args: source, type: "GET", freeze: true});
         if (!active(report, state)) return;
-        await frappe.require("/assets/tongjianyun/js/nutrition_profiles.js");
+        await frappe.require("/assets/tongjianyun/js/nutrition_profiles.js?v=source-reference.js");
         if (active(report, state)) frappe.tjy_food_nutrition.week(message);
     }
     async function generate(report) {

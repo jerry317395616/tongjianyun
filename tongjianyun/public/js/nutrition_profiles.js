@@ -42,8 +42,8 @@
             result.meals.map(meal => [meal.date, meal.meal, ...meal.metrics.filter(row => primary.has(row.key)).map(metricText)]));
         const gaps = result.issues.length ? table(["日期", "餐次", "食材", "待补资料"], result.issues
             .map(row => [row.date, row.meal, row.food, row.issue])) : "<p>暂无食材档案或重量换算缺项。各营养素的覆盖情况请查看汇总。</p>";
-        const profiles = result.profiles.length ? table(["食材", "营养档案", "来源", "条目编号", "来源版本"],
-            result.profiles.map(row => [row.food, row.profile, row.source, row.source_code, row.source_version])) : "<p>暂无可用档案。</p>";
+        const profiles = result.profiles.length ? table(["食材", "营养档案", "来源依据"],
+            result.profiles.map(row => [row.food, row.profile, row.source_reference])) : "<p>暂无可用档案。</p>";
         showResult("周食谱营养 · 人均投料估算", `<p>${basis} 「部分」标记后是已计入食材项数／总项数。</p>
             ${totals}<details><summary>分餐次查看</summary>${meals}</details>
             <details${result.issues.length ? " open" : ""}><summary>食材档案和换算缺项</summary>${gaps}</details>
@@ -51,7 +51,7 @@
     }
 
     frappe.tjy_food_nutrition = {dish, week,
-        ingredient: frm => frappe.require("/assets/tongjianyun/js/ingredient_nutrition.js")
+        ingredient: frm => frappe.require("/assets/tongjianyun/js/ingredient_nutrition.js?v=per-100g.js")
             .then(() => frappe.tjy_ingredient_nutrition(frm)),
     };
 })();

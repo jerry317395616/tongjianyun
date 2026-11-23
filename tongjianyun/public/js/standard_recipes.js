@@ -22,7 +22,7 @@ frappe.ui.form.on("BOM", {
 					method: "tongjianyun.recipe_nutrition.for_dish", type: "GET",
 					args: {recipe}, freeze: true,
 				});
-				await frappe.require("/assets/tongjianyun/js/nutrition_profiles.js");
+				await frappe.require("/assets/tongjianyun/js/nutrition_profiles.js?v=source-reference.js");
 				if (cur_frm === frm && frm.doc.name === recipe) frappe.tjy_food_nutrition.dish(message);
 			});
 		}

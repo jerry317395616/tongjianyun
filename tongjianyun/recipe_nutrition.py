@@ -8,13 +8,15 @@ import frappe
 
 from tongjianyun.food_nutrition import approved_profiles, nutrient_values
 from tongjianyun.ingredient_library import configured_conversion, conversion_rows
-from tongjianyun.nutrition_math import NUTRIENTS, ingredient_amounts, number, positive, summarize, unit_factor
+from tongjianyun.nutrition_math import (
+    NUTRIENTS, ingredient_amounts, number, positive, stock_mass_in_grams, summarize, unit_factor,
+)
 from tongjianyun.standard_recipes import MARKER, NET_QTY
 
 SNAPSHOT = "custom_tjy_nutrition_snapshot"
 
 
-def _line(row, serving, item, profile, conversions):
+def _line(row, serving, item, profile, conversions, stock_masses):
     gross = positive(row.qty)
     result = {
         "code": row.item_code, "food": row.get("item_name") or row.item_code, "unit": row.uom,
@@ -22,23 +24,20 @@ def _line(row, serving, item, profile, conversions):
     }
     if not gross:
         result["issue"] = "缺少有效的带量"
-    elif not profile or not item:
-        result["issue"] = "缺少已审核的营养档案"
+        return result
+    stock_conversion = configured_conversion(item, row.uom, conversions) if item else None
+    factor = unit_factor(row.uom, stock_masses.get(row.item_code), stock_conversion)
+    amounts, grams, basis = ingredient_amounts(gross, number(row.get(NET_QTY)), factor,
+                                               nutrient_values(profile) if profile else {})
+    if profile:
+        result.update(profile=profile.name, source_reference=profile.source_reference)
+    if grams is None:
+        result["issue"] = basis
     else:
-        basis_grams = positive(profile.basis_grams)
-        factor = unit_factor(row.uom, item.stock_uom, profile.grams_per_stock_unit,
-                             configured_conversion(item, row.uom, conversions), profile.basis, basis_grams)
-        amounts, grams, basis = ingredient_amounts(gross, number(row.get(NET_QTY)), factor,
-                                                  number(profile.edible_pct), basis_grams, nutrient_values(profile))
-        result.update(profile=profile.name, source=profile.source_name, source_code=profile.source_code,
-                      source_version=profile.source_version, weight_basis=basis, stock_unit=item.stock_uom,
-                      grams_per_unit=str(factor) if factor else None, edible_pct=profile.edible_pct,
-                      profile_basis=profile.basis, profile_basis_grams=profile.basis_grams)
-        if grams is None:
-            result["issue"] = basis
-        else:
-            result["grams"] = str(grams / serving)
-            result["amounts"] = {key: str(value / serving) for key, value in amounts.items()}
+        result.update(grams=str(grams / serving), weight_basis=basis, grams_per_unit=str(factor),
+                      amounts={key: str(value / serving) for key, value in amounts.items()})
+        if not profile:
+            result["issue"] = "缺少已审核的营养档案"
     return result
 
 
@@ -49,8 +48,16 @@ def _calculate(recipes):
     items = {item.name: item for item in frappe.get_all("Item", filters={"name": ["in", sorted(codes)]},
                                                        fields=["name", "stock_uom", "variant_of"])}
     conversions = conversion_rows(items.values())
+    units_by_item = defaultdict(dict)
+    for (code, unit), factor in conversions.items():
+        units_by_item[code][unit] = factor
+    stock_masses = {
+        code: stock_mass_in_grams(item.stock_uom, {**units_by_item[item.variant_of], **units_by_item[code]})
+        for code, item in items.items()
+    }
     profiles = approved_profiles(codes)
-    return {name: [_line(row, row.serving, items.get(row.item_code), profiles.get(row.item_code), conversions)
+    return {name: [_line(row, row.serving, items.get(row.item_code), profiles.get(row.item_code),
+                         conversions, stock_masses)
                    for row in rows] for name, rows in recipes.items()}
 
 
@@ -194,8 +201,9 @@ def weekly_totals(details, dates, recipes, by_plan=None):
     profiles = {}
     for line in all_lines:
         if profile := line.get("profile"):
-            profiles.setdefault(profile, {key: line[key] for key in
-                                          ("profile", "food", "source", "source_code", "source_version")})
+            reference = line.get("source_reference") or " · ".join(
+                line[key] for key in ("source", "source_code", "source_version") if line.get(key))
+            profiles.setdefault(profile, {"profile": profile, "food": line["food"], "source_reference": reference})
     return {
         "metrics": _metrics(all_lines),
         "days": [{"date": day, "metrics": _metrics(day_lines[day])} for day in dates],

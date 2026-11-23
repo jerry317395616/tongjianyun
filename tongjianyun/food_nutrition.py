@@ -1,17 +1,15 @@
 """Reviewed food-composition profiles linked to standard ingredient Items."""
 
-from decimal import Decimal
-
 import frappe
 
 from tongjianyun.ingredient_library import MARKER
-from tongjianyun.nutrition_math import NUTRIENTS, PER_100_G, PER_100_ML, PER_SERVING, number
+from tongjianyun.nutrition_math import NUTRIENTS, number
 
 PROFILE = "Tongjianyun Food Nutrition Profile"
 STATUS = "custom_tjy_nutrition_status"
 MISSING, REVIEW, MATCHED = "缺少数据", "待审核", "已匹配"
-EDITOR_FIELDS = ("food_name", "food_state", "source_name", "source_code", "source_version", "source_url",
-                 "basis", "basis_grams", "edible_pct", "grams_per_stock_unit", "basis_note", *NUTRIENTS)
+EDITOR_FIELDS = tuple(NUTRIENTS)
+SOURCE_REFERENCE = "source_reference"
 
 
 def validate_profile(doc):
@@ -22,27 +20,21 @@ def validate_profile(doc):
     previous = doc.get_doc_before_save()
     if previous and previous.item_code != doc.item_code:
         frappe.throw("请为其他食材新建档案。")
-    if doc.basis not in (PER_100_G, PER_100_ML, PER_SERVING):
-        frappe.throw("请选择原始营养值口径。")
-    if doc.basis == PER_100_G:
-        doc.basis_grams = "100"
-    for field in ("food_name", "source_name", "source_code", "source_version"):
-        doc.set(field, (doc.get(field) or "").strip())
-    for field in (*NUTRIENTS, "basis_grams", "edible_pct", "grams_per_stock_unit"):
+    doc.source_reference = (doc.source_reference or "").strip()
+    for field in NUTRIENTS:
         raw = doc.get(field)
-        if isinstance(raw, str):
-            raw = raw.strip()
-        value = number(raw)
-        if raw in ("", None) and field != "basis_grams":
+        if raw is None or not str(raw).strip():
             doc.set(field, None)
             continue
-        minimum = 0 if field in NUTRIENTS else Decimal("0.000001")
-        maximum = 100 if field == "edible_pct" else 100000000
-        if value is None or not minimum <= value <= maximum or value.as_tuple().exponent < -12:
+        value = number(str(raw).strip())
+        if value is None or not 0 <= value <= 100000000 or value.as_tuple().exponent < -12:
             frappe.throw(f"请核对「{doc.meta.get_label(field)}」的数值和单位。")
         doc.set(field, format(value, "f"))
-    if doc.docstatus == 1 and not any(doc.get(key) is not None for key in NUTRIENTS):
-        frappe.throw("请至少录入一项可核实的营养值。")
+    if doc.docstatus == 1:
+        if not doc.source_reference:
+            frappe.throw("审核前请填写来源依据。")
+        if not any(doc.get(key) is not None for key in NUTRIENTS):
+            frappe.throw("请至少录入一项可核实的营养值。")
 
 
 def sync_status(item_code, exclude=None):
@@ -62,8 +54,7 @@ def approved_profiles(codes):
         return {}
     rows = frappe.get_all(
         PROFILE, filters={"item_code": ["in", sorted(set(codes))], "docstatus": 1},
-        fields=["name", "item_code", "food_name", "food_state", "source_name", "source_code",
-                "source_version", "basis", "basis_grams", "edible_pct", "grams_per_stock_unit", *NUTRIENTS],
+        fields=["name", "item_code", SOURCE_REFERENCE, *NUTRIENTS],
         order_by="approved_at desc, name desc",
     )
     profiles = {}
@@ -91,8 +82,7 @@ def ingredient_profile(item_code: str):
     profile = approved_profiles([item_code]).get(item_code)
     if profile:
         frappe.get_doc(PROFILE, profile.name).check_permission("read")
-        factor = 100 / number(profile.basis_grams)
-        result.update(profile=profile, nutrients={key: float(value * factor)
+        result.update(profile=profile, nutrients={key: float(value)
                       for key, value in nutrient_values(profile).items()}, stock_uom=item.stock_uom)
     return result
 

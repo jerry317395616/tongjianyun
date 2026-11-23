@@ -19,7 +19,7 @@ frappe.ui.form.on("Item", {
 		code.df.reqd = 0;
 		code.refresh();
 		frm.fields_dict.custom_tjy_ingredient_aliases.$input?.attr("rows", 2).css("height", "auto");
-		return frappe.require("/assets/tongjianyun/js/ingredient_nutrition.js")
+		return frappe.require("/assets/tongjianyun/js/ingredient_nutrition.js?v=per-100g.js")
 			.then(() => frappe.tjy_ingredient_nutrition(frm));
 	},
 	item_code(frm) {
