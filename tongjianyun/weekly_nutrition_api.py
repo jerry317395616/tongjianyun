@@ -21,7 +21,7 @@ def _authorize():
     get_report_doc("Weekly Recipe Nutrition Analysis")
 
 
-def _source(week_start=None, week_name=None, plan_batch=None):
+def _authorized_source(week_start=None, week_name=None, plan_batch=None):
     _authorize()
     if week_start:
         try:
@@ -38,6 +38,11 @@ def _source(week_start=None, week_name=None, plan_batch=None):
     source = load_source({"week_start": week_start, "week_name": week_name, "plan_batch": plan_batch})
     if week_start and source["dates"][0] != week_start:
         frappe.throw("食谱与所选周开始日期不一致。")
+    return source
+
+
+def _source(week_start=None, week_name=None, plan_batch=None):
+    source = _authorized_source(week_start, week_name, plan_batch)
     try:
         return source_data(source["details"], source["dates"], source["source"])
     except (ValueError, TypeError, KeyError):
@@ -93,6 +98,13 @@ def report_data(week_start=None, week_name=None, plan_batch=None):
 @frappe.whitelist(methods=["POST"])
 def generate(week_start=None, week_name=None, plan_batch=None):
     return report_data(week_start, week_name, plan_batch)
+
+
+@frappe.whitelist(methods=["GET"])
+def calculate_profiles(week_start=None, week_name=None, plan_batch=None):
+    from tongjianyun.recipe_nutrition import for_week
+
+    return for_week(_authorized_source(week_start, week_name, plan_batch))
 
 
 def _access(report_id):

@@ -17,6 +17,7 @@ before_migrate = before_install
 after_install = [
     before_install,
     "tongjianyun.reports_setup.install",
+    "tongjianyun.nutrition_setup.install",
     "tongjianyun.standard_recipe_setup.install",
     "tongjianyun.ingredient_library_setup.install",
     "tongjianyun.special_orders.install",
@@ -46,9 +47,13 @@ doc_events = {
     },
     "Meal Planning Week": {
         "validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission",
+        "before_submit": "tongjianyun.recipe_nutrition.freeze_week",
         "on_submit": "tongjianyun.special_ingredients.freeze",
     },
-    "Meal Plan Adjustment": {"on_submit": "tongjianyun.special_ingredients.freeze"},
+    "Meal Plan Adjustment": {
+        "before_submit": "tongjianyun.recipe_nutrition.freeze_adjustment",
+        "on_submit": "tongjianyun.special_ingredients.freeze",
+    },
     "Material Request": {
         event: "tongjianyun.special_orders.check_request"
         for event in ("validate", "before_submit", "before_update_after_submit")
@@ -73,7 +78,7 @@ doc_events = {
     "BOM": {
         "validate": "tongjianyun.standard_recipes.validate_recipe",
         "before_save": "tongjianyun.standard_recipes.save_draft",
-        "before_submit": "tongjianyun.standard_recipes.publish_recipe",
+        "before_submit": ["tongjianyun.standard_recipes.publish_recipe", "tongjianyun.recipe_nutrition.freeze_recipe"],
         "on_update": "tongjianyun.dish_library.enroll_from_recipe",
         "on_submit": "tongjianyun.ingredient_library.enroll_from_recipe",
     },

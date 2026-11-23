@@ -29,7 +29,7 @@ def execute(filters=None):
         add("食材带量", food["name"], float(food["daily_quantity"]), food["uom"] + "/人日",
             "每名幼儿计划毛重；周人均合计：" + food["quantity"] + " " + food["uom"], ingredient_code=food["code"])
     source_payload = source_data(source["details"], source["dates"], source["source"])
-    message = '<div class="tjy-inline-analysis"><p class="tjy-inline-status" role="status">点击“生成AI营养分析”查看本周营养估算并下载Excel。结果临时保留15分钟。</p><div class="tjy-inline-sheet">' + render_sheet(source_payload) + '</div></div>'
+    message = '<div class="tjy-inline-analysis"><p class="tjy-inline-status" role="status">可按已审核的营养档案计算本周营养。生成的 AI 分析临时保留 15 分钟。</p><div class="tjy-inline-sheet">' + render_sheet(source_payload) + '</div></div>'
     return columns(), data, message, None, [], 1
 
 

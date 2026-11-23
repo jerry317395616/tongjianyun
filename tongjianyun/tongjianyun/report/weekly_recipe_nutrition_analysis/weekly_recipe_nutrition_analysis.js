@@ -38,6 +38,15 @@
         return row?.week_name ? {week_name: row.week_name} : row?.plan_batch ? {plan_batch: row.plan_batch} : {};
     };
     const active = (report, state) => report.__nutrition === state && frappe.get_route()[0] === "query-report" && frappe.get_route()[1] === name;
+    async function calculateProfiles(report) {
+        const source = selectedSource(report);
+        if (!Object.keys(source).length) return frappe.msgprint(__("请先选择周食谱或生产计划批次。"));
+        const state = report.__nutrition;
+        const {message} = await frappe.call({method: method + "calculate_profiles", args: source, type: "GET", freeze: true});
+        if (!active(report, state)) return;
+        await frappe.require("/assets/tongjianyun/js/nutrition_profiles.js");
+        if (active(report, state)) frappe.tjy_food_nutrition.week(message);
+    }
     async function generate(report) {
         if (report.__nutrition?.pending) return;
         const source = selectedSource(report);
@@ -91,6 +100,7 @@
         async onload(report) {
             report.page.set_title(__("食谱分析"));
             report.page.add_inner_button(__("周食谱表"), () => frappe.set_route("query-report", "Tongjianyun Weekly Menu", selectedSource(report)));
+            report.page.add_inner_button(__("按营养档案计算"), () => calculateProfiles(report));
             report.__nutritionGenerate = report.page.add_inner_button(__("生成AI营养分析"), () => generate(report));
             report.__nutritionDownload = report.page.add_inner_button(__("下载带量分析Excel"), () => {
                 if (report.__nutrition?.ready) window.location.assign("/api/method/" + method + "download?report_id=" + report.__nutrition.id);

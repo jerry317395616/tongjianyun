@@ -31,7 +31,10 @@ frappe.ui.form.on("Item", {
 				heading.prepend(frappe.utils.icon(icon, "sm"));
 			}
 		}
-		return frappe.require("/assets/tongjianyun/css/standard_ingredients.css");
+		return frappe.require([
+			"/assets/tongjianyun/css/standard_ingredients.css",
+			"/assets/tongjianyun/js/nutrition_profiles.js",
+		]).then(() => frappe.tjy_food_nutrition.ingredient(frm));
 	},
 	item_code(frm) {
 		const { doc } = frm;

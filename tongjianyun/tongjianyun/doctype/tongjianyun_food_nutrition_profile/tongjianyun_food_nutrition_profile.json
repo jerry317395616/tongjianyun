@@ -1,0 +1,349 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Food Nutrition Profile",
+ "module": "Tongjianyun",
+ "autoname": "format:TNUT-{#####}",
+ "title_field": "food_name",
+ "search_fields": "food_name,item_code,source_code",
+ "track_changes": 1,
+ "is_submittable": 1,
+ "allow_import": 1,
+ "show_title_field_in_link": 1,
+ "field_order": [
+  "item_code",
+  "food_name",
+  "food_state",
+  "source_column",
+  "source_name",
+  "source_code",
+  "source_version",
+  "source_url",
+  "evidence",
+  "basis_section",
+  "basis",
+  "basis_grams",
+  "basis_column",
+  "edible_pct",
+  "grams_per_stock_unit",
+  "basis_note",
+  "nutrients_section",
+  "energy",
+  "protein",
+  "fat",
+  "carbohydrate",
+  "fiber",
+  "sodium",
+  "cholesterol",
+  "nutrient_column_1",
+  "calcium",
+  "iron",
+  "zinc",
+  "potassium",
+  "magnesium",
+  "phosphorus",
+  "selenium",
+  "nutrient_column_2",
+  "vitamin_a",
+  "vitamin_b1",
+  "vitamin_b2",
+  "vitamin_c",
+  "vitamin_e",
+  "niacin",
+  "carotene",
+  "review_section",
+  "approved_at",
+  "approved_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "label": "标准食材",
+   "fieldtype": "Link",
+   "options": "Item",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "food_name",
+   "label": "来源食物名称",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "food_state",
+   "label": "食材状态",
+   "fieldtype": "Select",
+   "options": "\n生鲜\n干制\n熟制\n商品成品\n其他",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "source_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_name",
+   "label": "数据来源",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_code",
+   "label": "来源条目编号／商品规格",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_version",
+   "label": "来源版本／标签日期",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_url",
+   "label": "来源链接",
+   "fieldtype": "Data",
+   "options": "URL"
+  },
+  {
+   "fieldname": "evidence",
+   "label": "标签或来源凭证",
+   "fieldtype": "Attach"
+  },
+  {
+   "fieldname": "basis_section",
+   "label": "计量与可食率",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "basis",
+   "label": "原始营养值口径",
+   "fieldtype": "Select",
+   "options": "每100克\n每100毫升\n每份",
+   "default": "每100克",
+   "reqd": 1
+  },
+  {
+   "fieldname": "basis_grams",
+   "label": "对应可食重量（克）",
+   "fieldtype": "Data",
+   "depends_on": "eval:doc.basis != '每100克'",
+   "mandatory_depends_on": "eval:doc.basis != '每100克'",
+   "description": "每 100 毫升或每份原始营养值对应的克数。"
+  },
+  {
+   "fieldname": "basis_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "edible_pct",
+   "label": "默认可食率（%）",
+   "fieldtype": "Data",
+   "description": "仅在配方未录可食净量时使用。留空表示缺少依据。"
+  },
+  {
+   "fieldname": "grams_per_stock_unit",
+   "label": "每库存单位重量（克）",
+   "fieldtype": "Data",
+   "description": "例如库存单位为个、盒、袋时，录入一个单位对应的克数。"
+  },
+  {
+   "fieldname": "basis_note",
+   "label": "换算及匹配依据",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "nutrients_section",
+   "label": "营养值",
+   "fieldtype": "Section Break",
+   "description": "按所选原始口径录入。没有数据请留空。"
+  },
+  {
+   "fieldname": "energy",
+   "label": "能量（kcal）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "protein",
+   "label": "蛋白质（g）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "fat",
+   "label": "脂肪（g）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "carbohydrate",
+   "label": "碳水化合物（g）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "fiber",
+   "label": "膳食纤维（g）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "sodium",
+   "label": "钠（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "cholesterol",
+   "label": "胆固醇（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "nutrient_column_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "calcium",
+   "label": "钙（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "iron",
+   "label": "铁（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "zinc",
+   "label": "锌（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "potassium",
+   "label": "钾（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "magnesium",
+   "label": "镁（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "phosphorus",
+   "label": "磷（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "selenium",
+   "label": "硒（μg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "nutrient_column_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "vitamin_a",
+   "label": "维生素 A（μg RAE）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "vitamin_b1",
+   "label": "维生素 B1（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "vitamin_b2",
+   "label": "维生素 B2（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "vitamin_c",
+   "label": "维生素 C（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "vitamin_e",
+   "label": "维生素 E（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "niacin",
+   "label": "烟酸（mg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "carotene",
+   "label": "胡萝卜素（μg）",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "review_section",
+   "label": "审核",
+   "fieldtype": "Section Break",
+   "depends_on": "eval:doc.docstatus == 1"
+  },
+  {
+   "fieldname": "approved_at",
+   "label": "审核时间",
+   "fieldtype": "Datetime",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "label": "审核人",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "create": 1,
+   "write": 1,
+   "delete": 1,
+   "submit": 1,
+   "import": 1,
+   "export": 1
+  },
+  {
+   "role": "膳食管理员",
+   "read": 1,
+   "create": 1,
+   "write": 1,
+   "delete": 1,
+   "submit": 1,
+   "import": 1,
+   "export": 1
+  },
+  {
+   "role": "食谱审核员",
+   "read": 1,
+   "create": 1,
+   "write": 1,
+   "submit": 1,
+   "import": 1,
+   "export": 1
+  },
+  {
+   "role": "食谱编排员",
+   "read": 1,
+   "create": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1
+  }
+ ]
+}

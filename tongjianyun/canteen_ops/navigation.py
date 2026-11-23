@@ -14,6 +14,7 @@ GROUPS = (
     ("菜品与食谱", "book-open", (
         ("DocType", "Item", "标准菜品库", "book-open"),
         ("URL", INGREDIENT_URL, LIBRARY, "carrot"),
+        ("DocType", "Tongjianyun Food Nutrition Profile", "食物营养档案", "clipboard-list"),
         ("Report", REPORT, "食材主数据核查", "clipboard-check"),
         ("DocType", common.WEEK, "自定义周食谱", "calendar"),
         ("DocType", common.NUTRITION, "营养改善计划", "list-checks"),

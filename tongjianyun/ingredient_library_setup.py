@@ -8,6 +8,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.modules.import_file import import_file_by_path
 
 from tongjianyun.canteen_ops.navigation import install_navigation
+from tongjianyun.food_nutrition import MISSING, STATUS
 from tongjianyun.ingredient_library import ALIASES, LAYOUT, MARKER
 from tongjianyun.standard_recipe_setup import DISH_LAYOUT_FIELDS, DISH_OPTIONS, MODULE, _save_layout
 
@@ -24,6 +25,8 @@ UNITS = "custom_tjy_ing_units"
 ADVANCED = "custom_tjy_ing_advanced"
 ADVANCED_COLUMN = "custom_tjy_ing_advanced_column"
 CODE = "custom_tjy_ing_code"
+NUTRITION_TAB = "custom_tjy_nutrition_tab"
+NUTRITION_PREVIEW = "custom_tjy_nutrition_preview"
 
 LAYOUT_FIELDS = {
     OVERVIEW: {"fieldtype": "Section Break"},
@@ -34,6 +37,8 @@ LAYOUT_FIELDS = {
                "collapsible_depends_on": "eval:false"},
     ADVANCED_COLUMN: {"fieldtype": "Column Break"},
     CODE: {"fieldtype": "Section Break"},
+    NUTRITION_TAB: {"fieldtype": "Tab Break", "label": "营养成分"},
+    NUTRITION_PREVIEW: {"fieldtype": "HTML"},
 }
 PRIMARY_FIELDS = (
     OVERVIEW, PROFILE, "item_name", "item_group", ALIASES,
@@ -47,6 +52,7 @@ def install():
     frappe.only_for("System Manager")
     create_custom_fields({"Item": [dict(field, module="Tongjianyun") for field in FIELDS]})
     _install_layout()
+    frappe.db.set_value("Item", {MARKER: 1, STATUS: ["is", "not set"]}, STATUS, MISSING, update_modified=False)
     previous = frappe.flags.in_migrate
     try:
         frappe.flags.in_migrate = True
@@ -72,6 +78,7 @@ def _install_layout():
         "uoms": {"label": "单位换算"},
         **{fieldname: {"hidden": 1} for fieldname in SLOT_FIELDS.values()},
         **{name: {"depends_on": "eval:true"} for name in LAYOUT_FIELDS},
+        STATUS: {"hidden": 0, "in_standard_filter": 1},
     }, arrange_fields=_arrange_basic_info, condition=f"doc.{MARKER} == 1")
 
 
@@ -79,12 +86,16 @@ def _install_layout_fields():
     # Keep layout-only breaks beyond the native tabs, where they only affect this layout.
     fields = frappe.get_meta("Item", cached=False).fields
     anchor = next(df.fieldname for df in reversed(fields)
-                  if df.fieldname not in LAYOUT_FIELDS and df.fieldname not in DISH_LAYOUT_FIELDS)
+                  if df.fieldname != STATUS and df.fieldname not in LAYOUT_FIELDS
+                  and df.fieldname not in DISH_LAYOUT_FIELDS)
     custom = []
     for name, properties in LAYOUT_FIELDS.items():
         custom.append({"fieldname": name, "module": "Tongjianyun", "insert_after": anchor,
                        "depends_on": "eval:false", **properties})
         anchor = name
+    custom.append({"fieldname": STATUS, "module": "Tongjianyun", "insert_after": anchor,
+                   "label": "营养数据状态", "fieldtype": "Select", "hidden": 1, "read_only": 1,
+                   "default": MISSING, "options": "\n缺少数据\n待审核\n已匹配", "no_copy": 1})
     create_custom_fields({"Item": custom})
 
 
@@ -92,9 +103,10 @@ def _arrange_basic_info(metadata, fields):
     by_name = {row["fieldname"]: row for row in fields}
     details = next(i for i, df in enumerate(metadata) if df.fieldname == "details")
     end = next(i for i, df in enumerate(metadata) if i > details and df.fieldtype == "Tab Break")
-    placed = {*PRIMARY_FIELDS, *ADVANCED_SWITCHES, *LAYOUT_FIELDS, "item_code"}
+    placed = {*PRIMARY_FIELDS, *ADVANCED_SWITCHES, *LAYOUT_FIELDS, "item_code", STATUS}
     advanced = [row.fieldname for row in metadata[details + 1:end]
                 if row.fieldname not in placed and row.fieldtype not in {"Section Break", "Column Break"}]
     layout_order = (*PRIMARY_FIELDS, ADVANCED, *ADVANCED_SWITCHES, ADVANCED_COLUMN, *advanced, CODE, "item_code")
     other_tabs = [row for row in fields[end:] if row["fieldname"] not in placed]
-    return [*fields[:details + 1], *(by_name[name] for name in layout_order), *other_tabs]
+    return [*fields[:details + 1], *(by_name[name] for name in layout_order),
+            by_name[NUTRITION_TAB], by_name[STATUS], by_name[NUTRITION_PREVIEW], *other_tabs]
