@@ -1,13 +1,20 @@
 """Native sidebar entries for the meal and canteen module."""
+from urllib.parse import urlencode
+
 import frappe
 from frappe.desk.doctype.custom_sidebar.custom_sidebar import get_customization
 from frappe.desk.doctype.sidebar.sidebar import item_key
 
 from tongjianyun.canteen_ops import common
+from tongjianyun.ingredient_library import LAYOUT, LIBRARY, MARKER, REPORT
+
+INGREDIENT_URL = "/desk/item/view/list?" + urlencode({"layout": LAYOUT, MARKER: 1})
 
 GROUPS = (
     ("菜品与食谱", "book-open", (
         ("DocType", "Item", "标准菜品库", "book-open"),
+        ("URL", INGREDIENT_URL, LIBRARY, "carrot"),
+        ("Report", REPORT, "食材主数据核查", "clipboard-check"),
         ("DocType", common.WEEK, "自定义周食谱", "calendar"),
         ("DocType", common.NUTRITION, "营养改善计划", "list-checks"),
     )),
@@ -93,7 +100,9 @@ def install_navigation(module, dish_route_options):
         for link_type, target, label, icon in entries:
             entry = {"type": "Link", "link_type": link_type, "link_to": target, "label": label,
                      "icon": icon, "child": 1, "added": 1}
-            if target == "Item":
+            if link_type == "URL":
+                entry.update(link_to=None, url=target, open_in_new_tab=0)
+            elif target == "Item":
                 entry["route_options"] = dish_route_options
             row = links.get(_entry_key(entry))
             if row is None:

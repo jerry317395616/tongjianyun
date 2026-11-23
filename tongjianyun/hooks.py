@@ -18,6 +18,7 @@ after_install = [
     before_install,
     "tongjianyun.reports_setup.install",
     "tongjianyun.standard_recipe_setup.install",
+    "tongjianyun.ingredient_library_setup.install",
     "tongjianyun.special_orders.install",
 ]
 after_migrate = after_install
@@ -36,7 +37,10 @@ doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/j
                    "Tongjianyun Food Sample": "public/js/canteen_sample_list.js"}
 extend_doctype_class = {"Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"]}
 doc_events = {
-    "Item": {"before_insert": "tongjianyun.dish_library.validate_new_dish"},
+    "Item": {
+        "before_insert": "tongjianyun.dish_library.validate_new_dish",
+        "validate": "tongjianyun.ingredient_library.validate_ingredient",
+    },
     "Meal Planning Week": {
         "validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission",
         "on_submit": "tongjianyun.special_ingredients.freeze",
@@ -68,6 +72,7 @@ doc_events = {
         "before_save": "tongjianyun.standard_recipes.save_draft",
         "before_submit": "tongjianyun.standard_recipes.publish_recipe",
         "on_update": "tongjianyun.dish_library.enroll_from_recipe",
+        "on_submit": "tongjianyun.ingredient_library.enroll_from_recipe",
     },
 }
 

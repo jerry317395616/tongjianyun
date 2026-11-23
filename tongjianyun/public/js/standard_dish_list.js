@@ -1,19 +1,22 @@
 (() => {
-	const layout = "标准菜品档案";
+	const dishLayout = "标准菜品档案";
+	const ingredientLayout = "标准食材档案";
+	const mealLayouts = new Set([dishLayout, ingredientLayout]);
 	const settings = (frappe.listview_settings.Item ??= {});
 	const onload = settings.onload;
 	settings.onload = function (list) {
 		onload?.call(this, list);
 		const getFormLink = list.get_form_link.bind(list);
 		list.get_form_link = function (doc) {
-			if (frappe.router.doctype_layout === layout) {
+			const layout = frappe.router.doctype_layout;
+			if (mealLayouts.has(layout)) {
 				return frappe.utils.get_form_link("Item", doc.name, false, null, { layout });
 			}
 			return getFormLink(doc);
 		};
 		// The native row handler only forwards the pathname, dropping the layout query.
 		list.$result[0].addEventListener("click", (event) => {
-			if (frappe.router.doctype_layout !== layout || event.ctrlKey || event.metaKey) return;
+			if (!mealLayouts.has(frappe.router.doctype_layout) || event.ctrlKey || event.metaKey) return;
 			if (event.target.closest(
 				"a, button, input, [data-toggle='dropdown'], .filterable, .select-like, .file-select, .list-row-like"
 			)) return;
@@ -26,9 +29,16 @@
 		}, true);
 		const makeNew = list.make_new_doc.bind(list);
 		list.make_new_doc = async function () {
-			if (frappe.router.doctype_layout !== layout) {
-				return makeNew();
+			const layout = frappe.router.doctype_layout;
+			if (layout === ingredientLayout) {
+				return frappe.model.with_doctype("Item", () => {
+					const doc = frappe.model.get_new_doc("Item", null, null, true);
+					doc.custom_tjy_standard_ingredient = 1;
+					frappe.route_options = { layout };
+					return frappe.set_route("Form", "Item", doc.name);
+				});
 			}
+			if (layout !== dishLayout) return makeNew();
 			const { message: options } = await frappe.call({
 				method: "tongjianyun.dish_library.dish_options",
 				type: "GET",

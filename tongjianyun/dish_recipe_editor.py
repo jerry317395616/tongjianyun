@@ -3,7 +3,6 @@
 from math import isfinite
 
 import frappe
-from erpnext.stock.get_item_details import get_conversion_factor
 
 from tongjianyun.dish_library import (
     _can_select_company,
@@ -15,12 +14,10 @@ from tongjianyun.dish_library import (
     _valid_production_item,
     _visible,
 )
-from tongjianyun.standard_recipes import CATEGORY, DISH, DISH_CATEGORY, DRAFT, MARKER, NET_QTY, STATE
-
-
-INGREDIENT_GROUPS = (
-    "粮油及主食", "蔬菜", "水果", "肉禽水产", "蛋奶及豆制品", "干货", "调味品", "食谱样例食材",
+from tongjianyun.ingredient_library import (
+    ALIASES, INGREDIENT_GROUPS, MARKER as INGREDIENT, configured_conversion, conversion_rows,
 )
+from tongjianyun.standard_recipes import CATEGORY, DISH, DISH_CATEGORY, DRAFT, MARKER, NET_QTY, STATE
 
 
 @frappe.whitelist()
@@ -34,8 +31,17 @@ def ingredient_query(
     if doctype != "Item":
         return []
     ingredient_filters = {**(filters or {}), "item_group": ["in", INGREDIENT_GROUPS], DISH: 0}
-    matches = item_query(doctype, txt, searchfield, start, page_len, ingredient_filters)
-    return [(code, item_name or code) for code, item_name, *_ in matches]
+    if not txt:
+        matches = item_query(doctype, txt, searchfield, start, page_len, ingredient_filters)
+        return [(code, item_name or code) for code, item_name, *_ in matches]
+    limit = start + page_len
+    normal = item_query(doctype, txt, searchfield, 0, limit, dict(ingredient_filters))
+    pattern = "%" + txt.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    aliases = item_query(doctype, "", searchfield, 0, limit, {
+        **ingredient_filters, INGREDIENT: 1, ALIASES: ["like", pattern],
+    })
+    matches = {code: item_name or code for code, item_name, *_ in (*normal, *aliases)}
+    return list(matches.items())[start:limit]
 
 
 def _context(dish, company, *, lock=False):
@@ -192,7 +198,7 @@ def _checked_factor(code, unit, index, *, is_new):
         frappe.throw(f"第 {index} 行物料无法用于配方。")
     if not frappe.db.exists("UOM", {"name": unit, "enabled": 1}):
         frappe.throw(f"第 {index} 行食材单位未启用。")
-    factor = float(get_conversion_factor(code, unit).get("conversion_factor") or 0)
+    factor = configured_conversion(item, unit, conversion_rows([item]))
     if factor <= 0 or not isfinite(factor):
         frappe.throw(f"第 {index} 行食材需要配置该单位的换算系数。")
     return factor
