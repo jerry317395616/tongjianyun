@@ -212,7 +212,7 @@ def _install_sidebar():
     _install_ingredient_analysis_link()
     _install_staffing_links()
     _install_sidebar_link("DocType", "Tongjianyun Nutrition Improvement Plan", "营养改善计划", "list-checks")
-    install_navigation(MODULE)
+    install_navigation(MODULE, json.dumps(DISH_OPTIONS, ensure_ascii=False))
 
 
 def _install_dish_link():
