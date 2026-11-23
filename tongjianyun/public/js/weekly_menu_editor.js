@@ -1,8 +1,20 @@
 (() => {
 	const api = "tongjianyun.weekly_menu_editor.";
+	const doctype = "Meal Planning Week";
+	const basicTab = "custom_tjy_week_basic_tab";
+	const calendarTab = "custom_tjy_week_calendar_tab";
 	const weekdays = ["周一", "周二", "周三", "周四", "周五"];
 	const editable = (frm) => frm.doc.docstatus === 0 && !!frm.perm?.[0]?.write;
 	let styles;
+	let openedWeek;
+	let requestedTab = window.location.hash.slice(1);
+	frappe.router?.on?.("change", () => {
+		const [view, type, name] = frappe.get_route();
+		if (view !== "Form" || type !== doctype || name !== openedWeek) {
+			openedWeek = undefined;
+			requestedTab = window.location.hash.slice(1);
+		}
+	});
 	function loadStyles() {
 		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=week-create.css"))
 			.catch(() => { styles = undefined; });
@@ -54,7 +66,7 @@
 		}).catch(() => {});
 	}
 
-	function renderCalendar(frm, $panel, data) {
+	function renderCalendar(frm, $panel, data, tabbed) {
 		const { days, slots, meals, initialized, categories } = data;
 		const canEdit = editable(frm);
 		const byMeal = new Map(meals.map((meal) => [`${meal.date}:${meal.slot}`, meal]));
@@ -66,10 +78,11 @@
 		$panel.empty();
 		const $headBand = $("<div>", { class: "tgy-week-overview" }).appendTo($panel);
 		const $heading = $("<div>").appendTo($headBand);
-		$("<h3>", { class: "tgy-week-title" }).text("供餐周历").appendTo($heading);
 		const start = days[0];
 		const end = days.at(-1);
-		$("<div>", { class: "tgy-week-period" }).text(`${dateLabel(start, true)} – ${dateLabel(end, start.slice(0, 4) !== end.slice(0, 4))}`).appendTo($heading);
+		const period = `${dateLabel(start, true)} – ${dateLabel(end, start.slice(0, 4) !== end.slice(0, 4))}`;
+		$("<h3>", { class: "tgy-week-title" }).text(tabbed ? period : "供餐周历").appendTo($heading);
+		if (!tabbed) $("<div>", { class: "tgy-week-period" }).text(period).appendTo($heading);
 		if (canEdit && !initialized) {
 			const $actions = $("<div>", { class: "tgy-week-actions" }).appendTo($headBand);
 			button($actions, "空白编排", () => startWeek(frm, false), true);
@@ -126,35 +139,55 @@
 	async function refresh(frm) {
 		const $grid = frm.fields_dict.meals?.$wrapper;
 		if (!$grid?.length) return;
-		const creating = Boolean(frm.is_new() && !frm.doc.amended_from);
+		const unsaved = Boolean(frm.is_new());
+		const creating = unsaved && !frm.doc.amended_from;
+		const name = frm.doc.name;
+		const opening = openedWeek !== name;
+		openedWeek = name;
 		loadStyles();
 		frm.layout.wrapper.toggleClass("tgy-week-create", creating);
 		frm.fields_dict.company?.$wrapper?.closest(".form-section").toggleClass("tgy-week-settings", !creating);
-		let $panel = $grid.prev(".tgy-week-menu");
+		const $calendar = frm.fields_dict.custom_tjy_week_calendar?.$wrapper;
+		const tab = frm.layout.tabs.find((entry) => entry.df.fieldname === calendarTab);
+		const tabbed = Boolean($calendar?.length && tab);
+		const $mealSection = tabbed ? $grid.closest(".form-section") : null;
+		let $panel = tabbed ? $calendar.addClass("tgy-week-menu") : $grid.prev(".tgy-week-menu");
+		$mealSection?.hide();
 		if (creating) {
-			$panel.remove();
-			frm.set_intro("保存后，可选择空白编排或复制上周。", "blue");
+			if (tabbed) $panel.empty();
+			else $panel.remove();
+			frm.set_intro("保存后，在「供餐周历」选择空白编排或复制上周。", "blue");
 			return;
 		}
 		if (!$panel.length) $panel = $("<div>", { class: "tgy-week-menu mb-3" }).insertBefore($grid);
 		const $content = $("<div>").appendTo($panel.empty());
-		if (frm.is_new()) {
+		if (unsaved) {
 			$grid.show();
 			message($content, "请先保存园所、供餐周、学期和原料仓库，再开始编排。");
 			return;
 		}
-		const name = frm.doc.name;
+		if (tabbed) {
+			const explicitTab = frm.layout.tabs.some((tab) => tab.df.fieldname === requestedTab && !tab.is_hidden());
+			if (!tab.is_hidden() && (frm.__tgy_week_open_calendar || (opening && frm.doc.meals?.length && !explicitTab))) {
+				frm.layout.select_tab(calendarTab);
+			}
+			frm.__tgy_week_open_calendar = false;
+			frm.custom_buttons?.["采购需求预览"]?.off("click.tgyWeekTab")
+				.on("click.tgyWeekTab", () => frm.layout.select_tab(basicTab));
+		}
 		message($content, "正在读取周食谱…");
 		try {
 			const data = await call("calendar", { week_name: name });
 			if (frm.doc.name !== name || !$content.parent().length) return;
-			renderCalendar(frm, $content, data);
+			renderCalendar(frm, $content, data, tabbed);
 			frm.remove_custom_button("调整本餐菜品");
 			frm.custom_buttons?.["从上一周编排"]?.text("从参考周编排");
 			$grid.hide();
 		} catch {
+			if (frm.doc.name !== name || !$content.parent().length) return;
 			message($content.empty(), "周食谱读取失败。");
 			button($content, "重试", () => refresh(frm));
+			$mealSection?.show();
 			$grid.show();
 		}
 	}
@@ -311,5 +344,14 @@
 		}
 	}
 
-	frappe.ui.form.on("Meal Planning Week", { refresh });
+	frappe.ui.form.on(doctype, {
+		refresh,
+		before_save(frm) {
+			frm.__tgy_week_first_save = Boolean(frm.is_new());
+		},
+		after_save(frm) {
+			frm.__tgy_week_open_calendar = frm.__tgy_week_first_save;
+			frm.__tgy_week_first_save = false;
+		},
+	});
 })();

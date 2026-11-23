@@ -21,6 +21,7 @@ after_install = [
     "tongjianyun.standard_recipe_setup.install",
     "tongjianyun.ingredient_library_setup.install",
     "tongjianyun.special_orders.install",
+    "tongjianyun.weekly_menu_setup.install",
 ]
 after_migrate = after_install
 scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_reminders"]}

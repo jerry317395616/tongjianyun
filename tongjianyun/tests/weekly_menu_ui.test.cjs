@@ -21,6 +21,7 @@ function element(tag, attrs = {}) {
 		},
 		prop(key, value) { this.attrs[key] = value; return this; },
 		find() { return this; }, on(type, action) { this.events[type] = action; return this; },
+		closest() { return this.host; },
 		appendTo(host) { this.host = host; host.children.push(this); return this; },
 		insertBefore(anchor) { this.host = anchor.host; this.host.children.splice(this.host.children.indexOf(anchor), 0, this); return this; },
 		parent() { return this.host || { length: 0 }; },
@@ -32,11 +33,14 @@ function element(tag, attrs = {}) {
 test("native week keeps creation compact and shows the calendar and meal drawer after saving", async () => {
 	let hooks, dialog, initialized = false, saved, creating = true, intro;
 	const page = element("<div>");
-	const grid = element("<div>").appendTo(page);
+	const section = element("<div>").appendTo(page);
+	const grid = element("<div>").appendTo(section);
+	const calendar = element("<div>").appendTo(page);
 	const days = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
 	const slots = ["早餐", "早点", "午餐", "午点", "晚餐"];
 	const calls = [];
 	const assets = [];
+	const tabsOpened = [];
 	class Dialog {
 		constructor(options) {
 			this.options = options;
@@ -77,21 +81,28 @@ test("native week keeps creation compact and shows the calendar and meal drawer 
 	};
 	const form = {
 		doc: { name: "MEAL-WEEK-QA", docstatus: 0 }, perm: [{ write: 1 }],
-		layout: { wrapper: page },
-		fields_dict: { meals: { $wrapper: grid } }, is_new: () => creating ? 1 : undefined, is_dirty: () => false,
+		layout: { wrapper: page, tabs: [{ df: { fieldname: "custom_tjy_week_calendar_tab" }, is_hidden: () => creating }],
+			select_tab(name) { tabsOpened.push(name); } },
+		fields_dict: { meals: { $wrapper: grid }, custom_tjy_week_calendar: { $wrapper: calendar } },
+		is_new: () => creating ? 1 : undefined, is_dirty: () => false,
 		set_intro(text) { intro = text; },
 		remove_custom_button() {}, reload_doc: async () => hooks.refresh(form),
 	};
-	runInNewContext(readFileSync(resolve(__dirname, "../public/js/weekly_menu_editor.js"), "utf8"), { frappe, $: element });
+	runInNewContext(readFileSync(resolve(__dirname, "../public/js/weekly_menu_editor.js"), "utf8"),
+		{ frappe, $: element, window: { location: { hash: "" } } });
 	await hooks.refresh(form);
 	assert.equal(page.attrs.class, "tgy-week-create");
-	assert.equal(intro, "保存后，可选择空白编排或复制上周。");
+	assert.equal(intro, "保存后，在「供餐周历」选择空白编排或复制上周。");
 	assert.equal(calls.length, 0);
+	hooks.before_save(form);
 	creating = false;
 	page.attrs.class = "";
+	hooks.after_save(form);
 	await hooks.refresh(form);
 	assert.equal(page.attrs.class, "");
-	assert.equal(page.all("<td>").length, 25);
+	assert.deepEqual(tabsOpened, ["custom_tjy_week_calendar_tab"]);
+	assert.equal(calendar.all("<td>").length, 25);
+	assert.equal(section.hidden, true);
 	await page.all("<button>").find((node) => node.content === "复制上周").events.click();
 	assert.equal(calls.find(([operation]) => operation === "initialize")[2].copy_previous, 1);
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
