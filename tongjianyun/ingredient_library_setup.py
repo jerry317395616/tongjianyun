@@ -58,6 +58,8 @@ def install():
 
 
 def _install_layout():
+    from ione_core.meal_planning import SLOT_FIELDS
+
     _install_layout_fields()
     _save_layout("Item", LAYOUT, {
         "item_name": {"label": "标准食材名称", "in_list_view": 1, "reqd": 1},
@@ -68,6 +70,7 @@ def _install_layout():
         "purchase_uom": {"label": "默认采购单位", "in_list_view": 1,
                          "description": "采购单位不同时，在「计量单位」中维护换算。"},
         "uoms": {"label": "单位换算"},
+        **{fieldname: {"hidden": 1} for fieldname in SLOT_FIELDS.values()},
         **{name: {"depends_on": "eval:true"} for name in LAYOUT_FIELDS},
     }, arrange_fields=_arrange_basic_info, condition=f"doc.{MARKER} == 1")
 
