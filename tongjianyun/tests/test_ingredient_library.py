@@ -87,21 +87,7 @@ class IngredientLibraryTests(unittest.TestCase):
         self.assertEqual(library.configured_conversion(item, "箱", {("XT", "箱"): 8}, generic), 8)
         self.assertEqual(library.configured_conversion(item, "g", {("X", "g"): 0}, generic), 0)
 
-    def test_alias_normalization_and_audit_findings_keep_distinct_item_codes(self):
+    def test_alias_normalization_deduplicates_variants(self):
         library = self.library
-
-        class Item(dict):
-            __getattr__ = dict.__getitem__
-
-        item = Item(name="I-1", item_name="土豆", item_group="食谱样例食材", stock_uom="Kg",
-                    purchase_uom="箱", variant_of=None)
-        item[library.ALIASES] = "马铃薯\n Pot ato \nＰＯＴＡＴＯ"
-        duplicate = Item(name="I-2", item_name="马铃薯")
-        row = SimpleNamespace(item_code="I-1", uom="g")
-        results = list(library.audit_findings(
-            [item], [item, duplicate], [row], {"Kg", "箱", "g"}, {}, lambda *_: .001,
-        ))
-        self.assertEqual(set(library.aliases_for(item[library.ALIASES])), {"马铃薯", "potato"})
-        self.assertEqual({r["issue"] for r in results}, {"待确认分类", "疑似重复", "缺少单位换算"})
-        self.assertTrue(any("I-2" in r["detail"] for r in results))
-        self.assertTrue(all(r["item_code"] == "I-1" for r in results))
+        aliases = library.aliases_for("马铃薯\n Pot ato \nＰＯＴＡＴＯ")
+        self.assertEqual(aliases, {"马铃薯": "马铃薯", "potato": "Pot ato"})

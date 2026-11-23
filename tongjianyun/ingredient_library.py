@@ -1,6 +1,5 @@
 """Standard food ingredients are ERPNext Items shared by recipes and purchases."""
 
-from collections import defaultdict
 from math import isfinite
 from unicodedata import normalize
 from uuid import uuid4
@@ -14,7 +13,6 @@ MARKER = "custom_tjy_standard_ingredient"
 ALIASES = "custom_tjy_ingredient_aliases"
 LAYOUT = "标准食材档案"
 LIBRARY = "标准食材库"
-REPORT = "Tongjianyun Ingredient Master Audit"
 INGREDIENT_GROUPS = (
     "粮油及主食", "蔬菜", "水果", "肉禽水产", "蛋奶及豆制品", "干货", "调味品", "食谱样例食材",
 )
@@ -129,65 +127,3 @@ def conversion_rows(items):
             "parent": ["in", sorted(codes)], "parenttype": "Item", "parentfield": "uoms",
         }, fields=["parent", "uom", "conversion_factor"],
     )}
-
-
-def audit_findings(items, candidates, recipe_rows, enabled_units, factors, generic=get_uom_conv_factor):
-    used_units = defaultdict(set)
-    for row in recipe_rows:
-        used_units[row.item_code].add(row.uom or "")
-    named = defaultdict(set)
-    for item in candidates:
-        for key in {name_key(item.item_name), *aliases_for(item.get(ALIASES))} - {""}:
-            named[key].add(item.name)
-
-    for item in items:
-        def finding(issue, detail):
-            return dict(item_code=item.name, item_name=item.item_name, item_group=item.item_group,
-                        stock_uom=item.stock_uom, purchase_uom=item.purchase_uom, issue=issue, detail=detail)
-        if item.item_group not in CLASSIFIED_GROUPS:
-            yield finding("待确认分类", "请选择合适的食材物料组。")
-        keys = {name_key(item.item_name), *aliases_for(item.get(ALIASES))} - {""}
-        matches = set().union(*(named[key] for key in keys)) - {item.name}
-        if matches:
-            yield finding("疑似重复", "名称或别名重叠。请按规格核对物料 " + "、".join(sorted(matches)))
-        if item.stock_uom not in enabled_units:
-            yield finding("缺少有效单位", "库存单位为空或已停用。")
-            continue
-        units = used_units[item.name] | ({item.purchase_uom} if item.purchase_uom else set())
-        for unit in sorted(units):
-            if unit not in enabled_units:
-                yield finding("缺少有效单位", f"{unit or '配方单位'}为空或已停用。")
-            elif not configured_conversion(item, unit, factors, generic):
-                yield finding("缺少单位换算", f"请核对 {unit} 到 {item.stock_uom} 的换算系数。")
-
-
-def execute_audit(filters=None):
-    frappe.has_permission("Item", "read", throw=True)
-    candidates = frappe.get_list("Item", filters={"disabled": 0, DISH: 0}, or_filters={
-        MARKER: 1, "item_group": ["in", INGREDIENT_GROUPS],
-    }, fields=["name", "item_name", "item_group", "stock_uom", "purchase_uom", "variant_of", MARKER, ALIASES],
-        order_by="item_name asc, name asc", limit_page_length=0)
-    items = [row for row in candidates if row.get(MARKER)]
-    boms = (frappe.get_list("BOM", filters={RECIPE: 1, "docstatus": 1, "is_active": 1},
-                            pluck="name", limit_page_length=0)
-            if frappe.has_permission("BOM", "read") else [])
-    enabled_units = set(frappe.get_all("UOM", filters={"enabled": 1}, pluck="name"))
-    generic_factors = {}
-
-    def generic(source, target):
-        pair = (source, target)
-        if pair not in generic_factors:
-            generic_factors[pair] = get_uom_conv_factor(*pair)
-        return generic_factors[pair]
-
-    columns = [
-        {"label": "食材编码", "fieldname": "item_code", "fieldtype": "Link", "options": "Item", "width": 145},
-        {"label": "食材名称", "fieldname": "item_name", "fieldtype": "Data", "width": 160},
-        {"label": "物料组", "fieldname": "item_group", "fieldtype": "Link", "options": "Item Group", "width": 120},
-        {"label": "库存单位", "fieldname": "stock_uom", "fieldtype": "Data", "width": 85},
-        {"label": "采购单位", "fieldname": "purchase_uom", "fieldtype": "Data", "width": 85},
-        {"label": "核查项目", "fieldname": "issue", "fieldtype": "Data", "width": 130},
-        {"label": "核查说明", "fieldname": "detail", "fieldtype": "Data", "width": 340},
-    ]
-    return columns, list(audit_findings(items, candidates, recipe_ingredient_rows(boms), enabled_units,
-                                        conversion_rows(items), generic))

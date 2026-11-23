@@ -8,7 +8,7 @@ from tongjianyun.canteen_ops.reminders import METHOD as _EXPIRY_REMINDER
 
 REPORTS = (
     "Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger",
-    "Tongjianyun Ingredient Analysis", "Tongjianyun Ingredient Master Audit", "Tongjianyun Canteen Staffing Analysis",
+    "Tongjianyun Ingredient Analysis", "Tongjianyun Canteen Staffing Analysis",
 ) + report_names()
 
 

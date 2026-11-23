@@ -2,3 +2,4 @@
 
 [post_model_sync]
 tongjianyun.patches.simplify_food_nutrition_profiles
+tongjianyun.patches.remove_ingredient_master_audit

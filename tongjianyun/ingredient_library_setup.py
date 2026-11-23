@@ -1,11 +1,9 @@
-"""Install the standard ingredient view and audit using native Frappe metadata."""
+"""Install the standard ingredient view using native Frappe metadata."""
 
 import json
-from pathlib import Path
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-from frappe.modules.import_file import import_file_by_path
 
 from tongjianyun.canteen_ops.navigation import install_navigation
 from tongjianyun.food_nutrition import MISSING, STATUS
@@ -51,7 +49,6 @@ PRIMARY_FIELDS = (
     PURCHASING, "stock_uom", UNITS_COLUMN, "purchase_uom", POLICY_COLUMN, "custom_meal_procurement_policy",
 )
 ADVANCED_SWITCHES = ("is_purchase_item", "is_sales_item", "allow_alternative_item", "has_variants")
-REPORT_PATH = Path(__file__).parent / "tongjianyun/report/tongjianyun_ingredient_master_audit"
 
 
 def install():
@@ -59,12 +56,6 @@ def install():
     create_custom_fields({"Item": [dict(field, module="Tongjianyun") for field in FIELDS]})
     _install_layout()
     frappe.db.set_value("Item", {MARKER: 1, STATUS: ["is", "not set"]}, STATUS, MISSING, update_modified=False)
-    previous = frappe.flags.in_migrate
-    try:
-        frappe.flags.in_migrate = True
-        import_file_by_path(str(REPORT_PATH / "tongjianyun_ingredient_master_audit.json"), force=True)
-    finally:
-        frappe.flags.in_migrate = previous
     install_navigation(MODULE, json.dumps(DISH_OPTIONS, ensure_ascii=False))
     frappe.clear_cache()
 
