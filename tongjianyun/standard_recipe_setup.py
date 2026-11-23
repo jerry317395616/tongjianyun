@@ -152,7 +152,7 @@ def _arrange_dish_details(metadata, fields):
     return [*fields[:start + 1], *(rows[name] for name in names), *advanced, *other_tabs]
 
 
-def _save_layout(doctype, title, overrides, *, fields_after=None, **properties):
+def _save_layout(doctype, title, overrides, *, arrange_fields=None, **properties):
     values = {
         "doctype": "DocType Layout",
         "title": title,
@@ -179,12 +179,8 @@ def _save_layout(doctype, title, overrides, *, fields_after=None, **properties):
                 field["hidden"] = 1
     if title == DISH_LAYOUT:
         fields = _arrange_dish_details(metadata, fields)
-    if fields_after:
-        anchor, names = fields_after
-        selected = {row["fieldname"]: row for row in fields if row["fieldname"] in names}
-        fields = [row for row in fields if row["fieldname"] not in selected]
-        index = next(i for i, row in enumerate(fields) if row["fieldname"] == anchor) + 1
-        fields[index:index] = [selected[name] for name in names]
+    if arrange_fields:
+        fields = arrange_fields(metadata, fields)
     values["fields"] = fields
     existing = frappe.db.exists("DocType Layout", title)
     if existing:
