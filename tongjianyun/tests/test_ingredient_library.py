@@ -3,7 +3,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class IngredientLibraryTests(unittest.TestCase):
@@ -13,8 +13,11 @@ class IngredientLibraryTests(unittest.TestCase):
         standard_recipes = ModuleType("tongjianyun.standard_recipes")
         standard_recipes.DISH = "dish"
         standard_recipes.MARKER = "recipe"
+        self.frappe = ModuleType("frappe")
+        self.frappe.whitelist = lambda **kwargs: lambda fn: fn
+        self.frappe.has_permission = Mock()
         with patch.dict(sys.modules, {
-            "frappe": ModuleType("frappe"),
+            "frappe": self.frappe,
             "erpnext.stock.doctype.item.item": item_module,
             "tongjianyun.standard_recipes": standard_recipes,
         }):
@@ -23,6 +26,30 @@ class IngredientLibraryTests(unittest.TestCase):
             )
             self.library = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.library)
+
+    def test_form_code_requires_create_permission_and_missing_code_is_generated_on_insert(self):
+        library = self.library
+
+        class Item(SimpleNamespace):
+            def get(self, name):
+                return getattr(self, name, None)
+
+        code = library.new_ingredient_code()
+        self.frappe.has_permission.assert_called_once_with("Item", "create", throw=True)
+        self.assertRegex(code, r"^TJY-AUTO-[0-9A-F]{20}$")
+
+        standard = Item(item_code="", **{library.MARKER: 1})
+        library.set_ingredient_code(standard)
+        self.assertRegex(standard.item_code, r"^TJY-AUTO-[0-9A-F]{20}$")
+        self.assertNotEqual(standard.item_code, code)
+        library.set_ingredient_code(standard)
+        standard.item_code = "EXISTING-22"
+        library.set_ingredient_code(standard)
+        self.assertEqual(standard.item_code, "EXISTING-22")
+
+        ordinary = Item(item_code="")
+        library.set_ingredient_code(ordinary)
+        self.assertEqual(ordinary.item_code, "")
 
     def test_conversion_uses_explicit_package_factor_and_native_mass_factor(self):
         library = self.library

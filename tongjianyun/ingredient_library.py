@@ -3,6 +3,7 @@
 from collections import defaultdict
 from math import isfinite
 from unicodedata import normalize
+from uuid import uuid4
 
 import frappe
 from erpnext.stock.doctype.item.item import get_uom_conv_factor
@@ -34,6 +35,21 @@ def aliases_for(value):
         if key := name_key(line):
             aliases.setdefault(key, line.strip())
     return aliases
+
+
+def _new_item_code():
+    return f"TJY-AUTO-{uuid4().hex[:20].upper()}"
+
+
+@frappe.whitelist(methods=["GET"])
+def new_ingredient_code():
+    frappe.has_permission("Item", "create", throw=True)
+    return _new_item_code()
+
+
+def set_ingredient_code(doc, method=None):
+    if doc.get(MARKER) and not (doc.item_code or "").strip():
+        doc.item_code = _new_item_code()
 
 
 def validate_ingredient(doc, method=None):

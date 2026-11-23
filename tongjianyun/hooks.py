@@ -25,7 +25,7 @@ after_migrate = after_install
 scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_reminders"]}
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",
-    "Item": "public/js/standard_dishes.js",
+    "Item": ["public/js/standard_dishes.js", "public/js/standard_ingredients.js"],
     "Meal Planning Week": ["public/js/weekly_menu_editor.js", "public/js/special_ingredients.js",
                            "public/js/special_orders.js", "public/js/canteen_forms.js"],
     "Meal Plan Adjustment": ["public/js/special_ingredients.js", "public/js/special_orders.js", "public/js/canteen_forms.js"],
@@ -38,7 +38,10 @@ doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/j
 extend_doctype_class = {"Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"]}
 doc_events = {
     "Item": {
-        "before_insert": "tongjianyun.dish_library.validate_new_dish",
+        "before_insert": [
+            "tongjianyun.dish_library.validate_new_dish",
+            "tongjianyun.ingredient_library.set_ingredient_code",
+        ],
         "validate": "tongjianyun.ingredient_library.validate_ingredient",
     },
     "Meal Planning Week": {
