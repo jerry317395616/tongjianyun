@@ -16,7 +16,7 @@
 		}
 	});
 	function loadStyles() {
-		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=week-create.css"))
+		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-composer"))
 			.catch(() => { styles = undefined; });
 	}
 	function dateLabel(value, year = false) {
@@ -69,6 +69,7 @@
 	function renderCalendar(frm, $panel, data, tabbed) {
 		const { days, slots, meals, initialized, categories } = data;
 		const canEdit = editable(frm);
+		const schedule = { days, slots, categories };
 		const byMeal = new Map(meals.map((meal) => [`${meal.date}:${meal.slot}`, meal]));
 		const total = days.length * slots.length;
 		const stopped = meals.filter((meal) => meal.stopped).length;
@@ -106,10 +107,10 @@
 			$("<time>", { datetime: day }).text(dateLabel(day)).appendTo($day);
 		}
 		const $body = $("<tbody>").appendTo($table);
-		for (const slot of slots) {
+		for (const [slotIndex, slot] of slots.entries()) {
 			const $row = $("<tr>").appendTo($body);
 			$("<th>", { scope: "row" }).text(slot).appendTo($row);
-			for (const day of days) {
+			for (const [dayIndex, day] of days.entries()) {
 				const meal = byMeal.get(`${day}:${slot}`);
 				const label = meal?.stopped ? "整餐停供" : meal?.menu || "未编排";
 				const state = meal?.stopped ? "stopped" : meal?.menu ? "scheduled" : "pending";
@@ -118,7 +119,7 @@
 				let $card;
 				if (canEdit && initialized) {
 					$card = $("<button>", { type: "button", class: cellClass, "aria-label": `${day} ${slot} ${label}` })
-						.on("click", () => openMeal(frm, day, slot, categories)).appendTo($cell);
+						.on("click", () => openMeal(frm, schedule, dayIndex * slots.length + slotIndex)).appendTo($cell);
 				} else {
 					$card = $("<div>", { class: cellClass }).appendTo($cell);
 				}
@@ -192,115 +193,235 @@
 		}
 	}
 
-	async function openMeal(frm, date, slot, categories) {
-		if (!canAct(frm)) return;
-		const args = { week_name: frm.doc.name, meal_date: date, meal_type: slot };
+	function isCurrentWeek(frm, name) {
+		const route = frappe.get_route?.();
+		return frm.doc.name === name && (!route || (route[0] === "Form" && route[1] === doctype && route[2] === name));
+	}
+
+	async function openMeal(frm, schedule, index, name = frm.doc.name) {
+		if (!isCurrentWeek(frm, name) || !editable(frm) || frm.__meal_opening || !canAct(frm)) return;
+		const { days, slots } = schedule;
+		const dayIndex = Math.floor(index / slots.length);
+		const args = { week_name: name, meal_date: days[dayIndex], meal_type: slots[index % slots.length] };
+		frm.__meal_opening = true;
 		try {
 			const meal = await call("get_meal", args);
-			if (frm.doc.name === args.week_name && canAct(frm)) mealDialog(frm, args, meal, categories);
+			if (isCurrentWeek(frm, name) && editable(frm) && canAct(frm)) {
+				mealDialog(frm, schedule, index, args, weekdays[dayIndex], meal);
+			}
 		} catch {
 			// Frappe displays the permission or validation error returned by the server.
+		} finally {
+			frm.__meal_opening = false;
 		}
 	}
 
-	function mealDialog(frm, args, meal, categories) {
+	function mealDialog(frm, schedule, index, args, weekday, meal) {
+		const { days, slots, categories } = schedule;
+		const hasNext = index < days.length * slots.length - 1;
 		const selected = [...meal.dishes];
+		const previews = new Map();
+		const base = Number(meal.base_headcount);
 		let offset = 0;
 		let request = 0;
-		let $options, $chosen, $counts;
+		let $options, $chosen, $counts, $validation, $adjustments;
 		let lastOptions = null;
+		let expandedBom;
+		let closed = false;
+		let destination;
 		const dialog = new frappe.ui.Dialog({
-			title: `${dateLabel(args.meal_date, true)} · ${args.meal_type}`,
+			title: `${dateLabel(args.meal_date, true)} · ${weekday} · ${args.meal_type}`,
 			size: "large",
+			no_submit_on_enter: true,
 			fields: [
+				{ fieldname: "composer", fieldtype: "Section Break" },
+				{ fieldname: "catalog_column", fieldtype: "Column Break" },
+				{ fieldname: "catalog_heading", fieldtype: "HTML" },
 				{ fieldname: "search", fieldtype: "Data", label: "搜索菜品", placeholder: "菜名或编码" },
-				{ fieldname: "category_column", fieldtype: "Column Break" },
-				{ fieldname: "category", fieldtype: "Select", label: "菜品分类", options: ["", ...categories], onchange: resetSearch },
-				{ fieldname: "options_section", fieldtype: "Section Break" },
+				{ fieldname: "category", fieldtype: "Select", label: "菜品分类",
+					options: [{ label: "全部分类", value: "" }, ...categories], onchange: resetSearch },
 				{ fieldname: "all_slots", fieldtype: "Check", label: "显示其他餐次的菜品", onchange: resetSearch },
 				{ fieldname: "options", fieldtype: "HTML" },
-				{ fieldname: "chosen", fieldtype: "HTML" },
-				{ fieldname: "counts_section", fieldtype: "Section Break", label: "供餐安排" },
+				{ fieldname: "menu_column", fieldtype: "Column Break" },
 				{ fieldname: "counts_summary", fieldtype: "HTML" },
+				{ fieldname: "chosen", fieldtype: "HTML" },
+				{ fieldname: "adjustments", fieldtype: "HTML" },
 				{ fieldname: "excluded_count", fieldtype: "Int", label: "停餐调整人数", default: meal.excluded_count || 0, non_negative: 1,
 					onchange: renderCounts },
 				{ fieldname: "adjustment_reason", fieldtype: "Small Text", label: "停餐调整原因", default: meal.adjustment_reason },
 				{ fieldname: "stopped", fieldtype: "Check", label: "整餐停供", default: Number(meal.stopped), onchange: renderCounts },
 				{ fieldname: "reason", fieldtype: "Small Text", label: "整餐停供原因", default: meal.reason, depends_on: "eval:doc.stopped" },
 			],
-			primary_action_label: "保存本餐草稿",
-			async primary_action(values) {
-				if (frm.doc.name !== args.week_name || !canAct(frm)) return;
-				const primary = dialog.get_primary_btn().prop("disabled", true);
-				try {
-					await mutate(frm, "save_meal", {
-						...args, modified: meal.modified, boms: JSON.stringify(selected.map((dish) => dish.bom)),
-						excluded_count: values.excluded_count || 0, adjustment_reason: values.adjustment_reason || "",
-						stopped: values.stopped || 0, reason: values.reason || "",
-					}, () => dialog.hide());
-				} catch {
-					// Keep the meal open so quantities and selections can be checked.
-				} finally {
-					primary.prop("disabled", false);
-				}
-			},
+			onhide() { closed = true; },
+			primary_action_label: hasNext ? "保存并编排下一餐" : "保存本餐",
+			primary_action: (values) => save(values, hasNext),
+			secondary_action_label: hasNext ? "保存本餐" : undefined,
+			secondary_action: hasNext ? () => {
+				const values = dialog.get_values();
+				if (values) return save(values, false);
+			} : undefined,
 		});
-		dialog.$wrapper.addClass("tgy-week-picker");
+		const fields = dialog.fields_dict;
+		dialog.$wrapper.addClass("tgy-week-picker").one("hidden.bs.modal", () => {
+			dialog.$wrapper.remove();
+			if (destination !== undefined) return openMeal(frm, schedule, destination, args.week_name);
+		});
+		const $previous = button(dialog.header.find(".modal-actions"), "上一餐", () => {
+			if (closed || !canAct(frm)) return;
+			const leave = () => close(index - 1);
+			const changed = selected.length !== meal.dishes.length
+				|| selected.some((dish, position) => dish.bom !== meal.dishes[position]?.bom)
+				|| ["excluded_count", "stopped"].some((key) => Number(dialog.get_value(key) || 0) !== Number(meal[key] || 0))
+				|| ["adjustment_reason", "reason"].some((key) => (dialog.get_value(key) || "") !== (meal[key] || ""));
+			if (changed) frappe.confirm("本餐有未保存的修改，是否返回上一餐？", leave);
+			else leave();
+		}).prop("disabled", index === 0);
+
+		$("<h4>", { class: "tgy-picker-title" }).text("标准菜品库").appendTo(fields.catalog_heading.$wrapper);
+		$options = fields.options.$wrapper;
+		$chosen = fields.chosen.$wrapper;
+		$counts = fields.counts_summary.$wrapper;
+		$adjustments = $("<details>", { class: "tgy-picker-adjustments" }).appendTo(fields.adjustments.$wrapper);
+		$("<summary>").text("供餐调整").appendTo($adjustments);
+		const $adjustmentFields = $("<div>").appendTo($adjustments);
+		for (const name of ["excluded_count", "adjustment_reason", "stopped", "reason"]) {
+			fields[name].$wrapper.appendTo($adjustmentFields);
+			fields[name].$input?.on("input.tgyMeal", () => $validation.text(""));
+		}
+		$validation = $("<p>", { class: "tgy-picker-validation text-danger", role: "alert" }).appendTo($adjustmentFields);
+		fields.search.$input.on("input", frappe.utils.debounce(resetSearch, 250));
 		dialog.show();
-		$options = dialog.fields_dict.options.$wrapper;
-		$chosen = dialog.fields_dict.chosen.$wrapper;
-		$counts = dialog.fields_dict.counts_summary.$wrapper;
-		dialog.fields_dict.search.$input.on("input", frappe.utils.debounce(resetSearch, 250));
-		renderCounts();
 		renderChosen();
 		loadOptions();
 
+		function close(nextIndex) {
+			if (closed || !isCurrentWeek(frm, args.week_name)) return;
+			destination = nextIndex;
+			dialog.hide();
+		}
+
+		async function save(values, advance) {
+			if (closed || !isCurrentWeek(frm, args.week_name) || !canAct(frm)) return;
+			const excluded = Number(values.excluded_count || 0);
+			const adjustment = values.adjustment_reason?.trim() || "";
+			const reason = values.reason?.trim() || "";
+			const stopped = Number(values.stopped || 0);
+			if (!Number.isInteger(excluded) || excluded < 0 || excluded >= base) {
+				return adjustmentError("停餐调整人数须小于在园人数。", "excluded_count");
+			}
+			if (excluded && !adjustment) return adjustmentError("请填写停餐调整原因。", "adjustment_reason");
+			if (stopped && !reason) return adjustmentError("请填写整餐停供原因。", "reason");
+
+			const primary = dialog.get_primary_btn().prop("disabled", true);
+			const secondary = dialog.get_secondary_btn().prop("disabled", true);
+			$previous.prop("disabled", true);
+			let saved = false;
+			try {
+				await mutate(frm, "save_meal", {
+					...args, modified: meal.modified, boms: JSON.stringify(selected.map((dish) => dish.bom)),
+					excluded_count: excluded, adjustment_reason: adjustment, stopped, reason,
+				}, () => { saved = true; });
+			} catch {
+				// Keep the current meal open if Frappe rejected the save.
+			} finally {
+				primary.prop("disabled", false);
+				secondary.prop("disabled", false);
+				$previous.prop("disabled", index === 0);
+			}
+			if (saved && !closed) {
+				frappe.show_alert({ message: "本餐草稿已保存", indicator: "green" });
+				close(advance ? index + 1 : undefined);
+			}
+		}
+
+		function adjustmentError(text, fieldname) {
+			$adjustments.prop("open", true);
+			$validation.text(text);
+			fields[fieldname].$input?.trigger("focus");
+		}
+
 		function renderCounts() {
 			if (!$counts) return;
-			const $summary = $("<div>", { class: "tgy-picker-counts", role: "status" }).appendTo($counts.empty());
-			const base = Number(meal.base_headcount);
+			const $summary = $("<div>", { class: "tgy-picker-heading tgy-picker-counts" }).appendTo($counts.empty());
+			$("<h4>", { class: "tgy-picker-title" }).text(`本餐菜单 · ${selected.length} 道`).appendTo($summary);
 			const excluded = Number(dialog.get_value("excluded_count") || 0);
 			const stopped = Number(dialog.get_value("stopped"));
-			$("<span>").text(`在园学生 ${base} 人`).appendTo($summary);
 			const planned = !Number.isInteger(excluded) || excluded < 0 || excluded >= base
-				? "请核对停餐调整人数" : `计划供餐 ${stopped ? 0 : base - excluded} 人`;
-			$("<strong>").text(planned).appendTo($summary);
+				? "请核对停餐调整人数" : stopped ? "整餐停供" : `计划供餐 ${base - excluded} 人`;
+			$("<strong>", { role: "status" }).text(planned).appendTo($summary);
 		}
 
 		function resetSearch() {
-			if (!$options) return;
+			if (!$options || closed) return;
 			offset = 0;
 			return loadOptions();
 		}
 
-		function renderChosen() {
-			const $card = $("<div>", { class: "tgy-picker-card tgy-picker-chosen" }).appendTo($chosen.empty());
-			$("<h4>", { class: "tgy-picker-title" }).text(`已选菜品（${selected.length}）`).appendTo($card);
-			if (!selected.length) message($card, "从上方添加本餐菜品。");
-			const $detail = $("<div>", { class: "tgy-picker-detail", role: "status" });
-			selected.forEach((dish, index) => {
-				const $row = $("<div>", { class: "tgy-picker-row" }).appendTo($card);
-				$("<span>", { class: "tgy-picker-name" }).text(dish.name).appendTo($row);
+		function renderChosen(focusBom, focusAction) {
+			renderCounts();
+			const $list = $("<div>", { class: "tgy-picker-list" }).appendTo($chosen.empty());
+			if (!selected.length) message($list, "请从标准菜品库添加本餐菜品。");
+			let $focus;
+			selected.forEach((dish, position) => {
+				const $entry = $("<div>").appendTo($list);
+				const $row = $("<div>", { class: "tgy-picker-row" }).appendTo($entry);
+				const $label = $("<div>", { class: "tgy-picker-name" }).appendTo($row);
+				$("<span>").text(dish.name).appendTo($label);
+				if (dish.category) $("<small>").text(dish.category).appendTo($label);
 				const $actions = $("<div>", { class: "tgy-picker-row-actions" }).appendTo($row);
-				button($actions, "带量", async () => {
-					try {
-						const ingredients = await call("ingredients", { week_name: args.week_name, bom_name: dish.bom });
-						$detail.empty();
-						$("<strong>").text(`${dish.name} · 人均采购毛重`).appendTo($detail);
-						$("<div>").text(ingredients?.map((row) => `${row.name} ${row.gross ?? "—"} ${row.uom || ""}`).join("；") || "暂无可查看的带量。").appendTo($detail);
-					} catch { $detail.text("带量读取失败。"); }
-				});
-				if (index > 0) button($actions, "上移", () => {
-					[selected[index - 1], selected[index]] = [selected[index], selected[index - 1]];
-					renderChosen();
-				});
-				button($actions, "移除", () => { selected.splice(index, 1); renderChosen(); renderOptions(lastOptions); });
+				const expanded = expandedBom === dish.bom;
+				const $quantity = button($actions, "带量", () => {
+					expandedBom = expanded ? undefined : dish.bom;
+					renderChosen(dish.bom, "quantity");
+				}).attr({ "aria-expanded": String(expanded), "aria-label": `查看${dish.name}的带量` });
+				const $up = button($actions, "↑", () => move(-1, "up"))
+					.attr({ "aria-label": `上移${dish.name}`, title: "上移" }).prop("disabled", position === 0);
+				const $down = button($actions, "↓", () => move(1, "down"))
+					.attr({ "aria-label": `下移${dish.name}`, title: "下移" }).prop("disabled", position === selected.length - 1);
+				const $remove = button($actions, "×", () => {
+					selected.splice(position, 1);
+					if (expanded) expandedBom = undefined;
+					renderChosen(selected[Math.min(position, selected.length - 1)]?.bom, "remove");
+					renderOptions(lastOptions, $options.find(".tgy-picker-options").scrollTop());
+					if (!selected.length) fields.search.$input.trigger("focus");
+				}).attr({ "aria-label": `移除${dish.name}`, title: "移除" });
+				if (expanded) renderIngredients($entry, dish);
+				if (focusBom === dish.bom) {
+					const actions = { quantity: $quantity, up: position > 0 ? $up : $down,
+						down: position < selected.length - 1 ? $down : $up, remove: $remove };
+					$focus = actions[focusAction];
+				}
+
+				function move(by, action) {
+					const target = position + by;
+					[selected[position], selected[target]] = [selected[target], selected[position]];
+					renderChosen(dish.bom, action);
+				}
 			});
-			$detail.appendTo($card);
+			$focus?.trigger("focus");
+		}
+
+		async function renderIngredients($entry, dish) {
+			const $detail = $("<div>", { class: "tgy-picker-detail", role: "status" }).appendTo($entry);
+			$detail.text("正在读取带量…");
+			if (!previews.has(dish.bom)) {
+				previews.set(dish.bom, call("ingredients", { week_name: args.week_name, bom_name: dish.bom }));
+			}
+			try {
+				const ingredients = await previews.get(dish.bom);
+				$detail.empty();
+				$("<strong>").text("人均采购毛重").appendTo($detail);
+				$("<div>").text(ingredients?.map((row) => `${row.name} ${row.gross ?? "—"} ${row.uom || ""}`).join("；")
+					|| "暂无可查看的带量。").appendTo($detail);
+			} catch {
+				previews.delete(dish.bom);
+				$detail.text("带量读取失败。可收起后重新打开。");
+			}
 		}
 
 		async function loadOptions() {
 			const sequence = ++request;
+			lastOptions = null;
 			message($options.empty(), "正在查找标准菜品…");
 			try {
 				const result = await call("dishes", {
@@ -308,39 +429,52 @@
 					search: dialog.get_value("search") || "", category: dialog.get_value("category") || "",
 					all_slots: dialog.get_value("all_slots") || 0,
 				});
-				if (sequence === request) {
+				if (!closed && sequence === request) {
 					lastOptions = result;
 					renderOptions(result);
 				}
 			} catch {
-				if (sequence === request) message($options.empty(), "菜品读取失败，请重新搜索。");
+				if (!closed && sequence === request) {
+					message($options.empty(), "菜品读取失败。");
+					button($options, "重试", loadOptions);
+				}
 			}
 		}
 
-		function renderOptions(result) {
+		function renderOptions(result, scrollTop = 0, afterItem) {
 			if (!result) return;
-			const $card = $("<div>", { class: "tgy-picker-card" }).appendTo($options.empty());
-			$("<h4>", { class: "tgy-picker-title" }).text("标准菜品").appendTo($card);
-			const $list = $("<div>", { class: "tgy-picker-options" }).appendTo($card);
+			const $list = $("<div>", { class: "tgy-picker-list tgy-picker-options" }).appendTo($options.empty());
 			if (!result.rows.length) message($list, "暂无符合条件的标准菜品。");
+			let passedItem = false;
+			let $nextOption;
 			for (const dish of result.rows) {
-				const $row = $("<div>", { class: "tgy-picker-row" }).appendTo($list);
-				const $label = $("<span>", { class: "tgy-picker-name" }).text(dish.name).appendTo($row);
-				if (dish.category) $("<span>", { class: "tgy-picker-category" }).text(dish.category).appendTo($label);
-				if (!dish.bom) { message($row, dish.status); continue; }
+				const $entry = $("<div>").appendTo($list);
+				const $row = $("<div>", { class: "tgy-picker-row" }).appendTo($entry);
+				const $label = $("<div>", { class: "tgy-picker-name" }).appendTo($row);
+				$("<span>").text(dish.name).appendTo($label);
+				if (dish.category) $("<small>").text(dish.category).appendTo($label);
+				if (!dish.bom) {
+					$("<span>", { class: "text-muted" }).text(dish.status).appendTo($row);
+					continue;
+				}
 				const picked = selected.some((item) => item.item === dish.item);
-				button($row, picked ? "已选" : "添加", () => {
+				const $add = button($row, picked ? "已选" : "添加", () => {
+					if (closed || frm.__meal_action_running) return;
 					if (selected.length >= 20) return frappe.msgprint("每餐最多选择 20 道菜。");
 					selected.push(dish);
 					renderChosen();
-					renderOptions(result);
-				}).prop("disabled", picked);
+					renderOptions(result, $list.scrollTop(), dish.item);
+				}).attr("aria-label", `${picked ? "已选" : "添加"}${dish.name}`).prop("disabled", picked);
+				if (passedItem && !picked && !$nextOption) $nextOption = $add;
+				if (afterItem === dish.item) passedItem = true;
 			}
 			if (offset || result.has_more) {
-				const $pages = $("<div>", { class: "tgy-picker-pages" }).appendTo($card);
-				if (offset) button($pages, "上一页", () => { offset -= result.page_size; loadOptions(); });
-				if (result.has_more) button($pages, "下一页", () => { offset += result.page_size; loadOptions(); });
+				const $pages = $("<div>", { class: "tgy-picker-pages" }).appendTo($options);
+				if (offset) button($pages, "上一页", () => { offset -= result.page_size; return loadOptions(); });
+				if (result.has_more) button($pages, "下一页", () => { offset += result.page_size; return loadOptions(); });
 			}
+			$list.scrollTop(scrollTop);
+			if (afterItem) ($nextOption || fields.search.$input).trigger("focus");
 		}
 	}
 
