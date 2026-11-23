@@ -1,5 +1,4 @@
 (() => {
-    const profileType = "Tongjianyun Food Nutrition Profile";
     const primary = new Set(["energy", "protein", "fat", "carbohydrate"]);
     const number = new Intl.NumberFormat("zh-CN", {maximumFractionDigits: 4});
     const esc = value => frappe.utils.escape_html(String(value ?? ""));
@@ -22,68 +21,6 @@
             fields: [{fieldname: "data", fieldtype: "HTML"}]});
         dialog.get_field("data").$wrapper.html(html);
         dialog.show();
-    }
-
-    async function ingredient(frm) {
-        const $content = frm.fields_dict.custom_tjy_nutrition_preview?.$wrapper;
-        if (!$content) return;
-        if (!frappe.model.can_read(profileType)) {
-            $content.empty().text("当前账号无权查看营养档案。");
-            return;
-        }
-        if (frm.is_new()) {
-            $content.empty().text("保存食材后可建立营养档案。");
-            return;
-        }
-        const code = frm.doc.name;
-        const actions = () => {
-            const $actions = $("<div>", {class: "mb-3"}).appendTo($content);
-            $("<button>", {type: "button", class: "btn btn-default btn-sm mr-2"}).text("查看营养档案")
-                .on("click", () => {
-                    frappe.route_options = {item_code: code};
-                    frappe.set_route("List", profileType);
-                }).appendTo($actions);
-            if (!frm.doc.disabled && frappe.model.can_create(profileType)) {
-                $("<button>", {type: "button", class: "btn btn-primary btn-sm"}).text("新建营养档案")
-                    .on("click", () => frappe.new_doc(profileType, {item_code: code})).appendTo($actions);
-            }
-        };
-        $content.empty().text("正在加载营养成分…");
-        try {
-            const {message: result} = await frappe.call({
-                method: "tongjianyun.food_nutrition.ingredient_profile", type: "GET", args: {item_code: code},
-            });
-            if (frm.doc.name !== code) return;
-            const {profile, labels, nutrients, status} = result;
-            frm.doc.custom_tjy_nutrition_status = status;
-            frm.refresh_field("custom_tjy_nutrition_status");
-            $content.empty();
-            actions();
-            if (!profile) {
-                $("<p>", {class: "text-muted"}).text(status === "待审核"
-                    ? "档案审核通过后，营养成分将在这里显示。" : "暂无可用的营养档案。").appendTo($content);
-                return;
-            }
-            const $source = $("<p>", {class: "mb-2"}).appendTo($content);
-            $("<a>", {href: frappe.utils.get_form_link(profileType, profile.name)}).text(profile.name)
-                .appendTo($source);
-            $source.append(document.createTextNode(` · ${profile.food_name} · ${profile.food_state} · ${profile.source_name} · ${profile.source_code} · ${profile.source_version}`));
-            $("<p>", {class: "text-muted"}).text([
-                `原始口径 ${profile.basis}`,
-                `默认可食率 ${profile.edible_pct ? profile.edible_pct + "%" : "暂无数据"}`,
-                ...(profile.grams_per_stock_unit ? [`每${result.stock_uom} ${profile.grams_per_stock_unit} 克`] : []),
-            ].join(" · ")).appendTo($content);
-            const $summary = $("<div>", {class: "row mb-3"}).appendTo($content);
-            for (const [key, [label, unit]] of Object.entries(labels).filter(([key]) => primary.has(key))) {
-                const $cell = $("<div>", {class: "col-sm-3 mb-2"}).appendTo($summary);
-                $("<div>", {class: "text-muted"}).text(label).appendTo($cell);
-                $("<strong>").text(nutrients[key] == null ? "暂无数据" : `${valueText(nutrients[key])} ${unit}`).appendTo($cell);
-            }
-            $content.append(table(["营养素", "每 100 克可食部", "单位"],
-                Object.entries(labels).map(([key, [label, unit]]) => [label, valueText(nutrients[key]), unit])));
-        } catch {
-            if (frm.doc.name === code) $content.empty().text("暂时无法读取营养成分。");
-        }
     }
 
     function dish(result) {
@@ -113,5 +50,8 @@
             <details><summary>计算所用的档案版本</summary>${profiles}</details>`);
     }
 
-    frappe.tjy_food_nutrition = {ingredient, dish, week};
+    frappe.tjy_food_nutrition = {dish, week,
+        ingredient: frm => frappe.require("/assets/tongjianyun/js/ingredient_nutrition.js")
+            .then(() => frappe.tjy_ingredient_nutrition(frm)),
+    };
 })();
