@@ -7,6 +7,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.desk.doctype.custom_sidebar.custom_sidebar import add_site_sidebar_item
 from frappe.desk.doctype.dock.dock import get_dock, resolve_app_dock, save_site_dock
 
+from tongjianyun.canteen_ops.navigation import install_navigation
 from tongjianyun.dish_library import enroll_dish
 from tongjianyun.standard_recipes import (
     AGE, ALLERGENS, CATEGORIES, CATEGORY, DISH, DISH_CATEGORY, DRAFT, MARKER, METHOD, NET_QTY,
@@ -211,6 +212,7 @@ def _install_sidebar():
     _install_ingredient_analysis_link()
     _install_staffing_links()
     _install_sidebar_link("DocType", "Tongjianyun Nutrition Improvement Plan", "营养改善计划", "list-checks")
+    install_navigation(MODULE)
 
 
 def _install_dish_link():
