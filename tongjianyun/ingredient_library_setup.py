@@ -23,15 +23,7 @@ REPORT_PATH = Path(__file__).parent / "tongjianyun/report/tongjianyun_ingredient
 def install():
     frappe.only_for("System Manager")
     create_custom_fields({"Item": [dict(field, module="Tongjianyun") for field in FIELDS]})
-    _save_layout("Item", LAYOUT, {
-        "section_break_zlmj": {"label": "食材信息"},
-        "item_name": {"label": "标准食材名称", "in_list_view": 1},
-        "item_code": {"label": "食材编码"},
-        "item_group": {"label": "食材分类", "in_list_view": 1, "in_standard_filter": 1},
-        "stock_uom": {"label": "库存单位", "in_list_view": 1},
-        "purchase_uom": {"label": "默认采购单位", "in_list_view": 1},
-        "uoms": {"label": "单位换算"},
-    }, condition=f"doc.{MARKER} == 1")
+    _install_layout()
     previous = frappe.flags.in_migrate
     try:
         frappe.flags.in_migrate = True
@@ -40,3 +32,16 @@ def install():
         frappe.flags.in_migrate = previous
     install_navigation(MODULE, json.dumps(DISH_OPTIONS, ensure_ascii=False))
     frappe.clear_cache()
+
+
+def _install_layout():
+    _save_layout("Item", LAYOUT, {
+        "section_break_zlmj": {"label": "食材信息"},
+        "item_name": {"label": "标准食材名称", "in_list_view": 1},
+        "item_code": {"label": "食材编码"},
+        "item_group": {"label": "食材分类", "in_list_view": 1, "in_standard_filter": 1},
+        "stock_uom": {"label": "库存单位", "in_list_view": 1},
+        "purchase_uom": {"label": "默认采购单位", "in_list_view": 1},
+        "uoms": {"label": "单位换算"},
+    }, fields_after=("item_name", (ALIASES, "item_group", "stock_uom")),
+        condition=f"doc.{MARKER} == 1")
