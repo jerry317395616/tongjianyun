@@ -49,6 +49,7 @@ doc_events = {
         "validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission",
         "before_submit": "tongjianyun.recipe_nutrition.freeze_week",
         "on_submit": "tongjianyun.special_ingredients.freeze",
+        "on_trash": "tongjianyun.weekly_menu_editor.delete_draft_meal_plans",
     },
     "Meal Plan Adjustment": {
         "before_submit": "tongjianyun.recipe_nutrition.freeze_adjustment",

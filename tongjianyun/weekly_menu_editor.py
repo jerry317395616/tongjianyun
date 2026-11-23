@@ -4,6 +4,12 @@ from datetime import timedelta
 
 import frappe
 from frappe.database.query import Engine
+from frappe.model.delete_doc import (
+    check_if_doc_is_dynamically_linked,
+    check_if_doc_is_linked,
+    get_linked_docs,
+    raise_link_exists_exception,
+)
 from frappe.query_builder.functions import Coalesce
 from frappe.utils import cint, getdate, now_datetime
 from ione_core import meal_planning as planning
@@ -47,6 +53,64 @@ def _usable_recipe(bom, company):
 
 def _meal_lock(name):
     return frappe.cache.lock(f"meal-week:{name}", timeout=180, blocking_timeout=2)
+
+
+def delete_draft_meal_plans(week, method=None):
+    """Remove only the generated drafts owned by a week being deleted."""
+    if week.docstatus != 0:
+        return
+
+    # Frappe already holds the week row lock. Never wait for an editor that
+    # holds the meal lock and is about to acquire that row lock.
+    lock = _meal_lock(week.name)
+    if not lock.acquire(blocking=False):
+        frappe.throw("周食谱正在编排或修改，请稍后重试删除。")
+
+    def release_lock():
+        if lock.owned():
+            lock.release()
+
+    frappe.db.after_commit.add(release_lock)
+    frappe.db.after_rollback.add(release_lock)
+
+    plan_type = "Production Plan"
+    if week.material_request:
+        frappe.throw("周食谱已关联采购申请，请先处理采购流程。")
+    names = set(frappe.get_all(plan_type, filters={"custom_meal_week": week.name}, pluck="name"))
+    meals = {row.production_plan: row for row in week.meals}
+    if names != meals.keys() or len(meals) != len(week.meals):
+        frappe.throw("周食谱的餐次和生产计划关联不完整，请先核对对应记录。")
+    if not names:
+        return
+
+    plans = []
+    for name in sorted(names):
+        plan = frappe.get_doc(plan_type, name, for_update=True)
+        meal = meals[name]
+        if (not plan.get("custom_is_meal_plan") or plan.get("custom_meal_week") != week.name
+                or plan.get("custom_meal_batch") != week.name or plan.company != week.company
+                or str(plan.custom_meal_date) != str(meal.meal_date) or plan.custom_meal_type != meal.meal_type):
+            frappe.throw(f"餐次生产计划 {name} 的归属不一致，请先核对对应记录。")
+        if plan.docstatus != 0 or plan.get("custom_meal_adjustment") or plan.get("material_requests"):
+            frappe.throw(f"餐次生产计划 {name} 已进入后续流程，请先处理关联业务。")
+        plans.append(plan)
+
+    for link in get_linked_docs(week):
+        doctype, name = link["reference_doctype"], link["reference_docname"]
+        if doctype != plan_type or name not in names:
+            raise_link_exists_exception(week, doctype, name)
+    check_if_doc_is_dynamically_linked(week)
+
+    # Break just the backward links from this week's meal rows. Keep the
+    # in-memory document intact for Frappe's deleted-document archive.
+    frappe.db.set_value(week.meta.get_field("meals").options,
+                        {"parent": week.name, "parenttype": week.doctype, "parentfield": "meals"},
+                        "production_plan", None, update_modified=False)
+    for plan in plans:
+        check_if_doc_is_linked(plan)
+        check_if_doc_is_dynamically_linked(plan)
+    for plan in plans:
+        frappe.delete_doc(plan_type, plan.name, ignore_permissions=True, ignore_missing=False)
 
 
 @frappe.whitelist(methods=["GET"])
