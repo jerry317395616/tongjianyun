@@ -77,3 +77,38 @@ test("operations reports count meals only when a day has been closed", () => {
 	assert.equal(result.find(f=>f.label==="待日结或核对").value, "2");
 	assert.equal(ui.reportFacts("食堂经营报表",[{stage:"待日结"}]).length, 2);
 });
+
+function quickViews() {
+	const frappe = {perm:{has_perm:() => true}};
+	vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../public/js/meal_list_filters.js"), "utf8"), {frappe});
+	return frappe.tjyMealFilters;
+}
+test("list shortcuts keep company, support zero and preserve advanced filters", async () => {
+	const ui = quickViews(), dt = "Tongjianyun Food Sample";
+	let filters = [[dt,"company","=","青禾"],[dt,"docstatus","=",0]], count = 0;
+	const list = {doctype:dt, meta:{fields:[],is_submittable:1}, start:20,
+		filter_area:{get:() => filters, async remove(k){filters=filters.filter(f=>f[1]!==k);}, async add(fs){filters.push(...fs);}},
+		async refresh(){count++;}};
+	const config=ui.choicesFor(list,"食材扫码验收");
+	assert.equal(ui.currentChoice(list,config),"0");
+	await ui.setChoice(list,config,"1");
+	assert.equal(filters[0][3],"青禾");
+	assert.equal(ui.currentChoice(list,config),"1");
+	assert.equal(list.start,0);
+	await ui.setChoice(list,config,"");
+	assert.equal(filters.length,1);
+	for (const filter of [[dt,"docstatus","in",[0,1]], [dt,"docstatus","=",1,true], ["Other","docstatus","=",1]]) {
+		filters.push(filter);
+		assert.equal(ui.currentChoice(list,config),null);
+		await ui.setChoice(list,config,"0");
+		assert.equal(count,2);
+		filters.pop();
+	}
+});
+test("sample shortcuts follow the site's configured meal choices", () => {
+	const ui=quickViews();
+	const list={doctype:"Tongjianyun Food Sample",meta:{fields:[{fieldname:"meal_type",fieldtype:"Select",label:"餐次",options:"早餐\n午餐"}]}};
+	const config=ui.choicesFor(list,"食品留样");
+	assert.equal(config.field,"meal_type");
+	assert.equal(config.choices.map(choice=>choice[1]).join("、"),"早餐、午餐");
+});

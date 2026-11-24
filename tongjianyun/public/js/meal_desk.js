@@ -53,6 +53,12 @@
 	};
 	const targets = new Set(["Tongjianyun Canteen","Tongjianyun Meal Term Project","Meal Planning Week","Item","BOM",
 		"Employee","Student","Student Batch Name","Supplier","Warehouse","Account","Project","User","Task"]);
+	const mealTimes = new Map([["早餐","morning"],["早点","snack"],["午餐","midday"],["午点","snack"],["晚餐","evening"]]);
+	const reportStates = new Map([
+		...["正常","有效","已日结","已确认","已完成","已过账"].map(s=>[s,"good"]),
+		...["临期","需处理","待确认","待日结","日结依据待核对","待核对"].map(s=>[s,"check"]),
+		...["已过期","不合格","已取消","拒收"].map(s=>[s,"risk"]),
+	]);
 	const reports = new Map();
 	const escape = (value) => frappe.utils.escape_html(String(value ?? ""));
 	const chinese = (v) => typeof v === "string" ? (translated[v] || v) : v;
@@ -68,6 +74,7 @@
 		const [view, type] = frappe.get_route();
 		const active = (["List","Form"].includes(view) && titleFor(type)) || (view === "query-report" && reports.get(type));
 		frappe.tjyMealOverview.scope(active);
+		frappe.tjyMealFilters.scope(active);
 		document.body.classList.toggle("tjy-meal-desk", Boolean(active));
 	}
 	function subject(type, doc, value) {
@@ -104,6 +111,7 @@
 		syncScope();
 		list.page.set_title(label);
 		frappe.tjyMealOverview.list(list,label);
+		frappe.tjyMealFilters.render(list,label);
 		const action = list.page.btn_primary?.find(".es-button__label").first();
 		if (/^(添加|新建|Add |New )/.test(action?.text() || "")) action.text("新建"+label);
 
@@ -132,6 +140,7 @@
 				const node = primary ? anchor : row.querySelector('[data-fieldname="'+CSS.escape(df.fieldname)+'"] .filterable');
 				if (!node) continue;
 				const raw = doc[df.fieldname];
+				if (df.fieldname === "meal_type" && mealTimes.has(raw)) node.dataset.mealTime = mealTimes.get(raw);
 				const initial = primary ? subject(list.doctype,doc,node.textContent) : chinese(node.textContent.trim());
 				if (initial && initial !== node.textContent) node.textContent = initial;
 				if (primary) node.title = [initial, doc.name].filter(Boolean).join(" · ");
@@ -211,6 +220,13 @@
 		};
 		settings.formatter = function(value,row,col,data,standard,...rest) {
 			const format = (val,r,field,record) => {
+				if (name==="Tongjianyun Meal Quality Indicators" && field.fieldname==="rate" && record?.rate!=null && Number.isFinite(Number(record.rate))) {
+					const percent=Math.max(0,Math.min(100,Number(record.rate)));
+					return '<span class="tjy-report-rate"><span>'+standard(val,r,field,record)+'</span><meter aria-hidden="true" min="0" max="100" value="'+percent+'"></meter></span>';
+				}
+				if (["stage","day_status","actual_status"].includes(field.fieldname) && ["Data","Select"].includes(field.fieldtype) && reportStates.has(val)) {
+					return '<span class="tjy-report-state" data-tone="'+reportStates.get(val)+'">'+standard(val,r,field,record)+'</span>';
+				}
 				const label = record?._meal_labels?.[field.fieldname];
 				if (label && ["Link","Dynamic Link"].includes(field.fieldtype)) {
 					const type = field.fieldtype === "Dynamic Link" ? record[field.options] : field.options;
@@ -243,6 +259,14 @@
 		const labels = await namesFor([...links.map(c => [c.df.options,doc[c.df.fieldname]]), ...cells.map(c => [c.type,c.id])]);
 		if (frm.doc !== doc || frappe.get_route()[0] !== "Form" || window.cur_frm !== frm) return;
 		frappe.tjyMealOverview.form(frm,titleFor(frm.doctype),labels);
+		for (const control of Object.values(frm.fields_dict)) {
+			if (control.disp_status!=="Read" || !["Attach","Attach Image"].includes(control.df.fieldtype)) continue;
+			const link=control.disp_area?.querySelector("a[href]");
+			if (!link || link.getAttribute("href")!==doc[control.df.fieldname]) continue;
+			link.textContent="查看"+control.df.label;
+			link.title=doc[control.df.fieldname];
+			link.classList.add("tjy-attachment-link");
+		}
 		const display = (type,id) => labels[type]?.[id] || (type==="User" && id===frappe.session.user && frappe.boot.user.full_name) || translated[id];
 		for (const {cell,type,id} of cells) {
 			const value = display(type,id);
@@ -268,6 +292,7 @@
 	frappe.tjyMealDesk = {installLists, registerReport};
 	frappe.router.on("change",syncScope);
 	const formTimers = new WeakMap();
+	const requiredTimers = new WeakMap();
 	function queueForm(frm) {
 		clearTimeout(formTimers.get(frm));
 		formTimers.set(frm, setTimeout(() => { formatForm(frm).catch(console.error); }, 80));
@@ -275,6 +300,13 @@
 	$(document).on("form-refresh.tjyMealDesk",(_event,frm) => {
 		if (!titleFor(frm.doctype)) return;
 		$(frm.wrapper).off("grid-row-render.tjyMealDesk shown.bs.tab.tjyMealDesk").on("grid-row-render.tjyMealDesk shown.bs.tab.tjyMealDesk",() => queueForm(frm));
+		$(frm.wrapper).off(".tjyRequired");
+		if (frm.is_new()) $(frm.wrapper).on("input.tjyRequired change.tjyRequired", ".frappe-control", () => {
+			clearTimeout(requiredTimers.get(frm));
+			requiredTimers.set(frm,setTimeout(()=>{
+				if (window.cur_frm===frm && frappe.get_route()[0]==="Form" && frm.is_new()) frappe.tjyMealOverview.form(frm,titleFor(frm.doctype),{});
+			},120));
+		});
 		queueForm(frm);
 	});
 })();

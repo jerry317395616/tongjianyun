@@ -106,11 +106,11 @@
 		return node;
 	}
 	function clear(main) { main?.querySelector(":scope > .tjy-overview")?.remove(); }
-	function draw(main, title, mode, heading, context, facts, sections=[]) {
+	function draw(main, title, mode, heading, context, facts, sections=[], completion) {
 		const group=byTitle.get(title);
 		if (!main || !group) return;
 		const route=JSON.stringify(frappe.get_route());
-		const signature=JSON.stringify([route,heading,context,facts,sections.map(s=>s.label)]);
+		const signature=JSON.stringify([route,heading,context,facts,sections.map(s=>s.label),completion && [completion.total,completion.done,completion.next?.df.fieldname]]);
 		let panel=main.querySelector(":scope > .tjy-overview");
 		if (panel?.dataset.signature===signature) return;
 		if (!panel) {panel=el("section","tjy-overview");main.prepend(panel);}
@@ -118,23 +118,52 @@
 		panel.dataset.route=route;
 		panel.dataset.mode=mode;
 		panel.setAttribute("aria-label",title+"摘要");
-		const identity=el("div","tjy-overview-identity"),mark=el("span","tjy-overview-mark");
-		mark.setAttribute("aria-hidden","true");
-		// Icon names come from the module's fixed group definitions.
-		mark.innerHTML=frappe.utils.icon(group[2],"lg");
+		const identity=el("div","tjy-overview-identity");
+		const art=el("span","tjy-section-art");
+		art.setAttribute("aria-hidden","true");
 		const text=el("div","tjy-overview-text");
-		text.append(el("div","tjy-overview-path",group[0]+" / "+({list:"本页概览",report:"筛选结果",form:"单据概览"})[mode]),el("h2","tjy-overview-heading",heading));
-		if (context) text.append(el("div","tjy-overview-context",context));
-		identity.append(mark,text);
+		const path=el("div","tjy-overview-path");
+		const mark=el("span","tjy-overview-mark");
+		mark.setAttribute("aria-hidden","true");
+		mark.innerHTML=frappe.utils.icon(group[2],"sm");
+		path.append(mark,document.createTextNode(group[0]));
+		const headline=mode==="form" && heading ? heading : title;
+		text.append(path,el("h2","tjy-overview-heading",headline));
+		const detail=[mode!=="form" && heading!==title ? heading : "", context].filter(Boolean).join(" · ");
+		if (detail) text.append(el("div","tjy-overview-context",detail));
+		identity.append(art,text);
 		const counters=el("dl","tjy-overview-facts");
+		counters.setAttribute("aria-label",mode==="list" ? "本页数据" : mode==="report" ? "筛选结果" : "单据信息");
 		for (const fact of facts) {
 			const box=el("div","tjy-fact"),value=el("dd","tjy-fact-value",fact.value);
 			if (fact.tone) box.dataset.tone=fact.tone;
 			if (fact.unit) value.append(el("small","tjy-fact-unit",fact.unit));
 			box.append(el("dt","tjy-fact-label",fact.label),value);counters.append(box);
 		}
-		panel.replaceChildren(identity,counters);
-		if (sections.length>=3) {
+		const metrics=el("div","tjy-metrics");
+		if (facts.length) metrics.append(el("div","tjy-metrics-caption",counters.getAttribute("aria-label")),counters);
+		if (completion?.total) {
+			const detail=el("div","tjy-completion-line");
+			detail.append(el("span","","本页必填项"),el("strong","",completion.done+" / "+completion.total));
+			const progress=el("progress","tjy-completion-meter");
+			progress.max=completion.total;
+			progress.value=completion.done;
+			progress.setAttribute("aria-label","本页必填项已填写");
+			metrics.append(detail,progress);
+			if (completion.next) {
+				const next=completion.next;
+				const target=el("button","tjy-next-field","填写"+next.df.label+" →");
+				target.type="button";
+				target.onclick=()=>{
+					next.wrapper.scrollIntoView({block:"center",behavior:"instant"});
+					if (typeof next.set_focus==="function") next.set_focus();
+					else next.wrapper.querySelector("input,textarea,select,button")?.focus();
+				};
+				metrics.append(target);
+			}
+		}
+		panel.replaceChildren(identity,metrics);
+		if (sections.length>=2) {
 			const nav=el("nav","tjy-section-links");nav.setAttribute("aria-label","跳至表单分区");
 			for (const [index,section] of sections.entries()) {
 				const button=el("button","tjy-section-link",section.label);
@@ -154,7 +183,6 @@
 	}
 	function list(list,title) {
 		const main=list.page.main?.[0],rows=list.data || [];
-		if (!rows.length) {clear(main);return;}
 		const filter=list.get_filters_for_args?.().find(f=>f[0]===list.doctype && f[1]==="company" && f[2]==="=");
 		const scope=scopeName(rows,filter?.[3]);
 		const facts=listFacts(title,rows);
@@ -178,7 +206,18 @@
 	function form(frm,title,labels) {
 		const main=frm.page.main?.[0];
 		if (!main) return;
-		if (frm.is_new()) {clear(main);return;}
+		if (frm.is_new()) {
+			const sections=sectionHeads(main).map(head=>({label:head.textContent.trim()}));
+			const required=Object.values(frm.fields_dict).filter(c=>
+				c.df.reqd && !c.df.hidden && c.disp_status==="Write" && c.wrapper?.offsetWidth && typeof c.get_value==="function");
+			const missing=required.filter(c=>{
+				const value=c.get_value();
+				return !present(value) || (typeof value==="string" && !value.trim()) || (Array.isArray(value) && !value.length);
+			});
+			const completion={total:required.length,done:required.length-missing.length,next:missing[0]};
+			draw(main,title,"form",title,"新建记录",[],sections,completion);
+			return;
+		}
 		const readable=k=>{const c=frm.fields_dict[k];return c && !c.df.hidden && c.disp_status!=="None" && c.perm?.[0]?.read!==0 && present(frm.doc[k]) ? frm.doc[k] : "";};
 		const canteen=readable("canteen") || readable("custom_tjy_canteen"),company=readable("company");
 		const site=labels["Tongjianyun Canteen"]?.[canteen] || "";
@@ -196,7 +235,10 @@
 			return metric(df.label.replace(/（克）/g,""),val,unit);
 		});
 		const sections=sectionHeads(main).map(head=>({label:head.textContent.trim()}));
-		if (!site && !company && !facts.length) {clear(main);return;}
+		if (!site && !company && !facts.length) {
+			draw(main,title,"form",title,"",[],sections);
+			return;
+		}
 		draw(main,title,"form",site || company || title,site && company && site!==company ? company : "",facts,sections);
 	}
 	function scope(title) {
