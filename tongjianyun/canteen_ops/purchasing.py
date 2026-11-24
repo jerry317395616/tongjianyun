@@ -30,9 +30,9 @@ class Policy(Handler):
         if doc.cost_center:
             source = company_doc(doc, "Cost Center", doc.cost_center)
             require(not source.is_group and not source.get("disabled"), "请选择有效的明细成本中心。")
-        if doc.sample_required:
-            positive(doc.sample_min_weight)
-            positive(doc.sample_keep_hours)
+        doc.sample_required = doc.companion_required = 1
+        require(decimal(doc.sample_min_weight) >= 125 and decimal(doc.sample_keep_hours) >= 48,
+                "成品留样下限为每种125克、专柜冷藏48小时；可以设置更严格的标准。")
         attached_file(doc, doc.report_template)
 
     def before_submit(self):

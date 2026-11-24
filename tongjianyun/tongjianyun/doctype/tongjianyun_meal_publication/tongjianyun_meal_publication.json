@@ -1,0 +1,139 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Meal Publication",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所",
+   "fieldtype": "Link",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Canteen",
+   "reqd": 1
+  },
+  {
+   "fieldname": "week_start",
+   "label": "供餐周一",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meal_week",
+   "label": "周食谱",
+   "fieldtype": "Link",
+   "options": "Meal Planning Week"
+  },
+  {
+   "fieldname": "operator_name",
+   "label": "公开供餐单位",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "origins",
+   "label": "公开食材来源",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "additives",
+   "label": "食品添加剂采购及使用说明",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meals",
+   "label": "园外供应餐单",
+   "fieldtype": "Table",
+   "depends_on": "eval:!doc.meal_week",
+   "options": "Tongjianyun Meal Public Line"
+  },
+  {
+   "fieldname": "public_key",
+   "label": "家长查看码",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "public_menu",
+   "label": "已发布菜单",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "public_revision",
+   "label": "公示版本",
+   "fieldtype": "Int",
+   "read_only": 1
+  },
+  {
+   "fieldname": "change_notice",
+   "label": "最近变更通知",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen",
+  "week_start",
+  "meal_week",
+  "operator_name",
+  "public_revision",
+  "change_notice",
+  "origins",
+  "additives",
+  "meals",
+  "public_key",
+  "public_menu"
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "delete": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食保健员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1
+  }
+ ],
+ "autoname": "hash",
+ "track_changes": 1,
+ "is_submittable": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "operator_name"
+}

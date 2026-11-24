@@ -47,6 +47,9 @@
 	};
 
 	function setSiteQuery(frm) {
+		if ([sample,companion,finding].includes(frm.doctype) && !role("System Manager") && role("膳食园方负责人","膳食保健员","膳食安全员")) {
+			frm.set_query("company",()=>({query:prefix+"meal_operations.scope_links",filters:{}}));
+		}
 		frm.set_query("canteen", () => ({ filters: { company: frm.doc.company, disabled: 0 } }));
 	}
 	function showLabels(doctype, names) {
@@ -111,6 +114,15 @@
 
 	f.ui.form.on("Meal Planning Week", {
 		refresh(frm) {
+			if (frm.doc.docstatus === 1 && allowed("Tongjianyun Meal Publication")) {
+				frm.add_custom_button("食谱公示", async () => {
+					const type = "Tongjianyun Meal Publication";
+					const rows = await f.db.get_list(type, {filters:{meal_week:frm.doc.name,docstatus:["<",2]},limit:1});
+					if (rows.length) return open(type,rows[0].name);
+					return f.new_doc(type,{meal_week:frm.doc.name,company:frm.doc.company,
+						week_start:frm.doc.week_start,canteen:frm.doc.custom_tjy_canteen});
+				});
+			}
 			if (frm.doc.docstatus === 1 && allowed(dispatch)) {
 				frm.add_custom_button("生成 / 下发采购申请", () => fromWeek(frm, false), "采购操作");
 			}
@@ -121,6 +133,18 @@
 			if (frm.doc.docstatus === 1 && frm.doc.material_request && allowed(dispatch)) {
 				frm.add_custom_button("下发单餐变更采购申请", () => fromWeek(frm, true), "采购操作");
 			}
+		}
+	});
+	f.ui.form.on("Material Request", {
+		refresh(frm) {
+			if (frm.doc.docstatus !== 1 || frm.doc.material_request_type !== "Purchase" || !allowed(dispatch)) return;
+			api("ui.dispatch_source", {request: frm.doc.name}, "GET").then(source => {
+				if (!source || f.get_route().at(-1)!==frm.doc.name) return;
+				frm.add_custom_button("下发食堂采购", async () => {
+					const result = await api("purchasing.prepare_dispatch", source);
+					if (result.dispatch) open(dispatch,result.dispatch);
+				});
+			});
 		}
 	});
 	f.ui.form.on(dispatch, {
@@ -171,6 +195,9 @@
 		refresh(frm) {
 			if (!saved(frm) || frm.doc.docstatus === 2) return;
 			const defaults = { company: frm.doc.company, meal_day: frm.doc.name, meal_date: frm.doc.meal_date };
+			for (const [type,label] of [["Tongjianyun Meal Class Feedback","班级进餐反馈"],["Tongjianyun Meal Diet Handover","特殊餐交接"]]) {
+				if (allowed(type)) frm.add_custom_button(label,()=>newDoc(type,{company:frm.doc.company,meal_week:frm.doc.meal_week,service_date:frm.doc.meal_date}),"逐餐登记");
+			}
 			for (const [doctype, label] of [[sample, "登记留样"], [companion, "登记陪餐"]]) {
 				if (allowed(doctype)) frm.add_custom_button(label, () => newDoc(doctype, defaults), "逐餐登记");
 			}

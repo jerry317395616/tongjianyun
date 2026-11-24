@@ -1,0 +1,120 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Meal Class Feedback",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所",
+   "fieldtype": "Link",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Canteen",
+   "reqd": 1
+  },
+  {
+   "fieldname": "student_group",
+   "label": "班级",
+   "fieldtype": "Link",
+   "options": "Student Batch Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_date",
+   "label": "日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meal_type",
+   "label": "餐次",
+   "fieldtype": "Select",
+   "options": "早餐\n早点\n午餐\n午点\n晚餐",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meal_week",
+   "label": "周食谱",
+   "fieldtype": "Link",
+   "options": "Meal Planning Week",
+   "read_only": 1
+  },
+  {
+   "fieldname": "publication",
+   "label": "食谱公示",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Meal Publication",
+   "read_only": 1
+  },
+  {
+   "fieldname": "attendance",
+   "label": "实际就餐人数",
+   "fieldtype": "Int",
+   "reqd": 1
+  },
+  {
+   "fieldname": "observations",
+   "label": "菜品观察",
+   "fieldtype": "Table",
+   "options": "Tongjianyun Meal Dish Feedback"
+  },
+  {
+   "fieldname": "remarks",
+   "label": "进餐观察",
+   "fieldtype": "Small Text"
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen",
+  "student_group",
+  "service_date",
+  "meal_type",
+  "meal_week",
+  "publication",
+  "attendance",
+  "observations",
+  "remarks"
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "delete": 1
+  },
+  {
+   "role": "膳食班级教师",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食保健员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1
+  }
+ ],
+ "autoname": "hash",
+ "track_changes": 1,
+ "is_submittable": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "student_group"
+}

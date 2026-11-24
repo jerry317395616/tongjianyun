@@ -22,6 +22,7 @@ after_install = [
     "tongjianyun.ingredient_library_setup.install",
     "tongjianyun.weekly_menu_setup.install",
     "tongjianyun.canteen_ops.setup.install_project_fields",
+    "tongjianyun.canteen_ops.setup.install_public_notice_field",
 ]
 after_migrate = after_install
 scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_reminders"]}
@@ -41,6 +42,7 @@ doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/j
                    "Tongjianyun Canteen Receiving": "public/js/canteen_receiving_list.js",
                    "Tongjianyun Food Sample": "public/js/canteen_sample_list.js"}
 extend_doctype_class = {
+    "Meal Planning Week": ["tongjianyun.canteen_ops.service_calendar.CalendarWeek"],
     "Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"],
     "BOM": ["tongjianyun.meal_portions.MealExecutionBOM"],
 }
@@ -52,7 +54,10 @@ doc_events = {
         ],
         "validate": "tongjianyun.ingredient_library.validate_ingredient",
     },
+    "Tongjianyun Meal Publication": {event: "tongjianyun.canteen_ops.outside_meals.queue" for event in ("on_submit","on_cancel")},
+    "Tongjianyun Meal Delivery Handover": {event: "tongjianyun.canteen_ops.outside_meals.queue" for event in ("on_submit","on_cancel")},
     "Meal Planning Week": {
+        "before_validate": "tongjianyun.canteen_ops.service_calendar.apply_calendar",
         "validate": ["tongjianyun.weekly_menu_editor.validate_menu_for_submission",
                      "tongjianyun.canteen_ops.task_menus.validate_week_owner"],
         "before_submit": "tongjianyun.recipe_nutrition.freeze_week",
@@ -77,6 +82,8 @@ doc_events = {
     "Task": {"validate": "tongjianyun.canteen_ops.term_projects.protect_task"},
     "Production Plan": {"before_validate": "tongjianyun.meal_portions.validate_plan_scope"},
     "Meal Plan Adjustment": {
+        "on_submit": "tongjianyun.canteen_ops.family_menu.refresh_publication",
+        "on_cancel": "tongjianyun.canteen_ops.family_menu.refresh_publication",
         "validate": "tongjianyun.meal_portions.validate_adjustment",
         "before_submit": ["tongjianyun.meal_portions.submit_adjustment", "tongjianyun.recipe_nutrition.freeze_adjustment"],
     },
@@ -113,3 +120,12 @@ permission_query_conditions = {name: "tongjianyun.archive.query_condition" for n
 has_permission = {name: "tongjianyun.archive.document_permission" for name in _LEGACY_DOCTYPES} | {
     name: "tongjianyun.canteen_ops.common.scoped_permission" for name in _CANTEEN_DOCTYPES
 }
+
+
+from tongjianyun.canteen_ops.meal_operations import TYPES as _MEAL_RECORDS
+
+for _record in _MEAL_RECORDS:
+    permission_query_conditions[_record] = "tongjianyun.canteen_ops.meal_permissions." + _record.lower().replace(" ", "_")
+    has_permission[_record] = "tongjianyun.canteen_ops.meal_operations.permitted"
+    doctype_js[_record] = "public/js/meal_operations.js"
+doctype_js["Material Request"] = "public/js/canteen_forms.js"

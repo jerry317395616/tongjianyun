@@ -19,6 +19,9 @@ def _service_days(task, term, menu):
     if not term:
         return {"restricted": True}
     dates = term_weeks(term).get(getdate(task.week_start), {}).get("days", [])
+    if menu.get("docstatus") == 1:
+        from tongjianyun.canteen_ops.service_calendar import task_dates
+        dates = sorted(task_dates(frappe.get_doc(WEEK, menu["menu"]), dates))
     records = defaultdict(list)
     if dates and menu["state"] == "linked":
         for row in frappe.get_all(DAY, filters={"company": task.company, "meal_week": menu["menu"],
@@ -59,6 +62,13 @@ def get_context(task):
     doc = linked(TASK, task)
     term = frappe.get_doc(TERM, doc.term_project) if _readable(TERM, doc.term_project) else None
     site_name = frappe.db.get_value(CANTEEN, doc.canteen, "canteen_name") if _readable(CANTEEN, doc.canteen) else None
+    from tongjianyun.canteen_ops import outside_meals
+    if outside_meals.external(doc.canteen):
+        pub, expected, accepted = outside_meals.evidence(doc.company, doc.canteen, monday=getdate(doc.week_start))
+        return {"external": True, "menu": {"state": "outside"}, "publication": pub.name if pub and pub.has_permission("read") else None,
+                "published":bool(pub), "can_publish":frappe.has_permission(outside_meals.PUBLIC,"create"),
+                "total":len(expected), "accepted":len(expected & accepted), "canteen_title":site_name,
+                "term_title":term.project_title if term else None}
     menu = _menu_context(doc)
     result = {"menu": menu, "canteen_title": site_name, "term_title": term.project_title if term else None}
     if doc.task_kind == "逐餐供餐与日结":

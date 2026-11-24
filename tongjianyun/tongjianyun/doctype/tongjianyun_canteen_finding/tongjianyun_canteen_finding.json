@@ -116,6 +116,19 @@
    "print": 1,
    "create": 1,
    "write": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "膳食保健员",
+   "read": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1
   }
  ],
  "field_order": [

@@ -1,0 +1,137 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Meal Family Opinion",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所",
+   "fieldtype": "Link",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Canteen",
+   "reqd": 1
+  },
+  {
+   "fieldname": "publication",
+   "label": "公示食谱",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Meal Publication",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_date",
+   "label": "日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "category",
+   "label": "类别",
+   "fieldtype": "Select",
+   "options": "菜品与营养\n食品安全\n供餐服务",
+   "reqd": 1
+  },
+  {
+   "fieldname": "opinion",
+   "label": "意见",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reply",
+   "label": "处理答复",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "assigned_to",
+   "label": "安全问题责任人",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "due_date",
+   "label": "整改期限",
+   "fieldtype": "Date"
+  },
+  {
+   "fieldname": "finding",
+   "label": "整改记录",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "options": "Tongjianyun Canteen Finding"
+  },
+  {
+   "fieldname": "receipt_hash",
+   "label": "回执校验",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "menu_detail",
+   "label": "相关餐次或菜品",
+   "fieldtype": "Small Text",
+   "read_only": 1
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen",
+  "publication",
+  "service_date",
+  "category",
+  "menu_detail",
+  "opinion",
+  "reply",
+  "assigned_to",
+  "due_date",
+  "finding",
+  "receipt_hash"
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "delete": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食保健员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  }
+ ],
+ "autoname": "hash",
+ "track_changes": 1,
+ "is_submittable": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "category"
+}

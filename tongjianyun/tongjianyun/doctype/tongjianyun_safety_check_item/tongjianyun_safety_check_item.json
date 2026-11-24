@@ -1,0 +1,36 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Safety Check Item",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "control",
+   "label": "检查项目",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "result",
+   "label": "检查结果",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "options": "\n正常\n异常\n不适用"
+  },
+  {
+   "fieldname": "observation",
+   "label": "事实及处置",
+   "fieldtype": "Data",
+   "in_list_view": 1
+  }
+ ],
+ "field_order": [
+  "control",
+  "result",
+  "observation"
+ ],
+ "permissions": [],
+ "istable": 1,
+ "editable_grid": 1
+}

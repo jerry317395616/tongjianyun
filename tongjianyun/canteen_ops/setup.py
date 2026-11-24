@@ -7,7 +7,7 @@ from tongjianyun.canteen_ops.common import ROLES
 
 def ensure_roles():
     frappe.only_for("System Manager")
-    for name in ROLES:
+    for name in (*ROLES, "膳食班级教师", "膳食保健员", "膳食安全员", "膳食园方负责人"):
         if not frappe.db.exists("Role", name):
             frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert()
 
@@ -22,6 +22,16 @@ def install_project_fields():
         "label": "膳食项目负责人", "insert_after": "company", "module": "Tongjianyun",
         "read_only": 1, "no_copy": 1, "depends_on": f"eval:doc.{PROJECT_RESPONSIBLE}",
     }]})
+
+
+def install_public_notice_field():
+    from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+    if frappe.db.exists("DocType", "Meal Plan Adjustment"):
+        create_custom_fields({"Meal Plan Adjustment": [{
+            "fieldname": "custom_tjy_family_notice", "fieldtype": "Small Text", "module": "Tongjianyun",
+            "label": "公示变更原因", "insert_after": "reason",
+            "description": "随食谱公示向家长展示，请仅填写适于公开的换菜或停餐原因。",
+        }]})
 
 
 def report_names():

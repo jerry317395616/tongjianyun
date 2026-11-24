@@ -170,7 +170,9 @@ def initialize(week_name: str, copy_previous: int = 0):
             return {"name": week.name, "skipped_recipes": 0}
         population = planning._population(week)
         days = planning._dates(week)
-        if any(not cint(population[str(day)]["total"]) for day in days):
+        from tongjianyun.canteen_ops.service_calendar import scheduled_dates
+        serving = scheduled_dates(week)
+        if any(not cint(population[str(day)]["total"]) for day in serving):
             frappe.throw("有供餐日的有效在园人数为 0，请先核对学期和教育名册。")
         sources = _copy_sources(week) if copy_previous else {}
         snapshot = {"dates": population, "recipe_hashes": {}}
@@ -179,14 +181,16 @@ def initialize(week_name: str, copy_previous: int = 0):
             for index, day in enumerate(days):
                 count = cint(population[str(day)]["total"])
                 for slot in planning.SLOTS:
-                    source, omitted = _copy_menu(sources.get((timedelta(days=index), slot)), week.company)
+                    previous = sources.get((timedelta(days=index), slot)) if day in serving else None
+                    source, omitted = _copy_menu(previous, week.company)
                     plan = frappe.get_doc(planning._plan_values(week, source, day, slot, count))
                     suffix = planning._digest([week.name, str(day), slot])[:8].upper()
                     plan.insert(ignore_permissions=True, set_name=f"MEAL-{day:%Y%m%d}-{planning.SLOTS.index(slot) + 1:02}-{suffix}")
                     snapshot["recipe_hashes"][plan.name] = planning._recipe_signature(plan)
                     week.append("meals", dict(
                         meal_date=day, meal_type=slot, source_plan=source.name, production_plan=plan.name,
-                        base_student_count=count, planned_headcount=count, menu=plan.custom_meal_menu,
+                        base_student_count=count, planned_headcount=count if day in serving else 0, menu=plan.custom_meal_menu,
+                        service_suspended=int(day not in serving), suspension_reason="学期供餐日历停供" if day not in serving else None,
                     ))
                     skipped += omitted
             week.population_snapshot = frappe.as_json(snapshot)
@@ -312,8 +316,11 @@ def save_meal(week_name: str, meal_date: str, meal_type: str, modified: str, bom
         plan.check_permission("read")
         if plan.docstatus:
             frappe.throw("只能调整尚未提交的餐次。")
+        from tongjianyun.canteen_ops.service_calendar import scheduled_dates
+        if getdate(meal_date) not in scheduled_dates(week) and not stopped:
+            frappe.throw("该日已按学期供餐日历停供。")
         count = cint(row.base_student_count) - excluded_count
-        if excluded_count < 0 or count <= 0 or (excluded_count and not adjustment_reason.strip()):
+        if excluded_count < 0 or (count <= 0 and not stopped) or (excluded_count and not adjustment_reason.strip()):
             frappe.throw("停餐调整人数须小于在园人数，并填写调整原因。")
         if stopped and not reason.strip():
             frappe.throw("请填写整餐停供原因。")

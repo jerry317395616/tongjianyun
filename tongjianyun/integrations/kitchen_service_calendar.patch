@@ -1,0 +1,99 @@
+--- a/ione_core/meal_planning.py
++++ b/ione_core/meal_planning.py
+@@ -93,9 +93,13 @@
+ def _population(doc):
+ 	from ione_core.meal_population import get_population_snapshot
+ 
++	dates = _dates(doc)
++	serving = set(doc.meal_service_dates()) if hasattr(doc, "meal_service_dates") else set(dates)
+ 	return {
+-		str(day): get_population_snapshot(doc.company, day, doc.academic_year, doc.academic_term)
+-		for day in _dates(doc)
++		str(day): (get_population_snapshot(doc.company, day, doc.academic_year, doc.academic_term)
++		           if day in serving else {"total": 0, "classes": [], "roster_hash": _digest([doc.company, str(day), "停供"]),
++		                                   "basis": "学期供餐日历停供"})
++		for day in dates
+ 	}
+ 
+ 
+@@ -243,7 +247,8 @@
+ 			not excluded.is_finite()
+ 			or excluded != excluded.to_integral_value()
+ 			or excluded < 0
+-			or excluded >= cint(row.base_student_count)
++			or (excluded >= cint(row.base_student_count)
++				    and not (row.get("service_suspended") and excluded == 0 and cint(row.base_student_count) == 0))
+ 		):
+ 			frappe.throw(_("停餐调整人数必须是非负整数，且小于在册人数。"))
+ 		if excluded and not str(row.adjustment_reason or "").strip():
+@@ -432,8 +437,11 @@
+ 				source = frappe.get_doc("Production Plan", source_name)
+ 				source.check_permission("read")
+ 				count = cint(population[str(day)]["total"])
+-				if not count:
++				suspended = population[str(day)].get("basis") == "学期供餐日历停供"
++				if not count and not suspended:
+ 					frappe.throw(_("有效在册人数为0，不能生成供餐计划。"))
++				if suspended:
++					source = frappe._dict(name=None, po_items=[])
+ 				plan = frappe.get_doc(_plan_values(doc, source, day, slot, count))
+ 				suffix = _digest([doc.name, str(day), slot])[:8].upper()
+ 				plan.insert(
+@@ -447,6 +455,8 @@
+ 						"meal_date": day,
+ 						"meal_type": slot,
+ 						"source_plan": source.name,
++						"service_suspended": int(suspended),
++						"suspension_reason": "学期供餐日历停供" if suspended else None,
+ 						"production_plan": plan.name,
+ 						"base_student_count": count,
+ 						"excluded_count": 0,
+--- a/ione_core/meal_kitchen.py
++++ b/ione_core/meal_kitchen.py
+@@ -373,6 +373,8 @@
+ 	):
+ 		_fail("已取消的同日厨房记录仍有有效库存流水，请先处理原库存更正。")
+ 	meals, items = _effective_day(week, meal_date, lock=True)
++	if all(row.service_suspended for row in meals):
++		_fail("该日已全部停供，无需建立厨房日结。")
+ 	doc = frappe.get_doc(
+ 		{
+ 			"doctype": "Meal Kitchen Day",
+@@ -1521,7 +1523,10 @@
+ 
+ 
+ def _week_execution(week, lock=False):
+-	if _date(week.week_end) > _date(today()):
++	from ione_core.meal_adjustments import get_effective_meals
++
++	expected = {_date(row.meal_date) for row in get_effective_meals(week, lock=lock) if not row.service_suspended}
++	if max(expected, default=_date(week.week_start)) > _date(today()):
+ 		_fail("未来食谱周不能提前完成厨房周结。")
+ 	if frappe.db.sql(
+ 		"SELECT s.name FROM `tabStock Entry` s JOIN `tabMeal Kitchen Day` d "
+@@ -1549,19 +1554,20 @@
+ 		)
+ 	)
+ 	days = [frappe.get_doc("Meal Kitchen Day", name, for_update=lock) for name in names]
+-	expected = {_date(week.week_start).toordinal() + i for i in range(5)}
+-	if len(days) != 5 or {_date(day.meal_date).toordinal() for day in days} != expected:
+-		_fail("本周五个工作日必须各有一条已审核的厨房日结。")
++	actual = {_date(day.meal_date) for day in days}
++	if (len(actual) != len(days) or not expected.issubset(actual)
++		or any(not _date(week.week_start) <= day <= _date(week.week_end) for day in actual)):
++		_fail("本周每个实际供餐日必须有一条已审核的厨房日结。")
+ 	proofs = [_verified_day(day, lock=lock) for day in sorted(days, key=lambda day: _date(day.meal_date))]
+ 	plans = _day_plans(week, lock=lock)
+ 	if any(plan.status not in ("Closed", "Completed") for plan in plans):
+ 		_fail("本周仍有未关闭的原餐次或调整替换生产计划。")
+-	last_day = max(days, key=lambda day: _date(day.meal_date))
++	last_day = max(days, key=lambda day: _date(day.meal_date), default=None)
+ 	return {
+ 		"week_name": week.name,
+ 		"days": proofs,
+ 		"closed_plans": sorted(plan.name for plan in plans),
+-		"carry_out_sources": _json(last_day.execution_snapshot).get("carry_out_sources", []),
++		"carry_out_sources": _json(last_day.execution_snapshot).get("carry_out_sources", []) if last_day else [],
+ 	}
+ 
+ 

@@ -10,7 +10,7 @@ from tongjianyun.ingredient_library import LAYOUT, LIBRARY, MARKER
 
 INGREDIENT_URL = "/desk/item/view/list?" + urlencode({"layout": LAYOUT, MARKER: 1})
 
-GROUPS = (
+_OLD_GROUPS = (
     ("菜品与食谱", "book-open", (
         ("DocType", "Item", "标准菜品库", "book-open"),
         ("URL", INGREDIENT_URL, LIBRARY, "carrot"),
@@ -64,6 +64,27 @@ GROUPS = (
     )),
 )
 
+def _links(group, *indexes):
+    return tuple(_OLD_GROUPS[group][2][i] for i in indexes)
+
+
+GROUPS = (
+    ("食谱编排", "book-open", _links(0, 3) + (("DocType", "Tongjianyun Meal Publication", "食谱公示", "book-open"),)),
+    ("采购验收", "truck", (("DocType", "Material Request", "采购申请", "list-checks"),)
+     + _links(2, 3) + _links(3, 0, 2, 3)),
+    ("今日供餐", "calendar-days", _links(1, 1, 2) + _links(4, 3, 4) + (
+        ("DocType", "Tongjianyun Meal Delivery Handover", "到园成品交接", "truck"),
+        ("DocType", "Tongjianyun Meal Class Feedback", "班级进餐反馈", "book-open"),
+        ("DocType", "Tongjianyun Meal Diet Handover", "特殊餐交接", "list-checks"))),
+    ("检查整改", "shield-check", (("DocType", "Tongjianyun Meal Safety Check", "食品安全检查", "list-checks"),)
+     + _links(7, 0, 1) + (("DocType", "Tongjianyun Meal Family Opinion", "家长膳食意见", "book-open"),)),
+    ("台账分析", "chart-bar", _links(1, 3) + _links(2, 4, 5) + _links(3, 1)
+     + (("Report", "Tongjianyun Meal Quality Indicators", "膳食质量指标", "chart-bar"),)),
+    ("基础设置", "settings", _links(0, 0, 1) + _links(1, 0) + _links(4, 0, 1, 2) + _links(5, 0, 1, 2)
+     + _links(6, 0) + (("DocType", "Tongjianyun Meal Diet Arrangement", "特殊膳食安排", "book-open"),)),
+    ("财务结算", "wallet", _links(6, 1, 2, 3, 4, 5, 6)),
+)
+
 PREVIOUS_TITLES = {"食品安全与资质": "食品安全与人员"}
 
 
@@ -113,12 +134,17 @@ def install_navigation(module, dish_route_options):
 
     # User-added children of a managed section follow that section. Other custom blocks
     # keep their original order and child relationships.
+    old_headings = {title for title, _, _ in _OLD_GROUPS} | {"食品安全与人员"}
+    old_targets = {(typ, target, label) for _, _, entries in _OLD_GROUPS for typ, target, label, _ in entries}
     by_section = {id(section): children for section, children in layout}
     remaining = []
     parent = None
     for row in previous:
         if row.type == "Section Break":
             parent = by_section.get(id(row))
+        if id(row) not in managed and ((row.type == "Section Break" and row.label in old_headings)
+                or (row.link_type, row.link_to or row.url, row.label) in old_targets):
+            continue
         if id(row) not in managed:
             if row.child and parent is not None and row.type != "Section Break":
                 parent.append(row)

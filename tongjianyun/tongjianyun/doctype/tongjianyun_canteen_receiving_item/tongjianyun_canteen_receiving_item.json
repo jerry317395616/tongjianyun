@@ -16,6 +16,7 @@
   "lot_number",
   "expires_on",
   "evidence_status",
+  "record_weight",
   "gross_weight",
   "tare_weight",
   "net_weight",
@@ -78,20 +79,23 @@
    "fieldname": "gross_weight",
    "label": "实称毛重（公斤）",
    "fieldtype": "Float",
-   "non_negative": 1
+   "non_negative": 1,
+   "depends_on": "eval:doc.record_weight || doc.gross_weight || doc.tare_weight"
   },
   {
    "fieldname": "tare_weight",
    "label": "实称皮重（公斤）",
    "fieldtype": "Float",
-   "non_negative": 1
+   "non_negative": 1,
+   "depends_on": "eval:doc.record_weight || doc.gross_weight || doc.tare_weight"
   },
   {
    "fieldname": "net_weight",
    "label": "净重（公斤）",
    "fieldtype": "Float",
    "read_only": 1,
-   "non_negative": 1
+   "non_negative": 1,
+   "depends_on": "eval:doc.record_weight || doc.gross_weight || doc.tare_weight"
   },
   {
    "fieldname": "accepted_qty",
@@ -122,6 +126,11 @@
    "fieldname": "evidence_verified",
    "label": "已人工核对该批票证",
    "fieldtype": "Check"
+  },
+  {
+   "fieldname": "record_weight",
+   "fieldtype": "Check",
+   "label": "登记现场称重"
   }
  ]
 }

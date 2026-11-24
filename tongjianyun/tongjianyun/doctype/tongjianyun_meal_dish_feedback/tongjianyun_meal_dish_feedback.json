@@ -1,0 +1,58 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Meal Dish Feedback",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "dish",
+   "label": "实际菜品",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "acceptance",
+   "label": "接受程度",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "options": "未观察\n受欢迎\n一般\n剩得多",
+   "reqd": 1
+  },
+  {
+   "fieldname": "weighed",
+   "label": "已称重",
+   "fieldtype": "Check",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "served_g",
+   "label": "实际供出量（克）",
+   "fieldtype": "Float",
+   "depends_on": "eval:doc.weighed"
+  },
+  {
+   "fieldname": "plate_g",
+   "label": "餐盘剩余（克）",
+   "fieldtype": "Float",
+   "depends_on": "eval:doc.weighed"
+  },
+  {
+   "fieldname": "reason",
+   "label": "观察或原因",
+   "fieldtype": "Data",
+   "in_list_view": 1
+  }
+ ],
+ "field_order": [
+  "dish",
+  "acceptance",
+  "weighed",
+  "served_g",
+  "plate_g",
+  "reason"
+ ],
+ "permissions": [],
+ "istable": 1,
+ "editable_grid": 1
+}

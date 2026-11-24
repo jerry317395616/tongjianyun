@@ -47,12 +47,31 @@
    "report": 1,
    "export": 1,
    "print": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食保健员",
+   "read": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
   }
  ],
  "is_submittable": 1,
  "field_order": [
   "company",
   "canteen",
+  "external_handover",
   "meal_day",
   "meal_date",
   "meal_type",
@@ -87,9 +106,10 @@
    "fieldname": "meal_day",
    "label": "厨房执行日",
    "fieldtype": "Link",
-   "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Meal Kitchen Day"
+   "options": "Meal Kitchen Day",
+   "depends_on": "eval:!doc.external_handover",
+   "mandatory_depends_on": "eval:!doc.external_handover"
   },
   {
    "fieldname": "meal_date",
@@ -161,6 +181,13 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Meal Companion"
+  },
+  {
+   "fieldname": "external_handover",
+   "label": "园外供餐交接",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Meal Delivery Handover",
+   "depends_on": "eval:!doc.meal_day"
   }
  ]
 }

@@ -401,6 +401,17 @@
 				$("<span>").text(dish.name).appendTo($label);
 				$("<small>").text(sameName ? `${dish.category || "未分类"} · ${dish.item}` : dish.category || "未分类").appendTo($label);
 				const $actions = $("<div>", { class: "tgy-picker-row-actions" }).appendTo($row);
+				button($actions, "配餐提示", async () => {
+					const {message: notes} = await frappe.call({method:"tongjianyun.canteen_ops.meal_operations.dish_notes",
+						type:"GET", args:{week_name:frm.doc.name, bom_name:dish.bom, service_date:args.meal_date}});
+					const d=new frappe.ui.Dialog({title:"配餐提示",fields:[{fieldname:"notes",fieldtype:"HTML"}]});
+					const panel=d.fields_dict.notes.$wrapper;
+					$("<p>").text("配方标注过敏原："+(notes.allergens||"未标注")).appendTo(panel);
+					$("<p>").text("特殊餐匹配："+(notes.conflicts?.join("、")||"请核对已确认的饮食安排")).appendTo(panel);
+					if (notes.latest) $("<p>").text("最近观察 · "+notes.latest.date+" · "+(notes.latest.reason||notes.latest.acceptance)).appendTo(panel);
+					for(const row of notes.feedback) $("<p>").text(row.acceptance+" · "+row.observations+" 次班级观察").appendTo(panel);
+					d.show();
+				});
 				const expanded = expandedBom === dish.bom;
 				const $quantity = button($actions, "食材用量", () => {
 					expandedBom = expanded ? undefined : dish.bom;

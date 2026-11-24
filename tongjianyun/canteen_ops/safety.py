@@ -11,14 +11,17 @@ from tongjianyun.canteen_ops.common import (
     permission, positive, records, require, roles, submitted, unique_active,
 )
 
-FINDING_SOURCES = {CANTEEN, COMPANION, CREDENTIAL, DAY, DELIVERY, POLICY, PRICE, RECEIVING, SAMPLE,
+FINDING_SOURCES = {"Tongjianyun Meal Delivery Handover", "Tongjianyun Meal Safety Check", "Tongjianyun Meal Family Opinion", CANTEEN, COMPANION, CREDENTIAL, DAY, DELIVERY, POLICY, PRICE, RECEIVING, SAMPLE,
                    STATEMENT, VOUCHER, WEEK, "Purchase Order", "Batch", "Purchase Receipt"}
 
 
 class Canteen(Handler):
     def validate(self):
         doc = self.doc
-        names = [doc.raw_warehouse, doc.kitchen_warehouse]
+        if doc.service_mode in ("委托承包", "园外供餐"):
+            require(doc.service_supplier and doc.service_contract and doc.responsibilities, "请登记供餐单位、合同和责任约定。")
+        require(doc.service_mode == "园外供餐" or (doc.raw_warehouse and doc.kitchen_warehouse), "园内供餐须设置原料仓和厨房仓。")
+        names = [name for name in (doc.raw_warehouse, doc.kitchen_warehouse) if name]
         if doc.quarantine_warehouse:
             names.append(doc.quarantine_warehouse)
         require(len(set(names)) == len(names), "原料仓、厨房仓及隔离仓必须分别设置。")
@@ -28,7 +31,7 @@ class Canteen(Handler):
         lock_company(doc.company)
         filters = {"company": doc.company, "name": ("!=", doc.name or ""), "disabled": 0}
         if not doc.disabled:
-            require(not frappe.db.exists(CANTEEN, {**filters, "kitchen_warehouse": doc.kitchen_warehouse}),
+            require(not doc.kitchen_warehouse or not frappe.db.exists(CANTEEN, {**filters, "kitchen_warehouse": doc.kitchen_warehouse}),
                     "一个厨房仓只对应一个启用的食堂。")
             require(not frappe.db.exists(CANTEEN, {**filters, "canteen_name": doc.canteen_name}),
                     "同一园所已有同名食堂。")
@@ -77,6 +80,8 @@ class Term(Handler):
 
         doc = self.doc
         dates(doc.from_date, doc.to_date)
+        if doc.target_group:
+            require(frappe.db.get_value("Student Batch Name", doc.target_group, "company") == doc.company, "适用班级须属于本园所。")
         validate_project_link(doc)
 
     def before_update_after_submit(self):
@@ -116,13 +121,21 @@ class WeeklyTask(Handler):
             doc.meal_week = menu.name if menu else None
             doc.menu_confirmed = int(bool(current and current.menu_confirmed and
                                           current.canteen == doc.canteen and current.meal_week == doc.meal_week))
-            if doc.docstatus == 1:
+            from tongjianyun.canteen_ops.outside_meals import external
+            if doc.docstatus == 1 and not external(doc.canteen):
                 require(doc.meal_week, "请先编排本周食谱，或在任务中确认食谱归属。")
         if not doc.docstatus:
             doc.confirmed_at = None
 
     def before_submit(self):
         doc = self.doc
+        from tongjianyun.canteen_ops import outside_meals
+        if outside_meals.external(doc.canteen):
+            menu, expected, accepted = outside_meals.evidence(doc.company, doc.canteen, doc.week_start)
+            require(menu and (doc.task_kind == "食谱审核" or (doc.task_kind == "逐餐供餐与日结" and expected and expected <= accepted)),
+                    "请先审核园外供餐菜单，并完成对应餐次的交接。")
+            doc.confirmed_at = now_datetime()
+            return
         week = submitted(company_doc(doc, WEEK, doc.meal_week))
         if doc.task_kind == "准备采购":
             from ione_core.meal_procurement import get_procurement_preview
@@ -140,7 +153,8 @@ class WeeklyTask(Handler):
 
             schedule = term_weeks(linked(TERM, doc.term_project)).get(getdate(doc.week_start))
             require(schedule, "该学期本周没有供餐日。")
-            expected = set(schedule["days"])
+            from tongjianyun.canteen_ops.service_calendar import task_dates
+            expected = task_dates(week, schedule["days"])
             children = records(DAY, {"meal_week": week.name, "docstatus": 1, "meal_date": ["in", list(expected)]},
                                ["name", "meal_date"])
             require({getdate(child.meal_date) for child in children} == expected and all(
@@ -234,17 +248,32 @@ def _sample_plan_dishes(day, week, meal_type, reference):
     return {row.bom_no for row in plan.po_items if row.bom_no}
 
 
+def delivered_meal(doc):
+    from tongjianyun.canteen_ops.meal_operations import DELIVERY as EXTERNAL, meal_dishes
+    require(not doc.meal_day, "请选择一种供餐来源。")
+    source = company_doc(doc, EXTERNAL, doc.external_handover)
+    require(source.docstatus == 1 and source.result == "接收" and source.canteen == doc.canteen
+            and source.meal_type == doc.meal_type, "交接须已确认接收，且属于本食堂本餐。")
+    doc.meal_date = source.service_date
+    return meal_dishes(source)
+
+
 class FoodSample(Handler):
     def validate(self):
         doc = self.doc
-        day, plan = meal_context(doc)
-        require(doc.dish in {row.bom_no for row in plan.po_items}, "留样成品须来自本餐生效配方。")
-        doc.meal_date = day.meal_date
+        if doc.external_handover:
+            require(not doc.dish and doc.external_dish in delivered_meal(doc), "请选择到园交接餐次的实际成品。")
+        else:
+            day, plan = meal_context(doc)
+            require(doc.dish in {row.bom_no for row in plan.po_items}, "留样成品须来自本餐生效配方。")
+            doc.meal_date = day.meal_date
         meal_evidence_date(doc.sampled_at, doc.meal_date)
-        policy = active_policy(doc.canteen, doc.meal_date)
+        policy = active_policy(doc.canteen, doc.meal_date, required=False)
+        min_weight = max(125, float(policy.sample_min_weight or 0)) if policy else 125
+        keep_hours = max(48, int(policy.sample_keep_hours or 0)) if policy else 48
         weight = positive(doc.weight)
-        require(weight >= positive(policy.sample_min_weight), "留样量低于本食堂有效规则。")
-        doc.dispose_after = add_to_date(doc.sampled_at, hours=policy.sample_keep_hours, as_datetime=True)
+        require(weight >= min_weight, "留样量低于本食堂有效规则。")
+        doc.dispose_after = add_to_date(doc.sampled_at, hours=keep_hours, as_datetime=True)
         if not doc.docstatus:
             doc.operator = None
             doc.disposed_at = None
@@ -254,7 +283,9 @@ class FoodSample(Handler):
     def before_submit(self):
         doc = self.doc
         attached_file(doc, doc.photo, required=True, image=True)
-        unique_active(doc, {"meal_day": doc.meal_day, "meal_type": doc.meal_type, "dish": doc.dish},
+        source = ({"external_handover": doc.external_handover, "external_dish": doc.external_dish} if doc.external_handover
+                  else {"meal_day": doc.meal_day, "meal_type": doc.meal_type, "dish": doc.dish})
+        unique_active(doc, source,
                       "本餐已登记相同成品留样。")
         doc.operator = frappe.session.user
 
@@ -266,8 +297,11 @@ class FoodSample(Handler):
 class Companion(Handler):
     def validate(self):
         doc = self.doc
-        day, _plan = meal_context(doc)
-        doc.meal_date = day.meal_date
+        if doc.external_handover:
+            delivered_meal(doc)
+        else:
+            day, _plan = meal_context(doc)
+            doc.meal_date = day.meal_date
         meal_evidence_date(doc.attended_at, doc.meal_date)
         previous = doc.get_doc_before_save()
         doc.companion = previous.companion if previous else frappe.session.user
@@ -278,7 +312,8 @@ class Companion(Handler):
         doc = self.doc
         permission(doc.companion == frappe.session.user, "陪餐记录须由实际陪餐人确认。")
         require(doc.attested, "请确认本人参加本餐陪餐并核对记录。")
-        unique_active(doc, {"meal_day": doc.meal_day, "meal_type": doc.meal_type, "companion": doc.companion},
+        source = {"external_handover":doc.external_handover} if doc.external_handover else {"meal_day":doc.meal_day}
+        unique_active(doc, {**source, "meal_type": doc.meal_type, "companion": doc.companion},
                       "本餐已登记该陪餐人员。")
 
 

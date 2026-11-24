@@ -167,10 +167,15 @@ def _week_proof(week):
     proof = _proof(week.get("kitchen_reconciliation_snapshot"), "basis_hash", week_name=week.name)
     days = proof.get("days") if proof else None
     dates = {str(getdate(week.week_start) + timedelta(days=offset)) for offset in range(5)}
-    if not isinstance(days, list) or len(days) != 5 or not all(isinstance(row, dict) for row in days):
+    if not isinstance(days, list) or not all(isinstance(row, dict) for row in days):
         return None
-    if {row.get("meal_date") for row in days} != dates:
+    actual = {row.get("meal_date") for row in days}
+    if len(actual) != len(days) or not actual <= dates:
         return None
+    if actual != dates:
+        from tongjianyun.canteen_ops.service_calendar import effective_dates
+        if not {str(day) for day in effective_dates(week)} <= actual:
+            return None
     return proof
 
 

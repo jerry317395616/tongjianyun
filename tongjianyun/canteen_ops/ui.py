@@ -22,8 +22,9 @@ def get_labels(doctype, names):
             title = "随货标签"
         else:
             value = get_url_to_form(SAMPLE, doc.name)
-            dish = linked("BOM", doc.dish)
-            info = [site.canteen_name, f"{doc.meal_type} · {dish.get('item_name') or dish.item}",
+            dish = linked("BOM", doc.dish) if doc.dish else None
+            title = (dish.get("item_name") or dish.item) if dish else doc.external_dish
+            info = [site.canteen_name, f"{doc.meal_type} · {title}",
                     f"留样 {doc.sampled_at} · {doc.weight} 克", f"保存至 {doc.dispose_after}", doc.storage_location]
             title = "食品留样标签"
         qr = get_qr_code(value)
@@ -36,3 +37,16 @@ def get_labels(doctype, names):
 def order_site(purchase_order):
     order = linked("Purchase Order", purchase_order)
     return purchasing.order_site(order, strict=False)
+
+
+@frappe.whitelist(methods=["GET"])
+def dispatch_source(request):
+    from tongjianyun.canteen_ops.common import linked
+    linked("Material Request", request)
+    for kind in ("Meal Plan Adjustment", "Meal Planning Week"):
+        if not frappe.has_permission(kind, "read"):
+            continue
+        names = frappe.get_list(kind,filters={"material_request":request,"docstatus":1},pluck="name",limit_page_length=1)
+        if names:
+            doc = linked(kind,names[0])
+            return {"week_name":doc.meal_week,"meal_adjustment":doc.name} if kind=="Meal Plan Adjustment" else {"week_name":doc.name}

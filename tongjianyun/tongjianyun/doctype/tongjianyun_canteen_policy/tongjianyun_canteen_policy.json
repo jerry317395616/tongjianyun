@@ -280,7 +280,9 @@
    "fieldname": "sample_required",
    "label": "应登记成品留样",
    "fieldtype": "Check",
-   "default": "1"
+   "default": "1",
+   "hidden": 1,
+   "read_only": 1
   },
   {
    "fieldname": "sample_min_weight",
@@ -300,7 +302,9 @@
    "fieldname": "companion_required",
    "label": "应登记陪餐",
    "fieldtype": "Check",
-   "default": "1"
+   "default": "1",
+   "hidden": 1,
+   "read_only": 1
   },
   {
    "fieldname": "evidence_rules",

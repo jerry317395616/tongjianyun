@@ -1,0 +1,119 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Meal Safety Check",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所",
+   "fieldtype": "Link",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Canteen",
+   "reqd": 1
+  },
+  {
+   "fieldname": "period",
+   "label": "检查类型",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "options": "日管控\n周排查\n月调度",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_date",
+   "label": "日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "checks",
+   "label": "风险清单",
+   "fieldtype": "Table",
+   "options": "Tongjianyun Safety Check Item"
+  },
+  {
+   "fieldname": "summary",
+   "label": "检查结论或会议决定",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "assigned_to",
+   "label": "整改责任人",
+   "fieldtype": "Link",
+   "options": "User"
+  },
+  {
+   "fieldname": "due_date",
+   "label": "整改期限",
+   "fieldtype": "Date"
+  },
+  {
+   "fieldname": "signed_by",
+   "label": "确认人",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "options": "User"
+  },
+  {
+   "fieldname": "finding",
+   "label": "整改记录",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "options": "Tongjianyun Canteen Finding"
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen",
+  "period",
+  "service_date",
+  "checks",
+  "summary",
+  "assigned_to",
+  "due_date",
+  "signed_by",
+  "finding"
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "delete": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1
+  }
+ ],
+ "autoname": "hash",
+ "track_changes": 1,
+ "is_submittable": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "period"
+}

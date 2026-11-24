@@ -88,10 +88,23 @@
 	function render(frm, $panel, data) {
 		const kind = frm.doc.task_kind;
 		const menu = data.menu;
+		if (frm.doc.generated_by_term && !frm.doc.docstatus && !frm.is_dirty() && ["食谱审核","准备采购"].includes(kind)) {
+			const complete = kind==="食谱审核" ? (data.external ? data.published : menu.docstatus===1)
+				: ["申请已提交","申请草稿","已关联采购申请","无需采购"].includes(data.procurement?.status);
+			frm.page.set_indicator(complete?"已办理":"待办理",complete?"green":"orange");
+			frm.page.clear_primary_action();
+		}
 		$("<h5>", { class: "mb-2" }).text(titles[kind] || "任务办理").appendTo($panel);
 		const $bar = $("<div>", { class: "d-flex align-items-center flex-wrap justify-content-between" }).appendTo($panel);
 		const $status = $("<div>", { class: "mr-2 my-1" }).appendTo($bar);
 		const $actions = $("<div>", { class: "my-1" }).appendTo($bar);
+		if (data.external) {
+			$status.text(kind==="食谱审核" ? (data.published?"园外菜单已审核":"待审核园外菜单") : `已交接 ${data.accepted} / ${data.total} 餐`);
+			if(data.publication) button($actions,"打开供餐菜单",()=>open("Tongjianyun Meal Publication",data.publication));
+			else if(!data.published && data.can_publish) button($actions,"建立供餐菜单",()=>frappe.new_doc("Tongjianyun Meal Publication",
+				{company:frm.doc.company,canteen:frm.doc.canteen,week_start:frm.doc.week_start}));
+			return;
+		}
 		if (menu.state !== "linked") {
 			const labels = { empty: "待编排", ambiguous: "待确认食谱归属", unavailable: "园所本周已有其他食堂的食谱",
 				restricted: "当前账号无权查看本周食谱", historical: "这项任务没有关联食谱" };

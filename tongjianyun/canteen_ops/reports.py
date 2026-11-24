@@ -71,7 +71,7 @@ class Context:
             require(not self.filters.company or site.company == self.filters.company, "所选食堂不属于当前园所。")
         self.sites = records(CANTEEN, constraints,
                              ["name", "company", "region", "district", "raw_warehouse", "kitchen_warehouse",
-                              "quarantine_warehouse", "manager"])
+                              "quarantine_warehouse", "manager", "service_mode"])
         self.assigned_roles = roles()
 
     def companies(self):
@@ -382,7 +382,7 @@ def quality_rows(ctx, site):
                     fact=facts, stage=status, finding_key=safety.finding_key(rule, name, extra))
 
     policy = active_policy(site.name, ctx.today, required=False)
-    if not policy:
+    if not policy and site.service_mode != "园外供餐":
         yield row("采购与验收", "缺少生效规则", ctx.today, CANTEEN, site.name, "请维护食堂有效期内规则。")
     if ctx.can_audit("人员与证照"):
         for entry in credential_rows(ctx, site):
@@ -405,7 +405,7 @@ def quality_rows(ctx, site):
         for entry in price_alerts(site, ctx):
             yield row("采购与验收", "采购价格异常", entry["date"], entry["source_type"], entry["source"],
                       f"{entry['item_code']} · {entry['fact']}", entry["order_item"])
-    if ctx.can_audit("库存"):
+    if site.service_mode != "园外供餐" and ctx.can_audit("库存"):
         for entry in inventory.inventory_rows(site, ctx.filters, ctx.today):
             if entry.get("stage") != "正常":
                 anchor = entry.get("source") or site.name
@@ -421,15 +421,12 @@ def quality_rows(ctx, site):
                 yield row("供餐", "日结待核对", date, DAY, day.name, "实际供餐、库存或日结依据尚待核对。")
             if not ctx.can_audit("食品安全"):
                 continue
-            policy = active_policy(site.name, date, required=False)
-            if not policy:
-                continue
             for slot in day.meals:
                 if not slot.actual_confirmed or not slot.actual_headcount:
                     continue
-                if policy.companion_required and not accessible(COMPANION, {"meal_day": day.name, "meal_type": slot.meal_type, "docstatus": 1}):
+                if frappe.has_permission(COMPANION, "read") and not accessible(COMPANION, {"meal_day": day.name, "meal_type": slot.meal_type, "docstatus": 1}):
                     yield row("食品安全", "缺陪餐记录", date, DAY, day.name, slot.meal_type, slot.meal_type)
-                if policy.sample_required and frappe.has_permission(SAMPLE, "read"):
+                if frappe.has_permission(SAMPLE, "read"):
                     dishes = safety.sample_scope_dishes(day, week, slot.meal_type)
                     found = {entry.dish for entry in accessible(SAMPLE, {"meal_day": day.name, "meal_type": slot.meal_type,
                                                                          "docstatus": 1}, ["dish"])}
@@ -437,6 +434,16 @@ def quality_rows(ctx, site):
                         yield row("食品安全", "缺成品留样", date, DAY, day.name, f"{slot.meal_type} / {dish}",
                                   f"{slot.meal_type}-{dish}")
         if ctx.can_audit("食品安全"):
+            from tongjianyun.canteen_ops.meal_operations import DELIVERY as OUTSIDE_DELIVERY, meal_dishes
+            for delivery in accessible(OUTSIDE_DELIVERY, {**base, "service_date": date_filter(ctx), "result": "接收", "docstatus": 1}):
+                source = frappe.get_doc(OUTSIDE_DELIVERY, delivery.name)
+                if frappe.has_permission(COMPANION, "read") and not accessible(COMPANION, {"docstatus": 1,
+                        "external_handover": source.name}):
+                    yield row("食品安全", "缺陪餐记录", source.service_date, OUTSIDE_DELIVERY, source.name, source.meal_type, source.meal_type)
+                if frappe.has_permission(SAMPLE, "read"):
+                    found = accessible(SAMPLE, {"docstatus": 1, "external_handover": source.name}, ["external_dish"])
+                    for dish in meal_dishes(source) - {r.external_dish for r in found}:
+                        yield row("食品安全", "缺成品留样", source.service_date, OUTSIDE_DELIVERY, source.name, dish, dish)
             for entry in accessible(COMPANION, {**base, "meal_date": date_filter(ctx), "docstatus": 1,
                                                  "evaluation": ("!=", "满意")}, ["name", "meal_date", "evaluation", "meal_type"]):
                 yield row("食品安全", "陪餐反馈待整改", entry.meal_date, COMPANION, entry.name,
@@ -514,9 +521,6 @@ def completeness(ctx):
                 if ctx.can_audit("供餐"):
                     count("已建立执行日的日结完成", proof)
                 if ctx.can_audit("食品安全") and frappe.has_permission(COMPANION, "read"):
-                    policy = active_policy(site.name, date, required=False)
-                    if not policy or not policy.companion_required:
-                        continue
                     for meal in day.meals:
                         if meal.actual_confirmed and meal.actual_headcount > 0:
                             count("已实供餐次有陪餐记录",

@@ -63,6 +63,9 @@ def _progress(term, schedule):
 
     if not mondays:
         return []
+    from tongjianyun.canteen_ops import outside_meals
+    if outside_meals.external(term.canteen):
+        return outside_meals.progress(term, schedule)
     scope = WeekMenus(term.company, mondays)
     matches = {day: scope.match(term.canteen, day) for day in mondays}
     weeks = {day: menu for day, (menu, _) in matches.items() if menu}
@@ -82,7 +85,8 @@ def _progress(term, schedule):
         week = weeks.get(monday)
         request = week.material_request if week and week.material_request in active_requests else None
         service = schedule[monday]
-        allowed = set(service["days"])
+        from tongjianyun.canteen_ops.service_calendar import task_dates
+        allowed = task_dates(frappe.get_doc(WEEK, week.name) if week and week.docstatus == 1 else None, service["days"])
         kitchen_days = [day for day in days[week.name] if getdate(day.meal_date) in allowed] if week else []
         confirmed = {getdate(day.meal_date) for day in kitchen_days if day.docstatus == 1}
         steps = [{"kind": kind, "due": service["due"][kind], "complete": complete, "status": status}
@@ -176,9 +180,13 @@ def ensure_tasks(term, schedule, *, meal_week=None, automatic=False):
                               fields=["name", "week_start", "task_kind"])
     by_kind = {(getdate(row.week_start), row.task_kind): row.name for row in existing}
     names = []
+    from tongjianyun.canteen_ops.outside_meals import external
+    delivered = external(term.canteen)
     for monday, week in schedule.items():
         menu, _ = scope.match(term.canteen, monday)
         for kind, due in week["due"].items():
+            if delivered and kind in ("准备采购", "周核销"):
+                continue
             name = by_kind.get((monday, kind))
             if not name:
                 task = frappe.get_doc({"doctype": TASK, "company": term.company, "canteen": term.canteen,

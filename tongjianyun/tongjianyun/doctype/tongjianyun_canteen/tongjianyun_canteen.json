@@ -111,6 +111,25 @@
    "report": 1,
    "export": 1,
    "print": 1
+  },
+  {
+   "role": "膳食班级教师",
+   "select": 1
+  },
+  {
+   "role": "膳食保健员",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1,
+   "report": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1,
+   "report": 1
   }
  ],
  "field_order": [
@@ -119,6 +138,10 @@
   "region",
   "district",
   "location_column",
+  "service_mode",
+  "service_supplier",
+  "service_contract",
+  "responsibilities",
   "raw_warehouse",
   "kitchen_warehouse",
   "quarantine_warehouse",
@@ -165,15 +188,15 @@
    "fieldname": "raw_warehouse",
    "label": "原料仓",
    "fieldtype": "Link",
-   "reqd": 1,
-   "options": "Warehouse"
+   "options": "Warehouse",
+   "mandatory_depends_on": "eval:doc.service_mode!='园外供餐'"
   },
   {
    "fieldname": "kitchen_warehouse",
    "label": "厨房仓",
    "fieldtype": "Link",
-   "reqd": 1,
-   "options": "Warehouse"
+   "options": "Warehouse",
+   "mandatory_depends_on": "eval:doc.service_mode!='园外供餐'"
   },
   {
    "fieldname": "quarantine_warehouse",
@@ -196,6 +219,30 @@
    "fieldname": "disabled",
    "label": "停用",
    "fieldtype": "Check"
+  },
+  {
+   "fieldname": "service_mode",
+   "label": "供餐方式",
+   "fieldtype": "Select",
+   "default": "自主经营",
+   "options": "自主经营\n委托承包\n园外供餐",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_supplier",
+   "label": "承包或供餐单位",
+   "fieldtype": "Link",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "service_contract",
+   "label": "合同编号",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "responsibilities",
+   "label": "园方与供餐方责任约定",
+   "fieldtype": "Small Text"
   }
  ]
 }

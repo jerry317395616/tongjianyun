@@ -68,16 +68,33 @@
    "submit": 1,
    "cancel": 1,
    "amend": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食保健员",
+   "read": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1
   }
  ],
  "is_submittable": 1,
  "field_order": [
   "company",
   "canteen",
+  "external_handover",
   "meal_day",
   "meal_date",
   "meal_type",
   "dish",
+  "external_dish",
   "weight",
   "sampled_at",
   "dispose_after",
@@ -110,9 +127,10 @@
    "fieldname": "meal_day",
    "label": "厨房执行日",
    "fieldtype": "Link",
-   "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Meal Kitchen Day"
+   "options": "Meal Kitchen Day",
+   "depends_on": "eval:!doc.external_handover",
+   "mandatory_depends_on": "eval:!doc.external_handover"
   },
   {
    "fieldname": "meal_date",
@@ -133,9 +151,10 @@
    "fieldname": "dish",
    "label": "留样成品",
    "fieldtype": "Link",
-   "reqd": 1,
    "in_list_view": 1,
-   "options": "BOM"
+   "options": "BOM",
+   "depends_on": "eval:!doc.external_handover",
+   "mandatory_depends_on": "eval:!doc.external_handover"
   },
   {
    "fieldname": "weight",
@@ -203,6 +222,20 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Food Sample"
+  },
+  {
+   "fieldname": "external_handover",
+   "label": "园外供餐交接",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Meal Delivery Handover",
+   "depends_on": "eval:!doc.meal_day"
+  },
+  {
+   "fieldname": "external_dish",
+   "label": "交接成品名称",
+   "fieldtype": "Data",
+   "depends_on": "eval:doc.external_handover",
+   "mandatory_depends_on": "eval:doc.external_handover"
   }
  ]
 }

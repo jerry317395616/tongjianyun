@@ -127,6 +127,8 @@
   "responsible_user",
   "term_dates_column",
   "canteen",
+  "target_group",
+  "age_band",
   "service_scope",
   "dates_section",
   "from_date",
@@ -189,9 +191,8 @@
   },
   {
    "fieldname": "service_scope",
-   "label": "供餐人群及安排",
-   "fieldtype": "Small Text",
-   "reqd": 1
+   "label": "其他供餐安排",
+   "fieldtype": "Small Text"
   },
   {
    "fieldname": "dates_section",
@@ -273,6 +274,17 @@
   {
    "fieldname": "week_progress",
    "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "target_group",
+   "label": "适用班级（选填）",
+   "fieldtype": "Link",
+   "options": "Student Batch Name"
+  },
+  {
+   "fieldname": "age_band",
+   "label": "适用年龄组（选填）",
+   "fieldtype": "Data"
   }
  ]
 }

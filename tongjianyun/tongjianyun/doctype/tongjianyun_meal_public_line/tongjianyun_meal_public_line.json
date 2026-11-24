@@ -1,0 +1,36 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Meal Public Line",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "service_date",
+   "label": "日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meal_type",
+   "label": "餐次",
+   "fieldtype": "Select",
+   "options": "早餐\n早点\n午餐\n午点\n晚餐",
+   "reqd": 1
+  },
+  {
+   "fieldname": "menu",
+   "label": "公开菜品",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "reqd": 1
+  }
+ ],
+ "field_order": [
+  "service_date",
+  "meal_type",
+  "menu"
+ ],
+ "permissions": [],
+ "istable": 1,
+ "editable_grid": 1
+}

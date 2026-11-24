@@ -25,6 +25,7 @@ MANAGED = (CANTEEN, POLICY, CREDENTIAL, TRAINING, TERM, TASK, DISPATCH, PRICE, D
            SAMPLE, COMPANION, STATEMENT, VOUCHER, FINDING, LOT_MOVEMENT)
 SUPPLIER_ROLE = "膳食供应商"
 EDU_ROLE, SAFETY_ROLE, FINANCE_ROLE = "膳食教育监管", "膳食食品安全监管", "膳食财政监管"
+OPERATION_STAFF = {"膳食保健员", "膳食园方负责人", "膳食安全员", "膳食班级教师"}
 REGULATORS = frozenset((EDU_ROLE, SAFETY_ROLE, FINANCE_ROLE))
 ROLES = (SUPPLIER_ROLE, *sorted(REGULATORS))
 REGULATOR_CATEGORIES = {
@@ -137,8 +138,13 @@ def scoped_query(doctype):
             if doctype != CANTEEN:
                 clauses.append(_in(f"{table}.supplier", allowed_values("Supplier", user)))
             return " and ".join(clauses)
-        if companies or (REGULATORS & assigned):
+        if companies or (REGULATORS & assigned) or (doctype in (CANTEEN, FINDING, SAMPLE, COMPANION) and OPERATION_STAFF & assigned):
             clauses = [_in(f"{table}.company", companies)]
+            if OPERATION_STAFF & assigned and doctype in (CANTEEN, FINDING, SAMPLE, COMPANION):
+                sites = allowed_values(CANTEEN, user)
+                if sites:
+                    key = "name" if doctype == CANTEEN else "canteen"
+                    clauses.append(_in(f"{table}.{key}", sites))
             if doctype == FINDING and REGULATORS & assigned:
                 clauses.append(_in(f"{table}.category", regulator_categories(assigned)))
             return " and ".join(clauses)
@@ -156,8 +162,12 @@ def scoped_permission(doc, user=None, permission_type=None, **kwargs):
             return False
         if doc.doctype != CANTEEN and doc.supplier not in allowed_values("Supplier", user):
             return False
-    elif (companies or REGULATORS & assigned) and doc.company not in companies:
+    elif (companies or REGULATORS & assigned or (doc.doctype in (CANTEEN, FINDING, SAMPLE, COMPANION) and OPERATION_STAFF & assigned)) and doc.company not in companies:
         return False
+    if OPERATION_STAFF & assigned and doc.doctype in (CANTEEN, FINDING, SAMPLE, COMPANION):
+        sites = allowed_values(CANTEEN, user)
+        if sites and (doc.name if doc.doctype == CANTEEN else doc.canteen) not in sites:
+            return False
     if doc.doctype == FINDING and REGULATORS & assigned and doc.category not in regulator_categories(assigned):
         return False
     # Frappe's DocType roles and native document access still decide the operation.
@@ -167,7 +177,9 @@ def scoped_permission(doc, user=None, permission_type=None, **kwargs):
 def validate_scope(doc):
     permission(frappe.session.user != "Guest")
     permission(scoped_permission(doc) is not False)
-    if not restricted_supplier():
+    scoped_staff = (doc.doctype in (FINDING, SAMPLE, COMPANION) and roles() & OPERATION_STAFF
+                    and doc.company in allowed_values("Company"))
+    if not restricted_supplier() and not scoped_staff:
         linked("Company", doc.company)
     if doc.get("canteen"):
         site = linked(CANTEEN, doc.canteen)

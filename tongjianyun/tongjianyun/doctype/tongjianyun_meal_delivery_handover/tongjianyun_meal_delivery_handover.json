@@ -1,0 +1,151 @@
+{
+ "doctype": "DocType",
+ "name": "Tongjianyun Meal Delivery Handover",
+ "module": "Tongjianyun",
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "company",
+   "label": "园所",
+   "fieldtype": "Link",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Canteen",
+   "reqd": 1
+  },
+  {
+   "fieldname": "publication",
+   "label": "供餐菜单",
+   "fieldtype": "Link",
+   "options": "Tongjianyun Meal Publication",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_date",
+   "label": "日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "meal_type",
+   "label": "餐次",
+   "fieldtype": "Select",
+   "options": "早餐\n早点\n午餐\n午点\n晚餐",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier",
+   "label": "供餐单位",
+   "fieldtype": "Link",
+   "options": "Supplier",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch",
+   "label": "配送批次",
+   "fieldtype": "Data",
+   "reqd": 1
+  },
+  {
+   "fieldname": "prepared_at",
+   "label": "烧熟时间",
+   "fieldtype": "Datetime",
+   "reqd": 1
+  },
+  {
+   "fieldname": "arrived_at",
+   "label": "到园时间",
+   "fieldtype": "Datetime",
+   "reqd": 1
+  },
+  {
+   "fieldname": "served_at",
+   "label": "食用时间",
+   "fieldtype": "Datetime"
+  },
+  {
+   "fieldname": "portions",
+   "label": "到园份数",
+   "fieldtype": "Int",
+   "reqd": 1
+  },
+  {
+   "fieldname": "result",
+   "label": "验收结果",
+   "fieldtype": "Select",
+   "options": "\n接收\n拒收",
+   "reqd": 1
+  },
+  {
+   "fieldname": "exception",
+   "label": "差异或拒收处置",
+   "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "receiver",
+   "label": "现场确认人",
+   "fieldtype": "Link",
+   "read_only": 1,
+   "options": "User"
+  }
+ ],
+ "field_order": [
+  "company",
+  "canteen",
+  "publication",
+  "service_date",
+  "meal_type",
+  "supplier",
+  "batch",
+  "prepared_at",
+  "arrived_at",
+  "served_at",
+  "portions",
+  "result",
+  "exception",
+  "receiver"
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "cancel": 1,
+   "delete": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食安全员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  },
+  {
+   "role": "膳食园方负责人",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1
+  }
+ ],
+ "autoname": "hash",
+ "track_changes": 1,
+ "is_submittable": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "supplier"
+}
