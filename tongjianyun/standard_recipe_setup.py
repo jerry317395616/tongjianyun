@@ -216,6 +216,8 @@ def _install_sidebar():
     _install_ingredient_analysis_link()
     _install_staffing_links()
     install_navigation(MODULE, json.dumps(DISH_OPTIONS, ensure_ascii=False))
+    from tongjianyun.canteen_ops import home_setup
+    home_setup.install()
 
 
 def _install_dish_link():

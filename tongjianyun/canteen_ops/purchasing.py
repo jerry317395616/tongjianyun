@@ -609,12 +609,13 @@ def check_receipt(doc, method=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def receiving_from_code(code):
+def receiving_from_code(code, expected_delivery=None):
     token = str(code or "").strip().removeprefix("TGY-MEAL:")
     require(20 < len(token) < 90, "请扫描随货二维码或粘贴完整随货码。")
     name = frappe.db.get_value(DELIVERY, {"qr_token": token, "docstatus": 1, "progress": ("in", ["配送", "到货"])}, "name")
     permission(name, "随货码无效或尚未发货。")
     delivery = submitted(linked(DELIVERY, name))
+    require(not expected_delivery or delivery.name == expected_delivery, "该随货码与所选配送批次不一致。")
     lock_company(delivery.company)
     previous = frappe.db.get_value(RECEIVING, {"delivery": name, "docstatus": ("<", 2)}, "name", for_update=True)
     if previous:
