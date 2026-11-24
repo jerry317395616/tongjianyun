@@ -111,6 +111,7 @@ test("native week shows the calendar and supports editing meals in order", async
 			) } };
 			if (method === "tongjianyun.meal_portions.details") return { message: { adjustable: true, rows: [
 				{ row: "ING-1", name: "小白菜", standard_gross: 60, standard_net: null, gross: 60, net: null, uom: "克" },
+				{ row: "ING-2", name: "胡萝卜", standard_gross: 10, standard_net: 8, gross: 10, net: 8, uom: "克" },
 			] } };
 			if (operation === "save_meal") {
 				if (rejectSave) return { exc: true };
@@ -152,7 +153,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
 	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
 	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
-	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-portions.css"]);
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-ingredient-quantities.css"]);
 	assert.equal(page.all("<progress>")[0].attrs.value, 1);
 	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();
@@ -212,15 +213,21 @@ test("native week shows the calendar and supports editing meals in order", async
 	await new Promise(setImmediate);
 	options.all("<button>").find((node) => node.attrs["aria-label"] === "添加新菜（B）").events.click();
 	assert.ok(chosen.all("<small>").some((node) => node.content === "素菜"));
-	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "查看新菜的带量").events.click();
+	const quantity = chosen.all("<button>").find((node) => node.attrs["aria-label"] === "查看新菜的食材用量");
+	assert.equal(quantity.content, "食材用量");
+	quantity.events.click();
 	await new Promise(setImmediate);
-	assert.ok(chosen.all("<th>").some((node) => node.content === "小白菜"));
+	const portionTable = chosen.all("<table>").find((node) => node.attrs["aria-label"] === "本餐食材用量");
+	assert.deepEqual(portionTable.all("<thead>")[0].all("<th>").map((node) => node.content),
+		["食材 / 单位", "标准每人毛重", "本餐每人毛重", "每人可食净量", "本餐毛重合计"]);
+	assert.deepEqual(portionTable.all("<tbody>")[0].all("<th>").map((node) => node.content), ["小白菜", "胡萝卜"]);
 	assert.ok(chosen.all("<div>").some((node) => node.content === "待补可食净量"));
-	chosen.all("<button>").find((node) => node.content === "调整本餐带量").events.click();
-	const input = (name) => chosen.all("<input>").find((node) => node.attrs["aria-label"].includes(name));
-	input("本餐毛重").events.input.call({value: "35", validity: {badInput: false}});
-	input("可食净量").events.input.call({value: "30", validity: {badInput: false}});
+	chosen.all("<button>").find((node) => node.content === "调整本餐食材用量").events.click();
+	const input = (name) => chosen.all("<input>").find((node) => node.attrs["aria-label"] === name);
+	input("小白菜 本餐每人毛重（克）").events.input.call({value: "35", validity: {badInput: false}});
+	input("小白菜 每人可食净量（克）").events.input.call({value: "30", validity: {badInput: false}});
 	assert.ok(chosen.all("<td>").some((node) => node.content === "1.295 kg"));
+	assert.ok(chosen.all("<td>").some((node) => node.content === "370 克"));
 	assert.ok(!chosen.all("<div>").some((node) => node.content === "待补可食净量"));
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "上移新菜").events.click();
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "下移新菜").events.click();

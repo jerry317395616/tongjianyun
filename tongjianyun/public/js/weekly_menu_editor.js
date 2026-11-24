@@ -389,10 +389,10 @@
 				$("<small>").text(sameName ? `${dish.category || "未分类"} · ${dish.item}` : dish.category || "未分类").appendTo($label);
 				const $actions = $("<div>", { class: "tgy-picker-row-actions" }).appendTo($row);
 				const expanded = expandedBom === dish.bom;
-				const $quantity = button($actions, "带量", () => {
+				const $quantity = button($actions, "食材用量", () => {
 					expandedBom = expanded ? undefined : dish.bom;
 					renderChosen(dish.bom, "quantity");
-				}).attr({ "aria-expanded": String(expanded), "aria-label": `查看${label}的带量` });
+				}).attr({ "aria-expanded": String(expanded), "aria-label": `查看${label}的食材用量` });
 				const $up = button($actions, "↑", () => move(-1, "up"))
 					.attr({ "aria-label": `上移${label}`, title: "上移" }).prop("disabled", position === 0);
 				const $down = button($actions, "↓", () => move(1, "down"))
@@ -424,7 +424,7 @@
 		async function renderIngredients($entry, dish) {
 			const view = portionView;
 			const $detail = $("<div>", { class: "tgy-picker-detail" }).appendTo($entry);
-			$detail.text("正在读取带量…");
+			$detail.text("正在读取食材用量…");
 			if (!previews.has(dish.bom)) {
 				previews.set(dish.bom, window.tjyMealPortions.load({ ...args, bom_name: dish.bom }));
 			}
@@ -435,7 +435,7 @@
 					(changes) => { portions.set(dish.bom, changes); });
 			} catch {
 				previews.delete(dish.bom);
-				$detail.text("带量读取失败。可收起后重新打开。");
+				$detail.text("食材用量读取失败。可收起后重新打开。");
 			}
 		}
 

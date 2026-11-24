@@ -9,7 +9,7 @@
 		let request = 0;
 		let $details;
 		const dialog = new frappe.ui.Dialog({
-			title: "本餐食材带量",
+			title: "本餐食材用量",
 			size: "large",
 			no_submit_on_enter: true,
 			fields: [
@@ -31,14 +31,14 @@
 			if (!$details) return;
 			const sequence = ++request;
 			const bom_name = dialog.get_value("recipe") || dishes[0];
-			$details.text("正在读取带量…");
+			$details.text("正在读取食材用量…");
 			try {
 				const data = await editor.load({ ...source, bom_name });
 				if (sequence !== request) return;
 				editor.render($details, data, pending[bom_name], () => Number(frm.doc.target_headcount),
 					(changes) => { pending[bom_name] = changes; });
 			} catch {
-				if (sequence === request) $details.text("带量读取失败，请重新选择配方。");
+				if (sequence === request) $details.text("食材用量读取失败，请重新选择配方。");
 			}
 		}
 	}
@@ -46,9 +46,9 @@
 	frappe.ui.form.on("Meal Plan Adjustment", {
 		refresh(frm) {
 			if (frm.doc.docstatus || frm.is_new() || !frm.perm?.[0]?.write || !frm.fields_dict[pendingField]) return;
-			frm.add_custom_button("调整本餐带量", async () => {
+			frm.add_custom_button("调整本餐食材用量", async () => {
 				if (frm.doc.service_suspended || !frm.doc.dishes?.some((row) => row.bom_no)) {
-					return frappe.msgprint("请选择正常供餐的菜品后调整带量。");
+					return frappe.msgprint("请选择正常供餐的菜品后调整食材用量。");
 				}
 				await frappe.require(window.tjyMealPortions.stylesheet);
 				await openPortions(frm);

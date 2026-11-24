@@ -509,7 +509,7 @@ button.tgy-meal-cell:hover {
 
 .tgy-meal-portions table {
 	width: 100%;
-	min-width: 320px;
+	min-width: 260px;
 	font-size: var(--text-sm, 12px);
 	font-variant-numeric: tabular-nums;
 }
@@ -524,7 +524,6 @@ button.tgy-meal-cell:hover {
 .tgy-meal-portions thead th {
 	font-weight: 500;
 	color: var(--text-muted);
-	white-space: nowrap;
 }
 
 .tgy-meal-portions small {
