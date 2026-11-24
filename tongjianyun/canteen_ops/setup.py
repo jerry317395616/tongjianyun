@@ -12,6 +12,18 @@ def ensure_roles():
             frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert()
 
 
+def install_project_fields():
+    from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+    from tongjianyun.canteen_ops.term_projects import PROJECT_RESPONSIBLE
+
+    create_custom_fields({"Project": [{
+        "fieldname": PROJECT_RESPONSIBLE, "fieldtype": "Link", "options": "User",
+        "label": "膳食项目负责人", "insert_after": "company", "module": "Tongjianyun",
+        "read_only": 1, "no_copy": 1, "depends_on": f"eval:doc.{PROJECT_RESPONSIBLE}",
+    }]})
+
+
 def report_names():
     folder = Path(__file__).parents[1] / "tongjianyun" / "report"
     return tuple(

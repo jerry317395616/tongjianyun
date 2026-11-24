@@ -89,12 +89,25 @@
 				filters: { company: frm.doc.company, status: ["!=", "Cancelled"] },
 			}));
 		},
+		async management_project(frm) {
+			if (!frm.is_new() || !frm.doc.management_project) return;
+			const { name, management_project: project } = frm.doc;
+			const { message } = await frappe.db.get_value("Project", project, [
+				"project_name", "expected_start_date", "expected_end_date",
+			]);
+			if (!message || frm.doc.name !== name || frm.doc.management_project !== project) return;
+			const defaults = {};
+			if (!frm.doc.project_title && message.project_name) defaults.project_title = message.project_name;
+			if (!frm.doc.from_date && message.expected_start_date) defaults.from_date = message.expected_start_date;
+			if (!frm.doc.to_date && message.expected_end_date) defaults.to_date = message.expected_end_date;
+			await frm.set_value(defaults);
+		},
 		refresh(frm) {
 			if (frm.doc.docstatus === 1 && frm.perm?.[0]?.write) {
 				if (frm.doc.management_project) {
 					frm.add_custom_button("同步管理项目任务", () => updateProject(frm, "sync_management_tasks", "管理项目任务已同步"));
 				} else if (frappe.boot.user.can_create?.includes("Project") || frappe.session.user === "Administrator") {
-					frm.add_custom_button("创建管理项目", () => updateProject(frm, "create_project", "管理项目已关联"));
+					frm.add_custom_button("生成并关联管理项目", () => updateProject(frm, "create_project", "管理项目已关联"));
 				}
 			}
 			return refresh(frm);

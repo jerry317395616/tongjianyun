@@ -22,6 +22,7 @@ after_install = [
     "tongjianyun.ingredient_library_setup.install",
     "tongjianyun.special_orders.install",
     "tongjianyun.weekly_menu_setup.install",
+    "tongjianyun.canteen_ops.setup.install_project_fields",
 ]
 after_migrate = after_install
 scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_reminders"]}
@@ -62,7 +63,9 @@ doc_events = {
         event: "tongjianyun.canteen_ops.term_projects.queue_day" for event in ("on_submit", "on_cancel")
     },
     "Tongjianyun Meal Term Project": {
-        event: "tongjianyun.canteen_ops.term_projects.queue_term" for event in ("on_update", "on_update_after_submit")
+        "before_submit": "tongjianyun.canteen_ops.term_projects.attach_management_project",
+        "on_update": "tongjianyun.canteen_ops.term_projects.queue_term",
+        "on_update_after_submit": "tongjianyun.canteen_ops.term_projects.queue_term",
     },
     "Tongjianyun Meal Weekly Task": {
         event: "tongjianyun.canteen_ops.term_projects.queue_weekly_task" for event in ("on_update", "on_cancel")

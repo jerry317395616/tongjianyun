@@ -15,6 +15,7 @@ from tongjianyun.canteen_ops.common import (
 
 _SYNCING = ContextVar("tjy_syncing_meal_tasks", default=False)
 _REQUEST = "Material Request"
+PROJECT_RESPONSIBLE = "custom_tjy_meal_responsible_user"
 _WEEK_FIELDS = [
     "name", "week_start", "docstatus", "raw_material_warehouse", "kitchen_warehouse", "material_request",
     "procurement_snapshot", "kitchen_reconciled", "kitchen_reconciled_at",
@@ -166,18 +167,29 @@ def validate_project_link(doc):
     }, "name", for_update=True), "该管理项目已关联其他学期膳食项目。")
 
 
+def _new_project(term, *, from_term_submission=False):
+    suffix = f" · {term.name}"
+    return frappe.get_doc({
+        "doctype": "Project", "project_name": term.project_title[:140 - len(suffix)] + suffix, "company": term.company,
+        "expected_start_date": term.from_date, "expected_end_date": term.to_date,
+        "percent_complete_method": "Task Completion",
+        PROJECT_RESPONSIBLE: term.responsible_user,
+    }).insert(ignore_permissions=from_term_submission)
+
+
+def attach_management_project(term, method=None):
+    # This runs after the authorized academic-term document has passed its validations.
+    if not term.management_project:
+        term.management_project = _new_project(term, from_term_submission=True).name
+
+
 @frappe.whitelist(methods=["POST"])
 def create_project(term_project):
     term = submitted(linked(TERM, term_project, "write", lock=True))
     if term.management_project:
         return {"project": company_doc(term, "Project", term.management_project).name}
     permission(frappe.has_permission("Project", "create"), "当前账号没有创建 ERPNext 项目的权限。")
-    suffix = f" · {term.name}"
-    project = frappe.get_doc({
-        "doctype": "Project", "project_name": term.project_title[:140 - len(suffix)] + suffix, "company": term.company,
-        "expected_start_date": term.from_date, "expected_end_date": term.to_date,
-        "percent_complete_method": "Task Completion",
-    }).insert()
+    project = _new_project(term)
     term.management_project = project.name
     term.save()
     return {"project": project.name}

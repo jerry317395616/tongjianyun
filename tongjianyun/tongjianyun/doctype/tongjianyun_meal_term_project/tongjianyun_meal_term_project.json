@@ -151,9 +151,10 @@
   },
   {
    "fieldname": "management_project",
-   "label": "管理项目",
+   "label": "ERPNext 管理项目",
    "fieldtype": "Link",
    "options": "Project",
+   "description": "可选用同一园所的已有项目。留空时，提交后按本表信息自动关联。",
    "allow_on_submit": 1,
    "no_copy": 1,
    "search_index": 1

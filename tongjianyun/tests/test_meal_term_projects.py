@@ -30,6 +30,35 @@ class TermProjectTests(unittest.TestCase):
     def test_weeks_include_partial_first_and_last_week(self):
         self.assertEqual(self.module._mondays(self.term), [date(2026, 11, 23), date(2026, 11, 30)])
 
+    def test_submit_links_one_native_project_with_term_details(self):
+        self.term.name = "TERM-1"
+        self.term.project_title = "春季学期膳食"
+        self.term.responsible_user = "manager@example.invalid"
+        self.term.management_project = None
+        self.frappe.get_doc = Mock()
+        self.frappe.get_doc.return_value.insert.return_value.name = "PROJECT-1"
+
+        self.module.attach_management_project(self.term)
+        self.module.attach_management_project(self.term)
+
+        self.assertEqual(self.term.management_project, "PROJECT-1")
+        self.frappe.get_doc.assert_called_once_with({
+            "doctype": "Project", "project_name": "春季学期膳食 · TERM-1", "company": "School",
+            "expected_start_date": "2026-11-25", "expected_end_date": "2026-12-04",
+            "percent_complete_method": "Task Completion",
+            self.module.PROJECT_RESPONSIBLE: "manager@example.invalid",
+        })
+        self.frappe.get_doc.return_value.insert.assert_called_once_with(ignore_permissions=True)
+
+    def test_submit_reuses_selected_project(self):
+        self.term.management_project = "EXISTING-PROJECT"
+        self.frappe.get_doc = Mock()
+
+        self.module.attach_management_project(self.term)
+
+        self.assertEqual(self.term.management_project, "EXISTING-PROJECT")
+        self.frappe.get_doc.assert_not_called()
+
     def test_completion_comes_from_the_business_stage(self):
         week = SimpleNamespace(docstatus=0, kitchen_reconciled=False, kitchen_reconciled_at=None, procurement_snapshot=None)
         self.assertFalse(any(done for done, _ in self.module._week_steps(week, set(), "MR-1")))
