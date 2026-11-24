@@ -147,9 +147,6 @@
   "settlement_limit",
   "settlement_cycle",
   "cost_center",
-  "subsidy_debit_account",
-  "subsidy_credit_account",
-  "liability_account",
   "report_template",
   "remarks",
   "amended_from"
@@ -339,24 +336,6 @@
    "label": "食堂成本中心",
    "fieldtype": "Link",
    "options": "Cost Center"
-  },
-  {
-   "fieldname": "subsidy_debit_account",
-   "label": "补助到账借方科目",
-   "fieldtype": "Link",
-   "options": "Account"
-  },
-  {
-   "fieldname": "subsidy_credit_account",
-   "label": "补助到账贷方科目",
-   "fieldtype": "Link",
-   "options": "Account"
-  },
-  {
-   "fieldname": "liability_account",
-   "label": "专项应付款科目",
-   "fieldtype": "Link",
-   "options": "Account"
   },
   {
    "fieldname": "report_template",

@@ -16,7 +16,6 @@ Tongjianyun Food Sample,食品留样
 Tongjianyun Meal Companion,陪餐登记与评价
 Tongjianyun Canteen Reconciliation,供应商对账单
 Tongjianyun Canteen Finance Request,食堂会计凭证申请
-Tongjianyun Canteen Subsidy Confirmation,营养餐补助人次核对
 Tongjianyun Canteen Finding,监管整改
 Tongjianyun Canteen Data Quality,监管数据质量
 Tongjianyun Canteen Supplier Accounts,供应商对账与结算
@@ -24,8 +23,6 @@ Tongjianyun Canteen Accounting Records,食堂账务记录
 Tongjianyun Canteen Operations Report,食堂经营报表
 Tongjianyun Canteen Income Expense,食堂收支报表
 Tongjianyun Canteen Ingredient Purchases,食材采购报表
-Tongjianyun Canteen Nutrition Subsidy,营养餐补助报表
-Tongjianyun Canteen Fund Hierarchy,经费分级统计
 Tongjianyun Canteen Quotation Comparison,食材询价比价
 Tongjianyun Canteen Inventory Batches,实时库存与效期
 Tongjianyun Canteen Stock Count,食堂盘点报表

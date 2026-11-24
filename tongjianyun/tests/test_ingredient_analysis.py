@@ -17,7 +17,6 @@ class IngredientAnalysisTests(unittest.TestCase):
         utils.getdate = lambda value: value if isinstance(value, date) else date.fromisoformat(value)
         application = ModuleType("tongjianyun")
         application.meal_ledger = SimpleNamespace()
-        application.special_orders = SimpleNamespace()
         spec = importlib.util.spec_from_file_location("ingredient_analysis_test", Path(__file__).parents[1] / "ingredient_analysis.py")
         self.analysis = importlib.util.module_from_spec(spec)
         modules = {"frappe": frappe, "frappe.utils": utils, "tongjianyun": application, spec.name: self.analysis}

@@ -27,10 +27,9 @@ class Policy(Handler):
         require(doc.evidence_rules, "请至少维护一条验收必需票证规则。")
         pairs = [(row.item_group or "", row.evidence_type) for row in doc.evidence_rules]
         require(len(set(pairs)) == len(pairs), "食材分类与票证类型的组合不可重复。")
-        for field in ("cost_center", "subsidy_debit_account", "subsidy_credit_account", "liability_account"):
-            if doc.get(field):
-                source = company_doc(doc, "Cost Center" if field == "cost_center" else "Account", doc.get(field))
-                require(not source.is_group and not source.get("disabled"), "请选择有效的记账明细科目或成本中心。")
+        if doc.cost_center:
+            source = company_doc(doc, "Cost Center", doc.cost_center)
+            require(not source.is_group and not source.get("disabled"), "请选择有效的明细成本中心。")
         if doc.sample_required:
             positive(doc.sample_min_weight)
             positive(doc.sample_keep_hours)

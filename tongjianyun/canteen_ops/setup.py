@@ -28,5 +28,6 @@ def report_names():
     folder = Path(__file__).parents[1] / "tongjianyun" / "report"
     return tuple(
         " ".join(part.capitalize() for part in path.name.split("_"))
-        for path in sorted(folder.glob("tongjianyun_canteen_*")) if path.name != "tongjianyun_canteen_staffing_analysis"
+        for path in sorted(folder.glob("tongjianyun_canteen_*"))
+        if path.name != "tongjianyun_canteen_staffing_analysis" and (path / f"{path.name}.json").is_file()
     )

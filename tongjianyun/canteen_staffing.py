@@ -8,7 +8,7 @@ import frappe
 from frappe.utils import cint, flt, get_datetime, get_time, getdate, now_datetime
 
 from tongjianyun import meal_ledger
-from tongjianyun.special_ingredients import _lock_company
+from tongjianyun.canteen_ops.common import lock_company
 
 RULE = "Tongjianyun Canteen Staffing Rule"
 REPORT = "Tongjianyun Canteen Staffing Analysis"
@@ -50,7 +50,7 @@ def validate_rule(doc):
 
 
 def activate_rule(doc):
-    _lock_company(doc.company)
+    lock_company(doc.company)
     filters = {"name": ("!=", doc.name), "docstatus": 1, "company": doc.company,
                "department": doc.department, "designation": doc.designation, "shift_type": doc.shift_type,
                "start_date": ("<=", doc.end_date), "end_date": (">=", doc.start_date)}

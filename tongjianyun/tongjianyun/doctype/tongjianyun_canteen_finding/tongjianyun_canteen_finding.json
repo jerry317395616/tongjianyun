@@ -164,7 +164,7 @@
    "fieldtype": "Select",
    "reqd": 1,
    "in_list_view": 1,
-   "options": "采购与验收\n库存\n供餐\n人员与证照\n食品安全\n专项与财务"
+   "options": "采购与验收\n库存\n供餐\n人员与证照\n食品安全\n财务"
   },
   {
    "fieldname": "finding_key",

@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 import frappe
 from frappe.utils import cint, flt, getdate
 
-from tongjianyun import meal_ledger as ledger, special_orders
+from tongjianyun import meal_ledger as ledger
 
 REPORT = "Tongjianyun Ingredient Analysis"
 SUMMARY, TREND, PURCHASE, KITCHEN = "食材汇总", "趋势分析", "采购明细", "消耗明细"
@@ -39,7 +39,6 @@ def columns(view):
         return dated + [
             _column("stage", "采购环节"), _column("supplier", "供应商", "Link", 143, options="Supplier"),
             _column("warehouse", "仓库", "Link", 140, options="Warehouse"),
-            _column("purchase_use", "采购用途", width=88),
             *_quantities(("quantity", "数量"), ("pending_qty", "当前待到货")),
             _column("source_doctype", "单据类型", hidden=1),
             _column("source", "采购原单", "Dynamic Link", 160, options="source_doctype"),
@@ -89,7 +88,7 @@ def execute(filters=None):
     source = Sources(company, start, end, filters.get("item_code"))
     notices = []
     if view == PURCHASE:
-        rows = sorted(source.purchases(filters.get("supplier"), filters.get("purchase_use")),
+        rows = sorted(source.purchases(filters.get("supplier")),
                       key=lambda row: (row["date"], row["item_code"], row["stage"], row["source"]))
     elif view == KITCHEN:
         rows = list(source.kitchen())
@@ -205,7 +204,7 @@ class Sources:
                        complete_plan=complete_plan, stock_entries=entry.get("stock_entries", ""),
                        stock_entry_names=entry.get("stock_entry_names", []), **values)
 
-    def purchases(self, supplier=None, purpose=None):
+    def purchases(self, supplier=None):
         if not self.can_read_orders:
             return
         orders = self.transaction_names(ORDER, "transaction_date", supplier)
@@ -213,11 +212,11 @@ class Sources:
         for name in orders:
             order = self.document(ORDER, name)
             if order:
-                yield from self.purchase_order(order, purpose)
+                yield from self.purchase_order(order)
         for name in receipts:
             receipt = self.document(RECEIPT, name)
             if receipt:
-                yield from self.purchase_receipt(receipt, purpose)
+                yield from self.purchase_receipt(receipt)
 
     def transaction_names(self, doctype, date_field, supplier):
         filters = {"company": self.company, "docstatus": 1, date_field: ("between", (self.start, self.end))}
@@ -244,21 +243,20 @@ class Sources:
             return week
         return None
 
-    def purchase_record(self, doc, row, order_row, purpose):
+    def purchase_record(self, doc, row, order_row):
         identity = self.identity(row.item_code, row.stock_uom)
-        use = order_row.get(special_orders.USE) or "未标识"
-        if not identity or (purpose and purpose != "全部" and use != purpose):
+        if not identity:
             return None
         week = self.source_week(order_row)
         if not week or not self.document("Warehouse", row.warehouse):
             return None
         return dict(identity, date=str(doc.get("posting_date") or doc.transaction_date), supplier=doc.supplier,
-                    warehouse=row.warehouse, purchase_use=use, meal_week=week.name,
+                    warehouse=row.warehouse, meal_week=week.name,
                     source_doctype=doc.doctype, source=doc.name)
 
-    def purchase_order(self, order, purpose):
+    def purchase_order(self, order):
         for row in order.items:
-            result = self.purchase_record(order, row, row, purpose)
+            result = self.purchase_record(order, row, row)
             if not result:
                 continue
             remaining = ZERO
@@ -267,7 +265,7 @@ class Sources:
             yield dict(result, stage="已下单", quantity=flt(row.stock_qty), ordered_qty=flt(row.stock_qty),
                        pending_qty=float(remaining))
 
-    def purchase_receipt(self, receipt, purpose):
+    def purchase_receipt(self, receipt):
         for row in receipt.items:
             if not row.stock_qty:
                 continue
@@ -277,7 +275,7 @@ class Sources:
             source = next((item for item in order.items if item.name == row.purchase_order_item), None)
             if not source or source.item_code != row.item_code or source.stock_uom != row.stock_uom:
                 continue
-            result = self.purchase_record(receipt, row, source, purpose)
+            result = self.purchase_record(receipt, row, source)
             if not result:
                 continue
             qty = abs(flt(row.stock_qty))

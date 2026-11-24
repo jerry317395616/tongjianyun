@@ -20,7 +20,6 @@ after_install = [
     "tongjianyun.nutrition_setup.install",
     "tongjianyun.standard_recipe_setup.install",
     "tongjianyun.ingredient_library_setup.install",
-    "tongjianyun.special_orders.install",
     "tongjianyun.weekly_menu_setup.install",
     "tongjianyun.canteen_ops.setup.install_project_fields",
 ]
@@ -29,10 +28,10 @@ scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_rem
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",
     "Item": ["public/js/standard_dishes.js", "public/js/standard_ingredients.js"],
-    "Meal Planning Week": ["public/js/meal_portions.js", "public/js/weekly_menu_editor.js", "public/js/special_ingredients.js",
-                           "public/js/special_orders.js", "public/js/canteen_forms.js"],
+    "Meal Planning Week": ["public/js/meal_portions.js", "public/js/weekly_menu_editor.js",
+                           "public/js/canteen_forms.js"],
     "Meal Plan Adjustment": ["public/js/meal_portions.js", "public/js/meal_adjustment_portions.js",
-                             "public/js/special_ingredients.js", "public/js/special_orders.js", "public/js/canteen_forms.js"],
+                             "public/js/canteen_forms.js"],
     **{doctype: "public/js/canteen_forms.js" for doctype in (*_CANTEEN_DOCTYPES, "Meal Kitchen Day",
                                                            "Purchase Order", "Request for Quotation")},
     "Tongjianyun Meal Term Project": ["public/js/canteen_forms.js", "public/js/meal_term_project.js"],
@@ -55,7 +54,6 @@ doc_events = {
     "Meal Planning Week": {
         "validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission",
         "before_submit": "tongjianyun.recipe_nutrition.freeze_week",
-        "on_submit": "tongjianyun.special_ingredients.freeze",
         "on_trash": "tongjianyun.weekly_menu_editor.delete_draft_meal_plans",
         "on_change": "tongjianyun.canteen_ops.term_projects.queue_week",
     },
@@ -75,22 +73,15 @@ doc_events = {
     "Meal Plan Adjustment": {
         "validate": "tongjianyun.meal_portions.validate_adjustment",
         "before_submit": ["tongjianyun.meal_portions.submit_adjustment", "tongjianyun.recipe_nutrition.freeze_adjustment"],
-        "on_submit": "tongjianyun.special_ingredients.freeze",
     },
     "Material Request": {
-        **{event: "tongjianyun.special_orders.check_request"
-           for event in ("validate", "before_submit", "before_update_after_submit")},
         "on_cancel": "tongjianyun.canteen_ops.term_projects.queue_request",
     },
     "Purchase Order": {
-        "validate": "tongjianyun.special_orders.check_order",
-        "before_submit": ["tongjianyun.special_orders.check_order", "tongjianyun.canteen_ops.purchasing.check_order"],
-        "before_update_after_submit": ["tongjianyun.special_orders.check_order",
-                                        "tongjianyun.canteen_ops.purchasing.check_order"],
+        "before_submit": "tongjianyun.canteen_ops.purchasing.check_order",
+        "before_update_after_submit": "tongjianyun.canteen_ops.purchasing.check_order",
     },
     "Purchase Receipt": {
-        "validate": "tongjianyun.special_orders.check_receipt",
-        "before_update_after_submit": "tongjianyun.special_orders.check_receipt",
         "before_submit": ["tongjianyun.canteen_ops.purchasing.check_receipt",
                           "tongjianyun.canteen_ops.inventory.on_purchase_return"],
         "before_cancel": "tongjianyun.canteen_ops.inventory.check_cancel",

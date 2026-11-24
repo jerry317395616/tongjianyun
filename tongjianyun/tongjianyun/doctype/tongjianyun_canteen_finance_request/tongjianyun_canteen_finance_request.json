@@ -57,7 +57,6 @@
   "canteen",
   "operation",
   "posting_date",
-  "nutrition_plan",
   "financial_project",
   "external_reference",
   "amount",
@@ -92,7 +91,8 @@
    "fieldtype": "Select",
    "reqd": 1,
    "in_list_view": 1,
-   "options": "专项补助到账\n食堂资金调整"
+   "options": "食堂资金调整",
+   "default": "食堂资金调整"
   },
   {
    "fieldname": "posting_date",
@@ -102,12 +102,6 @@
    "in_list_view": 1
   },
   {
-   "fieldname": "nutrition_plan",
-   "label": "营养改善计划",
-   "fieldtype": "Link",
-   "options": "Tongjianyun Nutrition Improvement Plan"
-  },
-  {
    "fieldname": "financial_project",
    "label": "会计项目",
    "fieldtype": "Link",
@@ -115,7 +109,7 @@
   },
   {
    "fieldname": "external_reference",
-   "label": "拨付文号 / 业务依据编号",
+   "label": "业务依据编号",
    "fieldtype": "Data",
    "reqd": 1
   },

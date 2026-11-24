@@ -5,7 +5,7 @@ import frappe
 from frappe.utils import add_to_date, cint, get_datetime, getdate, now_datetime
 
 from tongjianyun.canteen_ops.common import (
-    CANTEEN, COMPANION, CREDENTIAL, DAY, DELIVERY, FINDING, NUTRITION, POLICY, PRICE,
+    CANTEEN, COMPANION, CREDENTIAL, DAY, DELIVERY, FINDING, POLICY, PRICE,
     RECEIVING, SAMPLE, STATEMENT, TASK, TERM, VOUCHER, WEEK, REGULATORS, Handler,
     active_policy, attached_file, canteen_for_week, company_doc, dates, linked, lock_company,
     permission, positive, records, require, roles, submitted, unique_active,
@@ -78,12 +78,6 @@ class Term(Handler):
 
         doc = self.doc
         dates(doc.from_date, doc.to_date)
-        if doc.nutrition_plan:
-            plan = submitted(company_doc(doc, NUTRITION, doc.nutrition_plan))
-            require(getdate(plan.start_date) <= getdate(doc.to_date) and getdate(plan.end_date) >= getdate(doc.from_date),
-                    "营养计划应覆盖该学期的适用日期。")
-        if doc.financial_project:
-            company_doc(doc, "Project", doc.financial_project)
         validate_project_link(doc)
 
     def before_update_after_submit(self):

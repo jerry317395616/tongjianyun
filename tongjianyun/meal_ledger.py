@@ -9,14 +9,9 @@ from frappe.utils import cint, flt, getdate
 from ione_core import meal_kitchen
 from ione_core.meal_adjustments import get_effective_meals
 
-from tongjianyun import special_ingredients
-from tongjianyun import special_orders
-
 WEEK = "Meal Planning Week"
 DAY = "Meal Kitchen Day"
 SUMMARY, MEALS, STOCK, PURCHASE = "按日汇总", "餐次核对", "食材流水", "采购与日结"
-SPECIAL = "专项食材"
-ORDERS = "专项订单"
 NO_DAY, OPEN_DAY, CLOSED_DAY, UNVERIFIED_DAY = "暂无执行记录", "待日结", "已日结", "日结依据待核对"
 
 
@@ -60,40 +55,6 @@ def columns(view):
             *(_column(name, label, "Float", 100, precision=9) for name, label in amounts),
             _column("stock_entries", "来源库存单", width=235), _column("note", "核对说明", width=220), day,
         ]
-    if view == SPECIAL:
-        return shared + [
-            _column("meal_type", "餐次", width=75),
-            _column("item_code", "食材", "Link", 125, options="Item"),
-            _column("item_name", "食材名称", width=145),
-            _column("planned_people", "计划供餐人数", "Int", 110),
-            _column("eligible_people", "专项计划人数", "Int", 110),
-            _column("stock_uom", "库存单位", width=86),
-            _column("special_qty", "专项需求量", "Float", 108, precision=9),
-            _column("ordinary_qty", "普通需求量", "Float", 108, precision=9),
-            _column("purchase_qty", "合计拟采购量", "Float", 115, precision=9),
-            _column("purchase_uom", "采购单位", width=86),
-            _column("special_status", "用途归属", width=90),
-            _column("plan_title", "营养改善计划", width=145),
-            _column("plan_version", "计划版本时间", "Datetime", 155),
-            _column("basis_doctype", "审核来源类型", hidden=1),
-            _column("basis_source", "审核来源", "Dynamic Link", 160, options="basis_doctype"),
-            _column("reason", "人数核对依据", width=170),
-        ]
-    if view == ORDERS:
-        return shared + [
-            _column("meal_type", "餐次", width=75),
-            _column("item_code", "食材", "Link", 135, options="Item"),
-            _column("purpose", "采购用途", width=86),
-            _column("nutrition_plan", "营养改善计划", width=145),
-            _column("stage", "采购环节", width=110),
-            _column("document_date", "单据日期", "Date", 104),
-            _column("stock_qty", "库存数量", "Float", 115, precision=9),
-            _column("stock_uom", "库存单位", width=85),
-            _column("status", "单据状态", width=95),
-            _column("request", "采购申请", "Link", 145, options="Material Request"),
-            _column("source_doctype", "原单类型", hidden=1),
-            _column("source", "原单", "Dynamic Link", 160, options="source_doctype"),
-        ]
     return shared + [
         _column("kind", "记录类型", width=120),
         _column("source_doctype", "来源单据类型", hidden=1),
@@ -105,7 +66,7 @@ def columns(view):
 def execute(filters=None):
     filters = frappe._dict(filters or {})
     view = filters.get("view") or SUMMARY
-    if view not in (SUMMARY, MEALS, STOCK, PURCHASE, SPECIAL, ORDERS):
+    if view not in (SUMMARY, MEALS, STOCK, PURCHASE):
         frappe.throw("请选择有效的台账视图。")
     frappe.has_permission(WEEK, "read", throw=True)
     frappe.has_permission(DAY, "read", throw=True)
@@ -119,14 +80,6 @@ def execute(filters=None):
     rows = []
     for week, daily in _weeks(filters, start, end):
         visible_days = [day for day in daily if not filters.get("day_status") or day.status == filters.day_status]
-        if view == SPECIAL:
-            meals = [meal for context in visible_days for meal in context.plans.values()]
-            status = filters.get("special_status") or special_ingredients.SPECIAL
-            rows.extend(_special_rows(week, meals, status))
-            continue
-        if view == ORDERS:
-            rows.extend(_order_rows(week, {day.date for day in visible_days}, filters))
-            continue
         for context in visible_days:
             if view == SUMMARY:
                 rows.append(_summary(week, context))
@@ -139,14 +92,6 @@ def execute(filters=None):
         if view == PURCHASE and visible_days:
             rows.extend(_purchase(week))
     return columns(view), rows
-
-
-def _special_rows(week, meals, status):
-    for row in special_ingredients.ledger_rows(week, meals):
-        if status != "全部" and row["special_status"] != status:
-            continue
-        yield {**row, "company": week.company, "meal_week": week.name,
-               **{field: flt(row[field]) for field in ("special_qty", "ordinary_qty", "purchase_qty")}}
 
 
 def _weeks(filters, start, end):
@@ -346,69 +291,6 @@ def _linked_parents(doctype, company, child, foreign_key, names, date_field):
                                            [child, foreign_key, "in", sorted(set(names))]],
                            fields=fields, distinct=True,
                            order_by="name asc", limit_page_length=0)
-
-
-def _order_rows(week, dates, filters):
-    if not dates or not special_orders._enabled():
-        return
-    from ione_core.meal_purchasing import _plan_names
-
-    use, plan = special_orders.USE, special_orders.PLAN
-    purpose = filters.get("purchase_use") or special_orders.SPECIAL
-    requests = _linked_parents("Material Request", week.company, "Material Request Item", "production_plan",
-                               _plan_names(week, for_update=False), "transaction_date")
-    lines = {}
-    for token in requests:
-        request = frappe.get_doc("Material Request", token.name)
-        if not request.has_permission("read") or not request.get(special_orders.PROOF):
-            continue
-        basis = special_orders._verified_request(request)
-        meals = {row["key"]: row["meal_type"] for row in basis["rows"]}
-        for row in request.items:
-            date = str(row.schedule_date)
-            if date not in dates or (purpose != "全部" and row.get(use) != purpose):
-                continue
-            if filters.get("nutrition_plan") and row.get(plan) != filters.nutrition_plan:
-                continue
-            lines[row.name] = dict(
-                meal_date=date, company=week.company, meal_week=week.name, item_code=row.item_code,
-                meal_type=meals.get(special_orders.source_id(row)),
-                purpose=row.get(use), nutrition_plan=row.get(plan), request=request.name,
-            )
-            yield _order_record(lines[row.name], request, row, "采购申请")
-    if not lines:
-        return
-    orders = _linked_parents("Purchase Order", week.company, "Purchase Order Item", "material_request_item",
-                             lines, "transaction_date")
-    ordered = {}
-    for token in orders:
-        order = frappe.get_doc("Purchase Order", token.name)
-        if not order.has_permission("read"):
-            continue
-        for row in order.items:
-            if row.material_request_item in lines and row.get(use) == lines[row.material_request_item]["purpose"]:
-                ordered[row.name] = lines[row.material_request_item]
-                yield _order_record(ordered[row.name], order, row, "采购订单")
-    receipts = _linked_parents("Purchase Receipt", week.company, "Purchase Receipt Item", "purchase_order_item",
-                               ordered, "posting_date")
-    for token in receipts:
-        receipt = frappe.get_doc("Purchase Receipt", token.name)
-        if not receipt.has_permission("read"):
-            continue
-        for row in receipt.items:
-            if row.purchase_order_item in ordered and row.get(use) == ordered[row.purchase_order_item]["purpose"]:
-                yield _order_record(ordered[row.purchase_order_item], receipt, row, "采购退货" if receipt.is_return else "采购收货")
-
-
-def _order_record(context, doc, row, stage):
-    status = {0: "草稿", 1: "已提交", 2: "已取消"}[doc.docstatus]
-    if doc.get("custom_meal_superseded_by"):
-        status = "已替代"
-    elif doc.docstatus == 1 and doc.get("status") in ("Closed", "Stopped"):
-        status = "已关闭"
-    return dict(context, stage=stage, source_doctype=doc.doctype, source=doc.name, stock_qty=flt(row.stock_qty),
-                document_date=doc.get("posting_date") or doc.get("transaction_date"),
-                stock_uom=row.stock_uom, status=status)
 
 
 def _purchase(week):

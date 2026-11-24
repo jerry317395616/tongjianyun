@@ -1,9 +1,8 @@
 import frappe
 from frappe.utils import cint, getdate, now_datetime
 
-from tongjianyun import special_orders
 from tongjianyun.canteen_ops.common import (
-    CANTEEN, NUTRITION, RECEIVING, STATEMENT, TERM, VOUCHER, ZERO, Handler,
+    CANTEEN, RECEIVING, STATEMENT, VOUCHER, ZERO, Handler,
     active_policy, attached_file, company_doc, dates, decimal, linked, lock_company, locked_rows, permission,
     positive, records, require, restricted_supplier, submitted, unique_active,
 )
@@ -94,8 +93,6 @@ class Statement(Handler):
             row.item_code = origin.item_code
             row.unit_rate = origin.get("net_rate") if origin.get("net_rate") is not None else origin.rate
             row.net_value = float(amount(decimal(row.unit_rate) * qty, doc.precision("net_total")))
-            row.purpose = origin.get(special_orders.USE) or "未标识"
-            row.nutrition_plan = origin.get(special_orders.PLAN)
             if not row.disputed:
                 totals += decimal(row.net_value)
         doc.net_total = float(totals)
@@ -161,9 +158,7 @@ def preview_statement(canteen, supplier, from_date, to_date, currency):
             pending = qty - committed_qty(row.name)
             if pending > 0:
                 result.append({"purchase_receipt": receipt.name, "receipt_item": row.name, "item_code": row.item_code,
-                               "quantity": float(pending), "unit_rate": row.get("net_rate") or row.rate,
-                               "purpose": row.get(special_orders.USE) or "未标识",
-                               "nutrition_plan": row.get(special_orders.PLAN)})
+                               "quantity": float(pending), "unit_rate": row.get("net_rate") or row.rate})
     return result
 
 
@@ -177,19 +172,6 @@ def confirm_statement(name):
         doc.supplier_confirmed_at = now_datetime()
         doc.save()
     return doc.name
-
-
-def _project(doc, plan):
-    if not plan:
-        return None
-    programme = company_doc(doc, NUTRITION, plan)
-    terms = records(TERM, {"canteen": doc.canteen, "nutrition_plan": plan, "docstatus": 1,
-                           "from_date": ("<=", getdate(programme.end_date)), "to_date": (">=", getdate(programme.start_date))},
-                    ["financial_project"])
-    projects = {row.financial_project for row in terms if row.financial_project}
-    require(len(projects) == 1, "该食堂须在学期膳食项目配置唯一的专项会计项目。")
-    project = company_doc(doc, "Project", next(iter(projects)))
-    return project.name
 
 
 @frappe.whitelist(methods=["POST"])
@@ -216,23 +198,13 @@ def make_invoice(name, receipt, bill_no, bill_date):
     require(policy.cost_center, "请先配置食堂的会计成本中心。")
     invoice.bill_no, invoice.bill_date, invoice.update_stock = str(bill_no).strip(), getdate(bill_date), 0
     invoice.set_posting_time = 0
-    plans = set()
     for key, row in items.items():
         target = buyer[key]
         require(decimal(target.qty) >= decimal(row.quantity), "本次开票数量超过原生待开票数量。")
         target.qty = row.quantity
         target.cost_center = policy.cost_center
-        if row.purpose == "专项":
-            require(row.nutrition_plan, "专项收货缺少已审批营养计划。")
-            target.project = _project(doc, row.nutrition_plan)
-            plans.add(target.project)
-        else:
-            target.project = None
-    require(len(plans) <= 1 and (not plans or all(r.purpose == "专项" for r in items.values())),
-            "普通和专项、不同专项须按采购用途分别结算。")
-    invoice.project = next(iter(plans), None)
-    if plans and policy.liability_account:
-        invoice.credit_to = policy.liability_account
+        target.project = None
+    invoice.project = None
     invoice.flags.canteen_statement = doc.name
     invoice.run_method("calculate_taxes_and_totals")
     invoice.insert()
@@ -269,22 +241,14 @@ def check_invoice(invoice, method=None):
     require(len(invoice.items) == len(current) and {row.pr_detail for row in invoice.items} == set(current),
             "发票明细须与对账确认结果一致。")
     policy = frappe.get_doc("Tongjianyun Canteen Policy", statement.policy)
-    projects = set()
     for row in invoice.items:
         origin = current[row.pr_detail]
         require(row.purchase_receipt == origin.purchase_receipt
                 and row.item_code == origin.item_code and decimal(row.qty) == decimal(origin.quantity)
                 and amount(row.net_rate, statement.precision("net_total")) ==
                 amount(origin.unit_rate, statement.precision("net_total"))
-                and row.cost_center == policy.cost_center,
-                "发票数量、单价、来源或成本中心须与原对账一致。")
-        project = _project(statement, origin.nutrition_plan) if origin.purpose == "专项" else None
-        require((row.project or None) == project, "发票会计项目须与已确认专项归属一致。")
-        if project:
-            projects.add(project)
-    if projects:
-        require(invoice.project in projects and (not policy.liability_account or invoice.credit_to == policy.liability_account),
-                "专项应付科目或会计项目不符合有效配置。")
+                and row.cost_center == policy.cost_center and not row.project,
+                "发票数量、单价、来源、成本中心和会计项目须与原对账一致。")
 
 
 class Voucher(Handler):
@@ -294,12 +258,7 @@ class Voucher(Handler):
         positive(doc.amount, "凭证金额必须大于零。")
         policy = active_policy(doc.canteen, getdate(doc.posting_date))
         doc.policy = policy.name
-        if doc.operation == "专项补助到账":
-            plan = submitted(company_doc(doc, NUTRITION, doc.nutrition_plan))
-            doc.financial_project = _project(doc, plan.name)
-            doc.debit_account = policy.subsidy_debit_account
-            doc.credit_account = policy.subsidy_credit_account
-        elif doc.financial_project:
+        if doc.financial_project:
             company_doc(doc, "Project", doc.financial_project)
         require(doc.debit_account and doc.credit_account and doc.debit_account != doc.credit_account and policy.cost_center,
                 "请配置不同的借贷明细科目与食堂成本中心。")
@@ -364,37 +323,4 @@ def check_journal(journal, method=None):
     for row in journal.accounts:
         require(expected.get(row.account) == (decimal(row.debit_in_account_currency), decimal(row.credit_in_account_currency))
                 and row.cost_center == policy.cost_center and (row.project or None) == (source.financial_project or None),
-                "凭证金额、科目、成本中心或专项项目须与已审核依据一致。")
-
-
-class Subsidy(Handler):
-    def validate(self):
-        from tongjianyun.canteen_ops.safety import meal_context
-        from tongjianyun import special_ingredients
-
-        doc = self.doc
-        day, _plan = meal_context(doc)
-        submitted(day)
-        doc.meal_date = day.meal_date
-        week = submitted(linked("Meal Planning Week", day.meal_week))
-        plan = submitted(company_doc(doc, NUTRITION, doc.nutrition_plan))
-        require(getdate(plan.start_date) <= getdate(doc.meal_date) <= getdate(plan.end_date),
-                "该餐日期不在专项适用期间。")
-        from ione_core.meal_adjustments import get_effective_meals
-
-        source = [row for row in get_effective_meals(week)
-                  if getdate(row.meal_date) == getdate(doc.meal_date) and row.meal_type == doc.meal_type]
-        basis = [row for row in special_ingredients.ledger_rows(week, source)
-                 if row.get("plan") == plan.name and row.get("eligible_people") is not None]
-        require(basis, "该餐没有此专项已经审核的人数归属。")
-        actual = next(row.actual_headcount for row in day.meals if row.meal_type == doc.meal_type)
-        people = cint(doc.confirmed_people)
-        require(0 <= people <= min(actual, max(row["eligible_people"] for row in basis)),
-                "核实受益人次超过本餐实供人数或已批准的专项范围。")
-        doc.subsidy_total = float(amount(positive(doc.subsidy_rate) * people, doc.precision("subsidy_total")))
-        attached_file(doc, doc.evidence)
-        unique_active(doc, {"meal_day": doc.meal_day, "meal_type": doc.meal_type, "nutrition_plan": plan.name},
-                      "本餐的该专项已有有效的受益人次记录。")
-
-    def before_submit(self):
-        require(self.doc.evidence or self.doc.remarks, "请保留受益人次核对依据。")
+                "凭证金额、科目、成本中心或会计项目须与已审核依据一致。")

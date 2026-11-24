@@ -8,7 +8,7 @@ from tongjianyun import ingredient_analysis, meal_ledger
 from tongjianyun.canteen_ops import inventory, purchasing, safety
 from tongjianyun.canteen_ops.common import (
     CANTEEN, COMPANION, CREDENTIAL, DAY, DELIVERY, FINDING, FINANCE_ROLE, POLICY, PRICE,
-    RECEIVING, SAMPLE, STATEMENT, SUBSIDY, TERM, VOUCHER, WEEK, ZERO, EDU_ROLE, SAFETY_ROLE, REGULATORS,
+    RECEIVING, SAMPLE, STATEMENT, VOUCHER, WEEK, ZERO, EDU_ROLE, SAFETY_ROLE, REGULATORS,
     active_policy, decimal, linked, permission, records, regulator_categories, require, roles,
 )
 
@@ -374,90 +374,6 @@ def income_expense(ctx):
     return cols, output, "仅统计已归属食堂成本中心的总账。未能归属的现金银行分录不计入已确认食堂收付。"
 
 
-def subsidy_activity(ctx, site):
-    scope = ctx.scope(site)
-    currency = frappe.db.get_value("Company", site.company, "default_currency")
-    for row in accessible(SUBSIDY, {**scope, "docstatus": 1, "meal_date": date_filter(ctx)},
-                          ["name", "meal_date", "meal_type", "nutrition_plan", "confirmed_people", "subsidy_total"]):
-        yield dict(scope, currency=currency, date=row.meal_date, meal_type=row.meal_type, nutrition_plan=row.nutrition_plan,
-                   people=row.confirmed_people, entitlement=row.subsidy_total, stage="已核实受益",
-                   source_type=SUBSIDY, source=row.name)
-    vouchers = {row.journal_entry: row for row in accessible(
-        VOUCHER, {**scope, "operation": "专项补助到账", "docstatus": 1, "posting_date": date_filter(ctx)},
-        ["name", "journal_entry", "posting_date", "nutrition_plan", "amount"],
-    ) if row.journal_entry}
-    for journal, row in vouchers.items():
-        if frappe.db.get_value("Journal Entry", journal, "docstatus") == 1:
-            yield dict(scope, currency=currency, date=row.posting_date, nutrition_plan=row.nutrition_plan, funding=row.amount,
-                       stage="已到账", source_type=VOUCHER, source=row.name)
-    terms = accessible(TERM, {**scope, "docstatus": 1},
-                       ["name", "financial_project", "nutrition_plan", "approved_budget", "from_date", "to_date"])
-    projects = {row.financial_project: row.nutrition_plan for row in terms if row.financial_project and row.nutrition_plan}
-    for term in terms:
-        if term.nutrition_plan and term.approved_budget and getdate(term.from_date) <= ctx.end and getdate(term.to_date) >= ctx.start:
-            yield dict(scope, currency=currency, date=term.from_date, nutrition_plan=term.nutrition_plan,
-                       budget=term.approved_budget, stage="适用学期批准预算", source_type=TERM, source=term.name)
-
-    invoices = {}
-    for statement in accessible(STATEMENT, {**scope, "docstatus": 1}):
-        for item in linked(STATEMENT, statement.name).items:
-            if item.nutrition_plan and item.purchase_invoice and not item.disputed:
-                invoices[item.purchase_invoice] = item.nutrition_plan
-    for name, plan in invoices.items():
-        if not readable("Purchase Invoice", name) and FINANCE_ROLE not in ctx.assigned_roles:
-            continue
-        invoice = frappe.db.get_value("Purchase Invoice", {"name": name, "company": site.company,
-                                                            "docstatus": 1, "is_return": 0},
-                                      ["posting_date", "base_grand_total", "outstanding_amount", "conversion_rate"], as_dict=True)
-        if invoice and ctx.start <= getdate(invoice.posting_date) <= ctx.end:
-            outstanding = decimal(invoice.outstanding_amount) * decimal(invoice.conversion_rate)
-            yield dict(scope, currency=currency, date=invoice.posting_date, nutrition_plan=plan,
-                       billed=invoice.base_grand_total, outstanding=float(outstanding),
-                       settled=float(decimal(invoice.base_grand_total) - outstanding), stage="专项采购发票",
-                       **reference("Purchase Invoice", name))
-
-    for entry in accounting_rows(ctx, site):
-        if entry["project"] not in projects or entry["root_type"] != "Expense":
-            continue
-        yield dict(scope, currency=currency, date=entry["date"], nutrition_plan=projects[entry["project"]],
-                   expenditure=float(decimal(entry["debit"]) - decimal(entry["credit"])), stage="已入账费用",
-                   source_type=entry.get("source_type"), source=entry.get("source"))
-
-
-def nutrition_subsidy(ctx):
-    cols = COMPANY_COLS + dates_cols() + [col("meal_type", "餐次"), col("nutrition_plan", "营养改善计划"),
-        col("stage", "数据口径"), col("people", "核实受益人次", "Int"), col("currency", "本位币", width=80),
-        *currencies(("budget", "适用学期预算"), ("entitlement", "核实应享金额"), ("funding", "实际到账金额"),
-                    ("billed", "期间专项已开票"), ("settled", "对应发票累计已结算"), ("outstanding", "对应发票当前未结"),
-                    ("expenditure", "已入账专项费用"))] + SOURCE_COLS
-    rows = [row for site in ctx.sites for row in subsidy_activity(ctx, site)]
-    return cols, rows, "预算按学期、到款与开票按入账日期、结算按发票当前状态统计。专项费用读取有效总账。"
-
-
-def fund_hierarchy(ctx):
-    cols = [col("level", "级别"), col("region", "市级行政区"), col("district", "区县"), *COMPANY_COLS,
-        col("currency", "本位币", width=80), col("people", "核实受益人次", "Int"),
-        *currencies(("budget", "适用学期预算"), ("entitlement", "核实应享金额"), ("funding", "期间到账"),
-                    ("billed", "期间已开票"), ("settled", "对应发票累计结算"), ("outstanding", "对应发票当前未结"),
-                    ("expenditure", "期间账面费用"), ("period_gap", "到账与费用差额"))]
-    groups = defaultdict(lambda: defaultdict(lambda: ZERO))
-    for site in ctx.sites:
-        for row in subsidy_activity(ctx, site):
-            keys = (("市级", site.region, "", "", ""), ("区县", site.region, site.district, "", ""),
-                    ("学校", site.region, site.district, site.company, ""),
-                    ("食堂", site.region, site.district, site.company, site.name))
-            for key in keys:
-                total = groups[(*key, row["currency"])]
-                for field in ("people", "budget", "entitlement", "funding", "billed", "settled", "outstanding", "expenditure"):
-                    total[field] += decimal(row.get(field))
-    output = []
-    for (level, region, district, company, canteen, currency), values in groups.items():
-        output.append(dict(level=level, region=region, district=district, company=company, canteen=canteen,
-                           currency=currency, **{key: float(number) for key, number in values.items()},
-                           period_gap=float(values["funding"] - values["expenditure"])))
-    return cols, output, "各层级分别汇总本辖区食堂的数据。期间差额不等于结转余额，跨币种分别列示。"
-
-
 def quality_rows(ctx, site):
     base = ctx.scope(site)
 
@@ -528,16 +444,16 @@ def quality_rows(ctx, site):
             for entry in accessible(SAMPLE, {**base, "docstatus": 1, "dispose_after": ("<=", now_datetime()),
                                               "disposed_at": ("is", "not set")}, ["name", "meal_date", "dish"]):
                 yield row("食品安全", "留样待处置", entry.meal_date, SAMPLE, entry.name, entry.dish)
-    if ctx.can_audit("专项与财务"):
+    if ctx.can_audit("财务"):
         for entry in accessible(VOUCHER, {**base, "posting_date": date_filter(ctx), "docstatus": 1},
                                 ["name", "posting_date", "journal_entry"]):
             if not entry.journal_entry or frappe.db.get_value("Journal Entry", entry.journal_entry, "docstatus") != 1:
-                yield row("专项与财务", "审核资金待记账", entry.posting_date, VOUCHER, entry.name, "待提交原生会计凭证。")
+                yield row("财务", "审核资金待记账", entry.posting_date, VOUCHER, entry.name, "待提交原生会计凭证。")
         for entry in accessible(STATEMENT, {**base, "docstatus": ("<", 2), "to_date": date_filter(ctx)}):
             doc = linked(STATEMENT, entry.name)
             for line in doc.items:
-                if line.disputed or line.purpose == "未标识":
-                    yield row("专项与财务", "对账争议" if line.disputed else "资金用途待核对", doc.to_date,
+                if line.disputed:
+                    yield row("财务", "对账争议", doc.to_date,
                               STATEMENT, doc.name, line.reason or line.item_code, line.name)
 
 
@@ -640,8 +556,6 @@ REPORT_FUNCTIONS = {
     "Canteen Operations Report": operations_report,
     "Canteen Income Expense": income_expense,
     "Canteen Ingredient Purchases": ingredient_purchases,
-    "Canteen Nutrition Subsidy": nutrition_subsidy,
-    "Canteen Fund Hierarchy": fund_hierarchy,
     "Canteen Quotation Comparison": quotation_comparison,
     "Canteen Inventory Batches": inventory_batches,
     "Canteen Stock Count": stock_count,

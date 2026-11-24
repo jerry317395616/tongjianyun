@@ -38,8 +38,6 @@
 				depends_on: "eval:doc.view === '趋势分析'" },
 			{ fieldname: "supplier", label: "供应商", fieldtype: "Link", options: "Supplier",
 				depends_on: "eval:doc.view === '采购明细'" },
-			{ fieldname: "purchase_use", label: "采购用途", fieldtype: "Select", options: ["全部", "专项", "普通", "未标识"],
-				default: "全部", depends_on: "eval:doc.view === '采购明细'" },
 			{ fieldname: "only_anomalies", label: "仅看异常与待核对", fieldtype: "Check",
 				depends_on: "eval:['食材汇总', '趋势分析'].includes(doc.view)" },
 			{ fieldname: "variance_threshold", label: "耗用偏差阈值 (%)", fieldtype: "Float", default: 10,

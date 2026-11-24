@@ -19,13 +19,13 @@ class CanteenStaffingTests(unittest.TestCase):
         utils.now_datetime = datetime.now
         app = ModuleType("tongjianyun")
         app.meal_ledger = SimpleNamespace()
-        special = ModuleType("tongjianyun.special_ingredients")
-        special._lock_company = lambda _: None
+        common = ModuleType("tongjianyun.canteen_ops.common")
+        common.lock_company = lambda _: None
         path = Path(__file__).parents[1] / "canteen_staffing.py"
         spec = importlib.util.spec_from_file_location("canteen_staffing_test", path)
         self.staffing = importlib.util.module_from_spec(spec)
         modules = {"frappe": frappe, "frappe.utils": utils, "tongjianyun": app,
-                   "tongjianyun.special_ingredients": special, spec.name: self.staffing}
+                   "tongjianyun.canteen_ops.common": common, spec.name: self.staffing}
         with patch.dict(sys.modules, modules):
             spec.loader.exec_module(self.staffing)
 

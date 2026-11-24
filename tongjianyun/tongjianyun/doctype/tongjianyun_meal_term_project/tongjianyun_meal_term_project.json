@@ -132,14 +132,10 @@
   "service_details",
   "service_scope",
   "service_finance_column",
-  "approved_budget",
   "remarks",
   "amended_from",
   "advanced_settings",
-  "management_project",
-  "advanced_finance_column",
-  "nutrition_plan",
-  "financial_project"
+  "management_project"
  ],
  "fields": [
   {
@@ -173,7 +169,7 @@
   },
   {
    "fieldname": "service_details",
-   "label": "供餐与专项",
+   "label": "供餐安排",
    "fieldtype": "Section Break"
   },
   {
@@ -185,10 +181,6 @@
    "label": "高级设置",
    "fieldtype": "Section Break",
    "collapsible": 1
-  },
-  {
-   "fieldname": "advanced_finance_column",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "company",
@@ -233,28 +225,10 @@
    "options": "User"
   },
   {
-   "fieldname": "nutrition_plan",
-   "label": "营养改善计划",
-   "fieldtype": "Link",
-   "options": "Tongjianyun Nutrition Improvement Plan"
-  },
-  {
-   "fieldname": "financial_project",
-   "label": "专项会计项目",
-   "fieldtype": "Link",
-   "options": "Project"
-  },
-  {
    "fieldname": "service_scope",
    "label": "供餐人群及安排",
    "fieldtype": "Small Text",
    "reqd": 1
-  },
-  {
-   "fieldname": "approved_budget",
-   "label": "本学期专项预算",
-   "fieldtype": "Currency",
-   "non_negative": 1
   },
   {
    "fieldname": "remarks",

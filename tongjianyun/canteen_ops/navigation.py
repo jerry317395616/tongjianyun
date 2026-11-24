@@ -16,7 +16,6 @@ GROUPS = (
         ("URL", INGREDIENT_URL, LIBRARY, "carrot"),
         ("DocType", "Tongjianyun Food Nutrition Profile", "食物营养档案", "clipboard-list"),
         ("DocType", common.WEEK, "自定义周食谱", "calendar"),
-        ("DocType", common.NUTRITION, "营养改善计划", "list-checks"),
     )),
     ("供餐计划与执行", "calendar-days", (
         ("DocType", common.TERM, "学期膳食项目", "calendar"),
@@ -55,12 +54,9 @@ GROUPS = (
         ("DocType", common.STATEMENT, "供应商对账单", "book-open"),
         ("Report", "Tongjianyun Canteen Supplier Accounts", "供应商对账与结算", "chart-bar"),
         ("DocType", common.VOUCHER, "食堂会计凭证申请", "book-open"),
-        ("DocType", common.SUBSIDY, "营养餐补助人次核对", "list-checks"),
         ("Report", "Tongjianyun Canteen Accounting Records", "食堂账务记录", "chart-bar"),
         ("Report", "Tongjianyun Canteen Operations Report", "食堂经营报表", "chart-bar"),
         ("Report", "Tongjianyun Canteen Income Expense", "食堂收支报表", "chart-bar"),
-        ("Report", "Tongjianyun Canteen Nutrition Subsidy", "营养餐补助报表", "chart-bar"),
-        ("Report", "Tongjianyun Canteen Fund Hierarchy", "经费分级统计", "chart-bar"),
     )),
     ("监管与整改", "clipboard-check", (
         ("Report", "Tongjianyun Canteen Data Quality", "监管数据质量", "chart-bar"),

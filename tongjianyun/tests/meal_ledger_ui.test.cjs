@@ -55,10 +55,9 @@ test("the ledger separates missing and zero counts and treats report text as tex
 		'<a href="/desk/stock-entry/STE-1%2F2">STE-1/2</a>');
 });
 
-test("the special ingredient view defaults to demand that includes programme quantities", () => {
+test("the ledger offers only active meal, kitchen and purchasing views", () => {
 	const { filters } = reportSettings();
-	assert.ok(filters.find((field) => field.fieldname === "view").options.includes("专项食材"));
-	const status = filters.find((field) => field.fieldname === "special_status");
-	assert.equal(status.default, "含专项");
-	assert.deepEqual(Array.from(status.options), ["含专项", "普通", "全部"]);
+	assert.deepEqual(Array.from(filters.find((field) => field.fieldname === "view").options),
+		["按日汇总", "餐次核对", "食材流水", "采购与日结"]);
+	assert.ok(!filters.some((field) => ["special_status", "purchase_use", "nutrition_plan"].includes(field.fieldname)));
 });

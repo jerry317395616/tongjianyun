@@ -11,7 +11,6 @@
 	const receiving = "Tongjianyun Canteen Receiving";
 	const sample = "Tongjianyun Food Sample";
 	const companion = "Tongjianyun Meal Companion";
-	const subsidy = "Tongjianyun Canteen Subsidy Confirmation";
 	const statement = "Tongjianyun Canteen Reconciliation";
 	const finding = "Tongjianyun Canteen Finding";
 	const voucher = "Tongjianyun Canteen Finance Request";
@@ -188,7 +187,7 @@
 		refresh(frm) {
 			if (!saved(frm) || frm.doc.docstatus === 2) return;
 			const defaults = { company: frm.doc.company, meal_day: frm.doc.name, meal_date: frm.doc.meal_date };
-			for (const [doctype, label] of [[sample, "登记留样"], [companion, "登记陪餐"], [subsidy, "核对专项人次"]]) {
+			for (const [doctype, label] of [[sample, "登记留样"], [companion, "登记陪餐"]]) {
 				if (allowed(doctype)) frm.add_custom_button(label, () => newDoc(doctype, defaults), "逐餐登记");
 			}
 		}
@@ -386,7 +385,7 @@
 			}
 		}
 	});
-	for (const doctype of [rule, review, task, subsidy, "Tongjianyun Canteen Credential", "Tongjianyun Canteen Training"]) {
+	for (const doctype of [rule, review, task, "Tongjianyun Canteen Credential", "Tongjianyun Canteen Training"]) {
 		f.ui.form.on(doctype, { setup: setSiteQuery, refresh: photoExisting });
 	}
 	f.ui.form.on(site, {

@@ -21,9 +21,8 @@ STATEMENT = "Tongjianyun Canteen Reconciliation"
 VOUCHER = "Tongjianyun Canteen Finance Request"
 FINDING = "Tongjianyun Canteen Finding"
 LOT_MOVEMENT = "Tongjianyun Canteen Stock Lot Movement"
-SUBSIDY = "Tongjianyun Canteen Subsidy Confirmation"
 MANAGED = (CANTEEN, POLICY, CREDENTIAL, TRAINING, TERM, TASK, DISPATCH, PRICE, DELIVERY, RECEIVING,
-           SAMPLE, COMPANION, STATEMENT, VOUCHER, FINDING, LOT_MOVEMENT, SUBSIDY)
+           SAMPLE, COMPANION, STATEMENT, VOUCHER, FINDING, LOT_MOVEMENT)
 SUPPLIER_ROLE = "膳食供应商"
 EDU_ROLE, SAFETY_ROLE, FINANCE_ROLE = "膳食教育监管", "膳食食品安全监管", "膳食财政监管"
 REGULATORS = frozenset((EDU_ROLE, SAFETY_ROLE, FINANCE_ROLE))
@@ -31,11 +30,10 @@ ROLES = (SUPPLIER_ROLE, *sorted(REGULATORS))
 REGULATOR_CATEGORIES = {
     EDU_ROLE: {"供餐", "食品安全", "人员与证照"},
     SAFETY_ROLE: {"库存", "采购与验收", "食品安全", "人员与证照"},
-    FINANCE_ROLE: {"专项与财务", "采购与验收"},
+    FINANCE_ROLE: {"财务", "采购与验收"},
 }
 DAY = "Meal Kitchen Day"
 WEEK = "Meal Planning Week"
-NUTRITION = "Tongjianyun Nutrition Improvement Plan"
 ZERO = Decimal("0")
 
 
@@ -242,7 +240,6 @@ class CanteenDocument(Document):
             VOUCHER: finance.Voucher,
             FINDING: safety.Finding,
             LOT_MOVEMENT: inventory.Movement,
-            SUBSIDY: finance.Subsidy,
         }
         return handlers[self.doctype](self)
 

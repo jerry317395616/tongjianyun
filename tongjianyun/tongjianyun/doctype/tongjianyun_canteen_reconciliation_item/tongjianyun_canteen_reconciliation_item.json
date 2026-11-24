@@ -15,8 +15,6 @@
   "quantity",
   "unit_rate",
   "net_value",
-  "purpose",
-  "nutrition_plan",
   "purchase_invoice",
   "disputed",
   "reason"
@@ -66,20 +64,6 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "read_only": 1
-  },
-  {
-   "fieldname": "purpose",
-   "label": "采购用途",
-   "fieldtype": "Select",
-   "read_only": 1,
-   "options": "普通\n专项\n未标识"
-  },
-  {
-   "fieldname": "nutrition_plan",
-   "label": "营养改善计划",
-   "fieldtype": "Link",
-   "read_only": 1,
-   "options": "Tongjianyun Nutrition Improvement Plan"
   },
   {
    "fieldname": "purchase_invoice",
