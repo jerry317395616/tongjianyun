@@ -1,6 +1,6 @@
 /* Keep Desk navigation and actions native. Only the active meal route adopts this theme. */
 body.tjy-meal-desk {
-	--meal-accent: light-dark(#286657, #85c6ae);
+	--meal-accent: var(--tjy-accent, #286657);
 	--meal-surface: var(--card-bg, var(--fg-color));
 	--meal-soft: color-mix(in srgb, var(--meal-accent) 5%, var(--meal-surface));
 	--meal-line: color-mix(in srgb, var(--meal-accent) 13%, var(--border-color));
@@ -97,4 +97,201 @@ body.tjy-meal-desk {
 	border-radius: 3px;
 	background-color: var(--meal-accent);
 	vertical-align: -.08em;
+}
+
+/* The navigation groups share one layout, with an accent for each area of work. */
+.tjy-meal-desk {
+	--tjy-ink: var(--text-color, #25342f);
+	--tjy-surface: var(--card-bg, #fff);
+	--tjy-accent: #286657;
+	--tjy-pale: color-mix(in srgb, var(--tjy-accent) 7%, var(--tjy-surface));
+	--tjy-mist: color-mix(in srgb, var(--tjy-accent) 3.5%, var(--tjy-surface));
+	--tjy-edge: color-mix(in srgb, var(--tjy-accent) 14%, var(--border-color));
+	--meal-accent: var(--tjy-accent);
+}
+[data-tjy-meal-group="purchase"] { --tjy-accent: #92632d; }
+[data-tjy-meal-group="service"] { --tjy-accent: #227268; }
+[data-tjy-meal-group="safety"] { --tjy-accent: #935443; }
+[data-tjy-meal-group="analysis"] { --tjy-accent: #35648b; }
+[data-tjy-meal-group="directory"] { --tjy-accent: #586b42; }
+[data-tjy-meal-group="finance"] { --tjy-accent: #67538a; }
+[data-theme="dark"] .tjy-meal-desk,
+[data-theme="dark"].tjy-meal-desk { --tjy-accent: #99cdbb; }
+[data-theme="dark"] [data-tjy-meal-group="purchase"] { --tjy-accent: #dab789; }
+[data-theme="dark"] [data-tjy-meal-group="safety"] { --tjy-accent: #dcac9c; }
+[data-theme="dark"] [data-tjy-meal-group="analysis"] { --tjy-accent: #a4c7e0; }
+[data-theme="dark"] [data-tjy-meal-group="finance"] { --tjy-accent: #c7b6df; }
+
+.tjy-meal-desk .page-body .layout-main-section {
+	background: var(--tjy-mist);
+	padding: clamp(10px, 1.5vw, 24px);
+	border-radius: 0;
+	min-width: 0;
+	container-type: inline-size;
+}
+.tjy-meal-desk .page-head .btn-primary { background: var(--tjy-accent); border-color: transparent; }
+[data-theme="dark"] .tjy-meal-desk .page-head .btn-primary { color: #18251f; }
+.tjy-meal-desk .page-head .btn-primary:hover { filter: brightness(.94); }
+.tjy-meal-desk .tjy-overview {
+	display: grid;
+	grid-template-columns: minmax(0,1fr) auto;
+	align-items: center;
+	column-gap: clamp(12px, 2vw, 36px);
+	padding: clamp(18px, 2vw, 32px);
+	margin: 0 0 16px;
+	border: 1px solid var(--tjy-edge);
+	border-radius: 16px;
+	background: linear-gradient(112deg, color-mix(in srgb, var(--tjy-accent) 12%, var(--tjy-surface)), var(--tjy-surface) 70%);
+	color: var(--tjy-ink);
+}
+.tjy-meal-desk .tjy-overview-identity { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.tjy-meal-desk .tjy-overview-mark {
+	display: grid;
+	place-items: center;
+	flex: 0 0 50px;
+	height: 50px;
+	border-radius: 15px;
+	background: var(--tjy-accent);
+	color: var(--tjy-surface);
+}
+.tjy-meal-desk .tjy-overview-mark svg {
+	width: 26px;
+	height: 26px;
+	color: inherit;
+	--icon-stroke: currentColor;
+	--icon-fill: transparent;
+}
+.tjy-meal-desk .tjy-overview-text { min-width: 0; }
+.tjy-meal-desk .tjy-overview-path {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--tjy-accent);
+	margin-bottom: 5px;
+}
+.tjy-meal-desk .tjy-overview-heading {
+	color: var(--tjy-ink);
+	margin: 0;
+	font-size: clamp(18px, 1.55vw, 25px);
+	line-height: 1.32;
+	font-weight: 650;
+	overflow-wrap: anywhere;
+}
+.tjy-meal-desk .tjy-overview-context { font-size: 12px; margin-top: 6px; color: var(--text-muted); }
+.tjy-meal-desk .tjy-overview-facts { display: flex; gap: 0; margin: 0; min-width: 0; }
+.tjy-meal-desk .tjy-fact {
+	min-width: 76px;
+	padding: 0 clamp(10px, 1.2vw, 24px);
+	border-inline-start: 1px solid var(--tjy-edge);
+}
+.tjy-meal-desk .tjy-fact:last-child { padding-inline-end: 0; }
+.tjy-meal-desk .tjy-fact-label { margin: 0 0 5px; font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.tjy-meal-desk .tjy-fact-value {
+	font-size: clamp(21px, 1.65vw, 28px);
+	font-weight: 600;
+	line-height: 1.2;
+	margin: 0;
+	color: var(--tjy-ink);
+	letter-spacing: -.02em;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+.tjy-meal-desk .tjy-fact[data-tone="attention"] .tjy-fact-value { color: var(--orange-700, #a85518); }
+.tjy-meal-desk .tjy-fact-unit { color: var(--text-muted); font-size: 12px; margin-inline-start: 4px; font-weight: 500; }
+.tjy-meal-desk .tjy-overview[data-mode="form"] .tjy-fact-value { font-size: 15px; }
+.tjy-meal-desk .tjy-section-links {
+	grid-column: 1 / -1;
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	border-top: 1px solid var(--tjy-edge);
+	padding-top: 12px;
+	margin-top: 17px;
+}
+.tjy-meal-desk .tjy-section-link {
+	border: 1px solid var(--tjy-edge);
+	background: var(--tjy-surface);
+	border-radius: 7px;
+	padding: 4px 10px;
+	color: var(--tjy-accent);
+	font-size: 12px;
+	line-height: 1.5;
+}
+.tjy-meal-desk .tjy-section-link:hover,
+.tjy-meal-desk .tjy-section-link:focus-visible { background: var(--tjy-pale); outline-color: var(--tjy-accent); }
+.tjy-meal-desk .layout-main-list > .page-form {
+	background: var(--tjy-surface);
+	border: 1px solid var(--tjy-edge);
+	border-radius: 12px 12px 0 0;
+	padding: 12px 15px;
+	margin: 0;
+}
+.tjy-meal-desk .layout-main-list > .frappe-list,
+.tjy-meal-desk .report-wrapper {
+	background: var(--tjy-surface);
+	border: 1px solid var(--tjy-edge);
+	border-top: 0;
+	border-radius: 0 0 12px 12px;
+}
+.tjy-meal-desk .layout-main-list > .frappe-list { margin-inline: 0; }
+@media (min-width: 768px) {
+	.tjy-meal-desk .frappe-list .list-row-col.list-subject { flex-grow: 1.7; }
+}
+.tjy-meal-desk .layout-main-list .list-row-head {
+	background: var(--tjy-pale);
+	min-height: 41px;
+	font-weight: 600;
+}
+.tjy-meal-desk .list-row-head .list-subject { color: var(--tjy-accent); }
+.tjy-meal-desk .list-row .list-subject a { font-weight: 650; }
+.tjy-meal-desk .frappe-list .list-row { min-height: 49px; }
+.tjy-meal-desk .list-row:has(.tjy-meal-row-context) { min-height: 59px; }
+.tjy-meal-desk .tjy-meal-row-context { margin-top: 3px; }
+.tjy-meal-desk .form-layout .form-page > .form-section.card-section:not(.empty-section),
+.tjy-meal-desk .form-layout .form-tab > .form-section.card-section:not(.empty-section) {
+	background: var(--tjy-surface);
+	border: 1px solid var(--tjy-edge);
+	border-radius: 12px;
+	margin-bottom: 12px;
+	padding: 0 clamp(12px, 1.35vw, 22px) 8px;
+}
+.tjy-meal-desk .form-layout .section-head {
+	scroll-margin-top: 72px;
+}
+.tjy-meal-desk .form-layout .form-control { border-radius: 7px; }
+.tjy-meal-desk .form-layout .form-section .section-head:not(:empty) {
+	padding: 13px 0 11px;
+	font-size: 15px;
+}
+.tjy-meal-desk .form-layout .form-section .section-head:not(:empty) + .section-body {
+	border-top: 1px solid var(--tjy-edge);
+	padding-top: 14px;
+}
+.tjy-meal-desk .layout-main-section:has(> .report-wrapper[style*="display: none"]) > .tjy-overview[data-mode="report"] { display: none; }
+.tjy-meal-desk .datatable .dt-header .dt-cell__content { color: var(--tjy-accent); }
+@container (max-width: 860px) {
+	.tjy-meal-desk .tjy-overview { grid-template-columns: 1fr; row-gap: 16px; }
+	.tjy-meal-desk .tjy-overview-facts:not(:empty) { padding-top: 12px; border-top: 1px solid var(--tjy-edge); }
+	.tjy-meal-desk .tjy-fact { flex: 1; min-width: 0; }
+	.tjy-meal-desk .tjy-fact:first-child { border-inline-start: 0; padding-inline-start: 0; }
+	.tjy-meal-desk .tjy-section-links { margin-top: 0; }
+}
+@container (635px <= width <= 860px) {
+	.tjy-meal-desk .tjy-overview[data-mode="form"] { grid-template-columns: minmax(0,1fr) auto; }
+	.tjy-meal-desk .tjy-overview[data-mode="form"] .tjy-overview-facts { border-top: 0; padding-top: 0; }
+}
+@media (max-width: 767px) {
+	.tjy-meal-desk .page-body .layout-main-section { padding: 8px; }
+	.tjy-meal-desk .tjy-overview { padding: 14px; margin-bottom: 10px; gap: 10px; border-radius: 12px; }
+	.tjy-meal-desk .tjy-overview-identity { gap: 10px; }
+	.tjy-meal-desk .tjy-overview-mark { flex-basis: 35px; height: 35px; border-radius: 10px; }
+	.tjy-meal-desk .tjy-overview-mark svg { width: 21px; height: 21px; }
+	.tjy-meal-desk .tjy-overview-heading { font-size: 17px; }
+	.tjy-meal-desk .tjy-overview-path { font-size: 11px; margin: 0 0 2px; }
+	.tjy-meal-desk .tjy-fact-value { font-size: 19px; }
+	.tjy-meal-desk .tjy-fact-label { font-size: 11px; margin-bottom: 3px; }
+	.tjy-meal-desk .layout-main-list > .page-form { padding: 8px; }
+}
+@media print {
+	.tjy-meal-desk .tjy-overview { display: none; }
+	.tjy-meal-desk .page-body .layout-main-section { padding: 0; background: transparent; }
 }

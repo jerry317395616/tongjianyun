@@ -66,7 +66,8 @@
 	}
 	function syncScope() {
 		const [view, type] = frappe.get_route();
-		const active = (["List","Form"].includes(view) && titleFor(type)) || (view === "query-report" && reports.has(type));
+		const active = (["List","Form"].includes(view) && titleFor(type)) || (view === "query-report" && reports.get(type));
+		frappe.tjyMealOverview.scope(active);
 		document.body.classList.toggle("tjy-meal-desk", Boolean(active));
 	}
 	function subject(type, doc, value) {
@@ -102,6 +103,7 @@
 		if (!label || frappe.get_route()[0] !== "List" || frappe.get_route()[1] !== list.doctype) return;
 		syncScope();
 		list.page.set_title(label);
+		frappe.tjyMealOverview.list(list,label);
 		const action = list.page.btn_primary?.find(".es-button__label").first();
 		if (/^(添加|新建|Add |New )/.test(action?.text() || "")) action.text("新建"+label);
 
@@ -153,6 +155,7 @@
 			settings._tjyMealList = true;
 			if (type !== "Item" && type !== "Material Request") settings.hide_name_column = true;
 			const extra = [...(rowContext[type] || [])];
+			if (type !== "Item" && type !== "Material Request") extra.push(...(frappe.tjyMealOverview?.listDimensions[types[type]] || []));
 			if (type === "Tongjianyun Food Sample") extra.push("external_dish");
 			if (extra.length) settings.add_fields = [...new Set([...(settings.add_fields || []), ...extra])];
 			const onload = settings.onload, refresh = settings.refresh;
@@ -188,9 +191,14 @@
 	function registerReport(name, title) {
 		reports.set(name,title);
 		const settings = frappe.query_reports[name];
-		const original = settings.formatter, onload = settings.onload;
+		const original = settings.formatter, onload = settings.onload, afterRefresh = settings.after_refresh;
+		settings.after_refresh = function(report) {
+			afterRefresh?.call(this,report);
+			if (frappe.get_route()[1]===name) frappe.tjyMealOverview.report(report,title);
+		};
 		settings.onload = async function(report) {
 			syncScope();
+			frappe.tjyMealOverview.clear(report.page.main?.[0]);
 			await onload?.call(this,report);
 			report.page.set_title(title);
 			if (name === "Tongjianyun Meal Quality Indicators" && !report.get_filter_value("canteen")) {
@@ -234,6 +242,7 @@
 		}
 		const labels = await namesFor([...links.map(c => [c.df.options,doc[c.df.fieldname]]), ...cells.map(c => [c.type,c.id])]);
 		if (frm.doc !== doc || frappe.get_route()[0] !== "Form" || window.cur_frm !== frm) return;
+		frappe.tjyMealOverview.form(frm,titleFor(frm.doctype),labels);
 		const display = (type,id) => labels[type]?.[id] || (type==="User" && id===frappe.session.user && frappe.boot.user.full_name) || translated[id];
 		for (const {cell,type,id} of cells) {
 			const value = display(type,id);
@@ -265,7 +274,7 @@
 	}
 	$(document).on("form-refresh.tjyMealDesk",(_event,frm) => {
 		if (!titleFor(frm.doctype)) return;
-		$(frm.wrapper).off("grid-row-render.tjyMealDesk").on("grid-row-render.tjyMealDesk",() => queueForm(frm));
+		$(frm.wrapper).off("grid-row-render.tjyMealDesk shown.bs.tab.tjyMealDesk").on("grid-row-render.tjyMealDesk shown.bs.tab.tjyMealDesk",() => queueForm(frm));
 		queueForm(frm);
 	});
 })();

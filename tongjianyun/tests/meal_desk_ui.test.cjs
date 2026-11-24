@@ -41,3 +41,39 @@ test("the meal purchase list keeps original actions, saved layouts and general E
 	await list.setup_columns();
 	assert.equal(calls.at(-1),"native");
 });
+
+function overview() {
+	const frappe = {};
+	vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../public/js/meal_overview.js"), "utf8"), {frappe});
+	return frappe.tjyMealOverview;
+}
+test("all forty meal entries have a group and sample weights describe the loaded rows", () => {
+	const ui = overview();
+	assert.equal(ui.byTitle.size, 40);
+	assert.equal(Object.keys(ui.listDimensions).length, 27);
+	const result = ui.listFacts("食品留样", [
+		{meal_type:"早餐",weight:138}, {meal_type:"午餐",weight:135}, {meal_type:"午餐",weight:null}
+	]);
+	assert.equal(result[0].value, "3");
+	assert.equal(result[1].value, "2");
+	assert.equal(result[2].value, "135–138");
+	assert.equal(result[2].unit, "克");
+});
+test("report summaries preserve zero, evidence gaps, and currency boundaries", () => {
+	const ui = overview();
+	const row = {currency:"CNY",income:432,expense:194.91,surplus:237.09};
+	assert.equal(ui.reportFacts("食堂收支报表",[row])[2].value, "237.09");
+	assert.equal(ui.reportFacts("食堂收支报表",[row,{...row,currency:"USD"}]).some(f=>f.label==="收支差额"),false);
+	assert.equal(ui.reportFacts("食堂收支报表",[{...row,income:null}]).some(f=>f.label==="确认收入"),false);
+	assert.equal(ui.reportFacts("膳食质量指标",[{metric:"a",rate:0},{metric:"b",rate:null}]).find(f=>f.label==="已有计算结果").value,"1");
+	assert.equal(ui.reportFacts("实时库存与效期",[{stage:"正常"},{stage:"待核对"},{}]).find(f=>f.label==="需核对记录").value,"1");
+});
+test("operations reports count meals only when a day has been closed", () => {
+	const ui = overview();
+	const result = ui.reportFacts("食堂经营报表", [
+		{stage:"已日结",actual:36}, {stage:"待日结"}, {stage:"日结依据待核对",actual:18}
+	]);
+	assert.equal(result.find(f=>f.label==="已日结实际供餐").value, "36");
+	assert.equal(result.find(f=>f.label==="待日结或核对").value, "2");
+	assert.equal(ui.reportFacts("食堂经营报表",[{stage:"待日结"}]).length, 2);
+});
