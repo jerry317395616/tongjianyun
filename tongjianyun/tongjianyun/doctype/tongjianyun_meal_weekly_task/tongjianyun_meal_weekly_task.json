@@ -20,7 +20,8 @@
    "write": 1,
    "submit": 1,
    "cancel": 1,
-   "amend": 1
+   "amend": 1,
+   "delete": 1
   },
   {
    "role": "膳食业务经办员",
@@ -132,7 +133,8 @@
   "management_task",
   "confirmed_at",
   "remarks",
-  "amended_from"
+  "amended_from",
+  "generated_by_term"
  ],
  "fields": [
   {
@@ -223,6 +225,15 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Meal Weekly Task"
+  },
+  {
+   "fieldname": "generated_by_term",
+   "fieldtype": "Check",
+   "label": "由学期项目生成",
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1,
+   "default": "0"
   }
  ]
 }

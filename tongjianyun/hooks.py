@@ -61,12 +61,15 @@ doc_events = {
         event: "tongjianyun.canteen_ops.term_projects.queue_day" for event in ("on_submit", "on_cancel")
     },
     "Tongjianyun Meal Term Project": {
-        "before_submit": "tongjianyun.canteen_ops.term_projects.attach_management_project",
+        "before_submit": ["tongjianyun.canteen_ops.term_schedule.freeze_calendar",
+                          "tongjianyun.canteen_ops.term_projects.attach_management_project"],
+        "on_submit": "tongjianyun.canteen_ops.term_projects.generate_on_submit",
         "on_update": "tongjianyun.canteen_ops.term_projects.queue_term",
         "on_update_after_submit": "tongjianyun.canteen_ops.term_projects.queue_term",
     },
     "Tongjianyun Meal Weekly Task": {
-        event: "tongjianyun.canteen_ops.term_projects.queue_weekly_task" for event in ("on_update", "on_cancel")
+        **{event: "tongjianyun.canteen_ops.term_projects.queue_weekly_task" for event in ("on_update", "on_cancel")},
+        "on_trash": "tongjianyun.canteen_ops.term_projects.close_management_task",
     },
     "Task": {"validate": "tongjianyun.canteen_ops.term_projects.protect_task"},
     "Production Plan": {"before_validate": "tongjianyun.meal_portions.validate_plan_scope"},

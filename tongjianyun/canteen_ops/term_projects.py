@@ -13,6 +13,8 @@ from tongjianyun.canteen_ops.common import (
     CANTEEN, DAY, TASK, TERM, WEEK, company_doc, linked, lock_company, permission, require, submitted,
 )
 
+from tongjianyun.canteen_ops.term_schedule import KINDS, term_weeks
+
 _SYNCING = ContextVar("tjy_syncing_meal_tasks", default=False)
 _REQUEST = "Material Request"
 PROJECT_RESPONSIBLE = "custom_tjy_meal_responsible_user"
@@ -20,12 +22,6 @@ _WEEK_FIELDS = [
     "name", "week_start", "docstatus", "raw_material_warehouse", "kitchen_warehouse", "material_request",
     "procurement_snapshot", "kitchen_reconciled", "kitchen_reconciled_at",
 ]
-
-
-def _mondays(term):
-    start, end = getdate(term.from_date), getdate(term.to_date)
-    monday = start - timedelta(days=start.weekday())
-    return [monday + timedelta(days=7 * index) for index in range((end - monday).days // 7 + 1)]
 
 
 def _source_weeks(term, mondays):
@@ -67,7 +63,7 @@ def _covered_by_stock(snapshot):
         return False
 
 
-def _week_steps(week, confirmed, request):
+def _week_steps(week, confirmed, request, day_count):
     if not week:
         return [(False, label) for label in ("待编排", "待审核", "待审核", "待审核")]
     approved = week.docstatus == 1
@@ -83,13 +79,13 @@ def _week_steps(week, confirmed, request):
     closed_days = len(confirmed)
     return [
         (True, "已审核"), purchase,
-        (closed_days == 5, f"已日结 {closed_days}/5 天"),
+        (closed_days == day_count, f"已日结 {closed_days}/{day_count} 天"),
         (reconciled, "已核销" if reconciled else "待核销"),
     ]
 
 
-def _progress(term, mondays):
-    from tongjianyun.canteen_ops.safety import TASKS
+def _progress(term, schedule):
+    mondays = list(schedule)
 
     if not mondays:
         return []
@@ -109,12 +105,14 @@ def _progress(term, mondays):
     for monday in mondays:
         week = weeks.get(monday)
         request = week.material_request if week and week.material_request in active_requests else None
-        kitchen_days = days[week.name] if week else []
-        confirmed = {getdate(day.meal_date) for day in kitchen_days
-                     if day.docstatus == 1 and 0 <= (getdate(day.meal_date) - monday).days < 5}
-        steps = [{"kind": kind, "complete": complete, "status": status}
-                 for (kind, _), (complete, status) in zip(TASKS, _week_steps(week, confirmed, request), strict=True)]
-        rows.append(dict(monday=str(monday), week=week.name if week else None, request=request,
+        service = schedule[monday]
+        allowed = set(service["days"])
+        kitchen_days = [day for day in days[week.name] if getdate(day.meal_date) in allowed] if week else []
+        confirmed = {getdate(day.meal_date) for day in kitchen_days if day.docstatus == 1}
+        steps = [{"kind": kind, "due": service["due"][kind], "complete": complete, "status": status}
+                 for kind, (complete, status) in zip(KINDS, _week_steps(week, confirmed, request, len(allowed)), strict=True)]
+        rows.append(dict(monday=str(monday), first=service["days"][0], last=service["days"][-1],
+                         week=week.name if week else None, request=request,
                          kitchen_days=[row.name for row in kitchen_days], steps=steps))
     return rows
 
@@ -129,16 +127,24 @@ def _visible(doctype, names):
 @frappe.whitelist(methods=["GET"])
 def progress(term_project):
     term = linked(TERM, term_project)
-    rows = _progress(term, _mondays(term))
+    rows = _progress(term, term_weeks(term))
+    tasks = frappe.get_list(TASK, filters={"term_project": term.name, "docstatus": ["<", 2]},
+                            fields=["name", "week_start", "task_kind", "due_date", "assigned_to"], limit_page_length=0
+                            ) if frappe.has_permission(TASK, "read") else []
+    by_kind = {(str(task.week_start), task.task_kind): task for task in tasks}
     weeks = _visible(WEEK, (row["week"] for row in rows))
     requests = _visible(_REQUEST, (row["request"] for row in rows))
     days = _visible(DAY, (day for row in rows for day in row["kitchen_days"]))
     project = term.management_project
     for row in rows:
+        for step in row["steps"]:
+            task = by_kind.get((row["monday"], step["kind"]))
+            if task:
+                step.update(task=task.name, due=task.due_date, assigned_to=task.assigned_to)
         row["week"] = row["week"] if row["week"] in weeks else None
         row["request"] = row["request"] if row["request"] in requests else None
         row["kitchen_days"] = [day for day in row["kitchen_days"] if day in days]
-    return {"weeks": rows, "project": project if project in _visible("Project", [project]) else None}
+    return {"weeks": rows, "task_count": len(tasks), "project": project if project in _visible("Project", [project]) else None}
 
 
 def validate_project_link(doc):
@@ -183,6 +189,58 @@ def attach_management_project(term, method=None):
         term.management_project = _new_project(term, from_term_submission=True).name
 
 
+def ensure_tasks(term, schedule, *, meal_week=None, automatic=False):
+    # Submission and explicit generation both hold the same term lock.
+    existing = frappe.get_all(TASK, filters={"term_project": term.name, "docstatus": ["<", 2]},
+                              fields=["name", "week_start", "task_kind"])
+    by_kind = {(getdate(row.week_start), row.task_kind): row.name for row in existing}
+    names = []
+    for monday, week in schedule.items():
+        for kind, due in week["due"].items():
+            name = by_kind.get((monday, kind))
+            if not name:
+                task = frappe.get_doc({"doctype": TASK, "company": term.company, "canteen": term.canteen,
+                                       "term_project": term.name, "week_start": monday, "task_kind": kind,
+                                       "assigned_to": term.responsible_user, "due_date": due,
+                                       "meal_week": meal_week, "generated_by_term": int(automatic)})
+                task.flags.generating_term_tasks = True
+                task.insert(ignore_permissions=automatic)
+                name = task.name
+            names.append(name)
+    return names
+
+
+def generate_on_submit(term, method=None):
+    ensure_tasks(term, term_weeks(term), automatic=True)
+
+
+def close_management_task(doc, method=None):
+    if not doc.management_task:
+        return
+    task = frappe.get_doc("Task", doc.management_task, for_update=True)
+    if task.status != "Cancelled":
+        context = _SYNCING.set(True)
+        try:
+            task.status = "Cancelled"
+            task.save(ignore_permissions=True)
+        finally:
+            _SYNCING.reset(context)
+
+
+def discard_unstarted_tasks(term):
+    rows = frappe.get_all(TASK, filters={"term_project": term.name, "docstatus": ["<", 2]},
+                          fields=["name", "docstatus", "generated_by_term", "remarks", "meal_week",
+                                  "week_start", "task_kind", "assigned_to", "due_date"])
+    schedule = term_weeks(term) if rows else {}
+    for row in rows:
+        week = schedule.get(getdate(row.week_start))
+        require(row.generated_by_term and not row.docstatus and not row.remarks and not row.meal_week
+                and row.assigned_to == term.responsible_user and week and week["due"].get(row.task_kind) == getdate(row.due_date),
+                f"请先处理已办理或已调整的每周任务 {row.name}，再取消学期项目。")
+    for row in rows:
+        frappe.delete_doc(TASK, row.name, ignore_permissions=True)
+
+
 @frappe.whitelist(methods=["POST"])
 def create_project(term_project):
     term = submitted(linked(TERM, term_project, "write", lock=True))
@@ -196,17 +254,19 @@ def create_project(term_project):
 
 
 def _sync(term_project):
-    term = frappe.get_doc(TERM, term_project, for_update=True)
+    if not frappe.db.get_value(TERM, term_project, "name", for_update=True):
+        return 0
+    term = frappe.get_doc(TERM, term_project)
     if term.docstatus != 1 or not term.management_project:
         return 0
     project = frappe.get_doc("Project", term.management_project, for_update=True)
     require(project.company == term.company and project.status != "Cancelled", "关联的管理项目须为本园所有效项目。")
     sources = frappe.get_all(TASK, filters={"term_project": term.name, "company": term.company, "canteen": term.canteen},
                              fields=["name", "week_start", "task_kind", "due_date", "docstatus", "management_task"])
-    scheduled = set(_mondays(term))
+    scheduled = term_weeks(term)
     weeks = sorted({getdate(row.week_start) for row in sources if row.docstatus < 2 and getdate(row.week_start) in scheduled})
     completed = {(row["monday"], step["kind"]): step["complete"]
-                 for row in _progress(term, weeks) for step in row["steps"]}
+                 for row in _progress(term, {day: scheduled[day] for day in weeks}) for step in row["steps"]}
     changes = 0
     context = _SYNCING.set(True)
     try:
@@ -221,14 +281,18 @@ def _sync(term_project):
             if source.management_task:
                 task = frappe.get_doc("Task", source.management_task, for_update=True)
                 require(task.project == project.name, "原生任务的管理项目归属不一致。")
-                if task.status == status:
+                end = min(getdate(term.to_date), max(getdate(term.from_date), getdate(source.due_date)))
+                start = min(max(getdate(term.from_date), getdate(source.week_start)), end)
+                if (task.status == status and task.exp_start_date and getdate(task.exp_start_date) == start
+                        and task.exp_end_date and getdate(task.exp_end_date) == end):
                     continue
+                task.exp_start_date, task.exp_end_date = start, end
                 task.status = status
                 task.progress = 100 if status == "Completed" else 0
                 task.save(ignore_permissions=True)
             else:
-                start = max(getdate(term.from_date), getdate(source.week_start))
-                end = min(getdate(term.to_date), getdate(source.due_date))
+                end = min(getdate(term.to_date), max(getdate(term.from_date), getdate(source.due_date)))
+                start = min(max(getdate(term.from_date), getdate(source.week_start)), end)
                 url = escape_html(get_url_to_form(TASK, source.name))
                 task = frappe.get_doc({
                     "doctype": "Task", "project": project.name, "company": term.company,
@@ -269,6 +333,10 @@ def queue_term(doc, method=None):
 
 
 def queue_weekly_task(doc, method=None):
+    if doc.flags.get("generating_term_tasks"):
+        return
+    if method == "on_cancel":
+        close_management_task(doc)
     if frappe.db.get_value(TERM, doc.term_project, "management_project"):
         _queue(doc.term_project)
 

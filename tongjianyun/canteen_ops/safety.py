@@ -11,7 +11,6 @@ from tongjianyun.canteen_ops.common import (
     permission, positive, records, require, roles, submitted, unique_active,
 )
 
-TASKS = (("食谱审核", 0), ("准备采购", 0), ("逐餐供餐与日结", 4), ("周核销", 6))
 FINDING_SOURCES = {CANTEEN, COMPANION, CREDENTIAL, DAY, DELIVERY, POLICY, PRICE, RECEIVING, SAMPLE,
                    STATEMENT, VOUCHER, WEEK, "Purchase Order", "Batch", "Purchase Receipt"}
 
@@ -86,8 +85,9 @@ class Term(Handler):
         validate_project_link(self.doc)
 
     def before_cancel(self):
-        require(not frappe.db.exists(TASK, {"term_project": self.doc.name, "docstatus": ("<", 2)}),
-                "该学期仍有有效任务，请先撤销相关任务。")
+        from tongjianyun.canteen_ops.term_projects import discard_unstarted_tasks
+
+        discard_unstarted_tasks(self.doc)
 
 
 class WeeklyTask(Handler):
@@ -97,7 +97,15 @@ class WeeklyTask(Handler):
         require((doc.get("management_task") or None) == ((previous and previous.get("management_task")) or None),
                 "管理项目任务由每周任务自动关联。")
         term = submitted(company_doc(doc, TERM, doc.term_project))
+        if not doc.flags.get("generating_term_tasks"):
+            doc.generated_by_term = previous.generated_by_term if previous else 0
         monday = getdate(doc.week_start)
+        if doc.docstatus == 1 and not doc.meal_week:
+            from tongjianyun.canteen_ops.term_projects import _source_weeks
+
+            source = _source_weeks(term, [monday]).get(monday)
+            if source:
+                doc.meal_week = source.name
         require(monday.weekday() == 0 and monday <= getdate(term.to_date)
                 and monday + timedelta(days=6) >= getdate(term.from_date) and doc.canteen == term.canteen,
                 "请选择学期范围内的自然周及同一食堂。")
@@ -125,10 +133,16 @@ class WeeklyTask(Handler):
         if doc.task_kind == "逐餐供餐与日结":
             from tongjianyun.meal_ledger import _day_proof, _week_proof
 
-            children = records(DAY, {"meal_week": week.name, "docstatus": 1})
-            require(len(children) == 5 and all(
+            from tongjianyun.canteen_ops.term_schedule import term_weeks
+
+            schedule = term_weeks(linked(TERM, doc.term_project)).get(getdate(doc.week_start))
+            require(schedule, "该学期本周没有供餐日。")
+            expected = set(schedule["days"])
+            children = records(DAY, {"meal_week": week.name, "docstatus": 1, "meal_date": ["in", list(expected)]},
+                               ["name", "meal_date"])
+            require({getdate(child.meal_date) for child in children} == expected and all(
                 _day_proof(linked(DAY, child.name), _week_proof(week)) for child in children
-            ), "须完成并核对本周五日的厨房日结。")
+            ), "须完成并核对本周所有供餐日的厨房日结。")
         if doc.task_kind == "周核销":
             from ione_core.meal_kitchen import verify_week_kitchen_reconciled
 
@@ -140,22 +154,16 @@ class WeeklyTask(Handler):
 @frappe.whitelist(methods=["POST"])
 def generate_week_tasks(term_project, week_start, meal_week=None):
     term = submitted(linked(TERM, term_project, "write", lock=True))
+    from tongjianyun.canteen_ops.term_schedule import term_weeks
+    from tongjianyun.canteen_ops.term_projects import ensure_tasks, queue_term
+
+    permission(frappe.has_permission(TASK, "create"))
     monday = getdate(week_start)
-    require(monday.weekday() == 0 and monday <= getdate(term.to_date)
-            and monday + timedelta(days=6) >= getdate(term.from_date), "请选择学期内的周一。")
-    result = []
-    for kind, offset in TASKS:
-        key = {"term_project": term.name, "week_start": monday, "task_kind": kind}
-        previous = frappe.db.get_value(TASK, {**key, "docstatus": ("<", 2)}, "name", for_update=True)
-        if previous:
-            result.append(linked(TASK, previous).name)
-            continue
-        task = frappe.get_doc({"doctype": TASK, **key, "company": term.company, "canteen": term.canteen,
-                               "due_date": monday + timedelta(days=offset), "assigned_to": term.responsible_user,
-                               "meal_week": meal_week})
-        task.insert()
-        result.append(task.name)
-    return result
+    week = term_weeks(term).get(monday)
+    require(week, "请选择学期内有供餐安排的周一。")
+    names = ensure_tasks(term, {monday: week}, meal_week=meal_week)
+    queue_term(term)
+    return names
 
 
 def meal_context(doc):

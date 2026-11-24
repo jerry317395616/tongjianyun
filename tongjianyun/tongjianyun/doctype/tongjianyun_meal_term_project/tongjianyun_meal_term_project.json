@@ -121,32 +121,112 @@
  "is_submittable": 1,
  "field_order": [
   "term_details",
-  "company",
-  "canteen",
   "project_title",
-  "term_dates_column",
-  "from_date",
-  "to_date",
+  "basics",
+  "company",
   "responsible_user",
-  "week_progress_section",
-  "week_progress",
-  "service_details",
+  "term_dates_column",
+  "canteen",
   "service_scope",
-  "service_finance_column",
+  "dates_section",
+  "from_date",
+  "dates_column",
+  "to_date",
+  "preview_section",
+  "task_summary",
+  "advanced_settings",
+  "management_project",
+  "service_holiday_list",
   "remarks",
   "amended_from",
-  "advanced_settings",
-  "management_project"
+  "service_holidays_snapshot",
+  "week_progress_section",
+  "week_progress"
  ],
  "fields": [
   {
    "fieldname": "term_details",
-   "label": "学期信息",
+   "fieldtype": "Tab Break",
+   "label": "基本信息"
+  },
+  {
+   "fieldname": "project_title",
+   "label": "学期项目名称",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "basics",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "company",
+   "label": "园所 / 账套",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Company"
+  },
+  {
+   "fieldname": "responsible_user",
+   "label": "项目负责人",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "User"
   },
   {
    "fieldname": "term_dates_column",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "canteen",
+   "label": "食堂",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "options": "Tongjianyun Canteen"
+  },
+  {
+   "fieldname": "service_scope",
+   "label": "供餐人群及安排",
+   "fieldtype": "Small Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "dates_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "from_date",
+   "label": "起始日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "dates_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "to_date",
+   "label": "结束日期",
+   "fieldtype": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "preview_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "task_summary",
+   "fieldtype": "HTML",
+   "label": "任务安排"
+  },
+  {
+   "fieldname": "advanced_settings",
+   "fieldtype": "Section Break",
+   "label": "更多设置",
+   "collapsible": 1
   },
   {
    "fieldname": "management_project",
@@ -159,77 +239,11 @@
    "search_index": 1
   },
   {
-   "fieldname": "week_progress_section",
-   "fieldtype": "Section Break",
-   "label": "按周进度",
-   "depends_on": "eval:!doc.__islocal"
-  },
-  {
-   "fieldname": "week_progress",
-   "fieldtype": "HTML"
-  },
-  {
-   "fieldname": "service_details",
-   "label": "供餐安排",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "service_finance_column",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "advanced_settings",
-   "label": "高级设置",
-   "fieldtype": "Section Break",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "company",
-   "label": "园所 / 账套",
+   "fieldname": "service_holiday_list",
    "fieldtype": "Link",
-   "reqd": 1,
-   "in_standard_filter": 1,
-   "options": "Company"
-  },
-  {
-   "fieldname": "canteen",
-   "label": "食堂",
-   "fieldtype": "Link",
-   "reqd": 1,
-   "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
-  },
-  {
-   "fieldname": "project_title",
-   "label": "学期项目名称",
-   "fieldtype": "Data",
-   "reqd": 1,
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "from_date",
-   "label": "起始日期",
-   "fieldtype": "Date",
-   "reqd": 1
-  },
-  {
-   "fieldname": "to_date",
-   "label": "结束日期",
-   "fieldtype": "Date",
-   "reqd": 1
-  },
-  {
-   "fieldname": "responsible_user",
-   "label": "项目负责人",
-   "fieldtype": "Link",
-   "reqd": 1,
-   "options": "User"
-  },
-  {
-   "fieldname": "service_scope",
-   "label": "供餐人群及安排",
-   "fieldtype": "Small Text",
-   "reqd": 1
+   "label": "停餐日历",
+   "options": "Holiday List",
+   "description": "按周一至周五供餐，跳过日历中的停餐日。留空时使用园所默认节假日表。"
   },
   {
    "fieldname": "remarks",
@@ -243,6 +257,22 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Meal Term Project"
+  },
+  {
+   "fieldname": "service_holidays_snapshot",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "week_progress_section",
+   "fieldtype": "Tab Break",
+   "label": "每周任务"
+  },
+  {
+   "fieldname": "week_progress",
+   "fieldtype": "HTML"
   }
  ]
 }

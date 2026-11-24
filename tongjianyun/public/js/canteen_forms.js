@@ -167,22 +167,7 @@
 			});
 		}
 	});
-	f.ui.form.on(term, {
-		setup: setSiteQuery,
-		refresh(frm) {
-			if (frm.doc.docstatus !== 1 || !allowed(task)) return;
-			frm.add_custom_button("生成每周任务", () => dialog("生成每周任务", [
-				option("week_start", "供餐周周一", "Date"),
-				{ fieldname: "meal_week", label: "关联已有周食谱", fieldtype: "Link", options: "Meal Planning Week",
-					get_query: () => ({ filters: { company: frm.doc.company } }) }
-			], async (values) => {
-				const names = await api("safety.generate_week_tasks", { term_project: frm.doc.name, ...values });
-				f.show_alert("本周任务已生成");
-				f.route_options = { term_project: frm.doc.name, name: ["in", names] };
-				f.set_route("List", task);
-			}));
-		}
-	});
+	f.ui.form.on(term, { setup: setSiteQuery });
 	f.ui.form.on("Meal Kitchen Day", {
 		refresh(frm) {
 			if (!saved(frm) || frm.doc.docstatus === 2) return;

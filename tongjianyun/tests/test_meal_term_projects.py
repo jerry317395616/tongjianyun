@@ -13,14 +13,19 @@ class TermProjectTests(unittest.TestCase):
         self.frappe = SimpleNamespace(db=Mock(), get_all=Mock(), whitelist=lambda **kwargs: lambda fn: fn)
         utils = SimpleNamespace(escape_html=str, get_url_to_form=lambda *args: "/", getdate=self.to_date)
         common = SimpleNamespace(**{key: key for key in ("CANTEEN", "DAY", "TASK", "TERM", "WEEK")},
-                                 company_doc=Mock(), linked=Mock(), lock_company=Mock(),
+                                 dates=Mock(), company_doc=Mock(), linked=Mock(), lock_company=Mock(),
                                  permission=Mock(), require=Mock(), submitted=Mock())
         spec = importlib.util.spec_from_file_location("term_projects_test", Path(__file__).parents[1] / "canteen_ops/term_projects.py")
         self.module = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, {
             "frappe": self.frappe, "frappe.utils": utils, "tongjianyun.canteen_ops.common": common,
         }):
-            spec.loader.exec_module(self.module)
+            timetable_spec = importlib.util.spec_from_file_location("tongjianyun.canteen_ops.term_schedule",
+                Path(__file__).parents[1] / "canteen_ops/term_schedule.py")
+            self.schedule = importlib.util.module_from_spec(timetable_spec)
+            timetable_spec.loader.exec_module(self.schedule)
+            with patch.dict(sys.modules, {timetable_spec.name: self.schedule}):
+                spec.loader.exec_module(self.module)
         self.term = SimpleNamespace(company="School", canteen="Kitchen", from_date="2026-11-25", to_date="2026-12-04")
 
     @staticmethod
@@ -28,7 +33,11 @@ class TermProjectTests(unittest.TestCase):
         return date.fromisoformat(value) if isinstance(value, str) else value
 
     def test_weeks_include_partial_first_and_last_week(self):
-        self.assertEqual(self.module._mondays(self.term), [date(2026, 11, 23), date(2026, 11, 30)])
+        weeks = self.schedule.build_weeks(self.term.from_date, self.term.to_date, {date(2026, 11, 27)})
+        self.assertEqual(list(weeks), [date(2026, 11, 23), date(2026, 11, 30)])
+        self.assertEqual(weeks[date(2026, 11, 23)]["days"], [date(2026, 11, 25), date(2026, 11, 26)])
+        self.assertEqual(weeks[date(2026, 11, 30)]["due"]["准备采购"], date(2026, 11, 26))
+        self.assertFalse(self.schedule.build_weeks("2026-11-28", "2026-12-01", {date(2026, 11, 30), date(2026, 12, 1)}))
 
     def test_submit_links_one_native_project_with_term_details(self):
         self.term.name = "TERM-1"
@@ -61,13 +70,13 @@ class TermProjectTests(unittest.TestCase):
 
     def test_completion_comes_from_the_business_stage(self):
         week = SimpleNamespace(docstatus=0, kitchen_reconciled=False, kitchen_reconciled_at=None, procurement_snapshot=None)
-        self.assertFalse(any(done for done, _ in self.module._week_steps(week, set(), "MR-1")))
+        self.assertFalse(any(done for done, _ in self.module._week_steps(week, set(), "MR-1", 5)))
         week.docstatus = 1
-        steps = self.module._week_steps(week, {1, 2}, "MR-1")
+        steps = self.module._week_steps(week, {1, 2}, "MR-1", 5)
         self.assertEqual(steps, [(True, "已审核"), (True, "已生成申请"), (False, "已日结 2/5 天"), (False, "待核销")])
         week.kitchen_reconciled, week.kitchen_reconciled_at = True, "2026-11-30 10:00:00"
         week.procurement_snapshot = json.dumps({"basis_hash": "frozen", "rows": [{"status": "covered"}]})
-        steps = self.module._week_steps(week, set(range(5)), None)
+        steps = self.module._week_steps(week, set(range(5)), None, 5)
         self.assertTrue(all(done for done, _ in steps))
         self.assertEqual(steps[1], (True, "无需采购"))
         self.assertFalse(self.module._covered_by_stock('{"basis_hash":"x","rows":[{"status":"purchase","purchase_qty":"1"}]}'))
