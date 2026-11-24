@@ -16,6 +16,7 @@ from ione_core import meal_planning as planning
 from ione_core.meal_adjustments import get_effective_meals
 
 from tongjianyun.dish_library import _preview_ingredients, _require, _visible
+from tongjianyun.meal_portions import SOURCE, parse_portions, resolve
 from tongjianyun.standard_recipes import CATEGORIES, DISH, DISH_CATEGORY, MARKER, PENDING, STATE
 
 PAGE_SIZE = 15
@@ -150,6 +151,10 @@ def _copy_menu(name, company):
     rows = []
     for row in source.po_items:
         bom = _visible("BOM", row.bom_no)
+        if bom.get(SOURCE):
+            bom = _visible("BOM", bom.get(SOURCE))
+            row = frappe._dict(row.as_dict())
+            row.bom_no = bom.name
         item = _visible("Item", row.item_code)
         if _usable_recipe(bom, company) and not item.disabled and not item.is_purchase_item and bom.item == item.name:
             rows.append(row)
@@ -285,7 +290,8 @@ def ingredients(week_name: str, bom_name: str):
 
 @frappe.whitelist(methods=["POST"])
 def save_meal(week_name: str, meal_date: str, meal_type: str, modified: str, boms: str,
-              excluded_count: int = 0, adjustment_reason: str = "", stopped: int = 0, reason: str = ""):
+              excluded_count: int = 0, adjustment_reason: str = "", stopped: int = 0, reason: str = "",
+              portions: str = ""):
     _editable_week(week_name)
     try:
         names = frappe.parse_json(boms)
@@ -294,6 +300,9 @@ def save_meal(week_name: str, meal_date: str, meal_type: str, modified: str, bom
     if (not isinstance(names, list) or len(names) > 20 or not all(isinstance(name, str) and name for name in names)
             or len(set(names)) != len(names)):
         frappe.throw("每餐最多选择 20 个不重复的菜品配方。")
+    changes = parse_portions(portions)
+    if changes.keys() - set(names):
+        frappe.throw("只能调整本餐已选菜品的带量。")
     with _meal_lock(week_name):
         week = _editable_week(week_name, lock=True)
         if str(week.modified) != modified:
@@ -309,6 +318,9 @@ def save_meal(week_name: str, meal_date: str, meal_type: str, modified: str, bom
         if stopped and not reason.strip():
             frappe.throw("请填写整餐停供原因。")
         rows = _dish_rows(week, plan, names)
+        for dish in rows:
+            if dish.bom_no in changes:
+                dish.bom_no = resolve(week, meal_date, meal_type, dish.bom_no, changes[dish.bom_no])
         values = planning._plan_values(week, frappe._dict(name=plan.custom_meal_source, po_items=rows),
                                        getdate(meal_date), meal_type, count)
         with planning._managed():

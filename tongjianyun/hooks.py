@@ -28,16 +28,20 @@ scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_rem
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",
     "Item": ["public/js/standard_dishes.js", "public/js/standard_ingredients.js"],
-    "Meal Planning Week": ["public/js/weekly_menu_editor.js", "public/js/special_ingredients.js",
+    "Meal Planning Week": ["public/js/meal_portions.js", "public/js/weekly_menu_editor.js", "public/js/special_ingredients.js",
                            "public/js/special_orders.js", "public/js/canteen_forms.js"],
-    "Meal Plan Adjustment": ["public/js/special_ingredients.js", "public/js/special_orders.js", "public/js/canteen_forms.js"],
+    "Meal Plan Adjustment": ["public/js/meal_portions.js", "public/js/meal_adjustment_portions.js",
+                             "public/js/special_ingredients.js", "public/js/special_orders.js", "public/js/canteen_forms.js"],
     **{doctype: "public/js/canteen_forms.js" for doctype in (*_CANTEEN_DOCTYPES, "Meal Kitchen Day",
                                                            "Purchase Order", "Request for Quotation")},
 }
 doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js",
                    "Tongjianyun Canteen Receiving": "public/js/canteen_receiving_list.js",
                    "Tongjianyun Food Sample": "public/js/canteen_sample_list.js"}
-extend_doctype_class = {"Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"]}
+extend_doctype_class = {
+    "Production Plan": ["tongjianyun.weekly_menu_editor.MealMenuDraftPlan"],
+    "BOM": ["tongjianyun.meal_portions.MealExecutionBOM"],
+}
 doc_events = {
     "Item": {
         "before_insert": [
@@ -52,8 +56,10 @@ doc_events = {
         "on_submit": "tongjianyun.special_ingredients.freeze",
         "on_trash": "tongjianyun.weekly_menu_editor.delete_draft_meal_plans",
     },
+    "Production Plan": {"before_validate": "tongjianyun.meal_portions.validate_plan_scope"},
     "Meal Plan Adjustment": {
-        "before_submit": "tongjianyun.recipe_nutrition.freeze_adjustment",
+        "validate": "tongjianyun.meal_portions.validate_adjustment",
+        "before_submit": ["tongjianyun.meal_portions.submit_adjustment", "tongjianyun.recipe_nutrition.freeze_adjustment"],
         "on_submit": "tongjianyun.special_ingredients.freeze",
     },
     "Material Request": {
@@ -78,7 +84,10 @@ doc_events = {
     "Purchase Invoice": {"before_submit": "tongjianyun.canteen_ops.finance.check_invoice"},
     "Journal Entry": {"before_submit": "tongjianyun.canteen_ops.finance.check_journal"},
     "BOM": {
-        "validate": "tongjianyun.standard_recipes.validate_recipe",
+        "validate": ["tongjianyun.meal_portions.protect_recipe", "tongjianyun.standard_recipes.validate_recipe"],
+        "before_update_after_submit": "tongjianyun.meal_portions.protect_recipe",
+        "before_cancel": "tongjianyun.meal_portions.protect_recipe",
+        "on_trash": "tongjianyun.meal_portions.protect_recipe",
         "before_save": "tongjianyun.standard_recipes.save_draft",
         "before_submit": ["tongjianyun.standard_recipes.publish_recipe", "tongjianyun.recipe_nutrition.freeze_recipe"],
         "on_update": "tongjianyun.dish_library.enroll_from_recipe",

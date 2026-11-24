@@ -17,7 +17,7 @@
 	});
 	function loadStyles() {
 		// The Frappe asset loader looks for the file extension after the version query.
-		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-catalog-table.css"))
+		styles ??= Promise.resolve(frappe.require(window.tjyMealPortions.stylesheet))
 			.catch(() => { styles = undefined; });
 	}
 	function dateLabel(value, year = false) {
@@ -221,6 +221,7 @@
 		const { days, slots, categories } = schedule;
 		const hasNext = index < days.length * slots.length - 1;
 		const selected = [...meal.dishes];
+		const portions = new Map();
 		const previews = new Map();
 		const base = Number(meal.base_headcount);
 		let offset = 0;
@@ -228,6 +229,8 @@
 		let $options, $chosen, $counts, $validation, $adjustments;
 		let lastOptions = null;
 		let expandedBom;
+		let updatePortionTotals;
+		let portionView = 0;
 		let closed = false;
 		let destination;
 		const dialog = new frappe.ui.Dialog({
@@ -273,7 +276,7 @@
 		const $previous = button(dialog.header.find(".modal-actions"), "上一餐", () => {
 			if (closed || !canAct(frm)) return;
 			const leave = () => close(index - 1);
-			const changed = selected.length !== meal.dishes.length
+			const changed = portions.size || selected.length !== meal.dishes.length
 				|| selected.some((dish, position) => dish.bom !== meal.dishes[position]?.bom)
 				|| ["excluded_count", "stopped"].some((key) => Number(dialog.get_value(key) || 0) !== Number(meal[key] || 0))
 				|| ["adjustment_reason", "reason"].some((key) => (dialog.get_value(key) || "") !== (meal[key] || ""));
@@ -324,6 +327,7 @@
 				await mutate(frm, "save_meal", {
 					...args, modified: meal.modified, boms: JSON.stringify(selected.map((dish) => dish.bom)),
 					excluded_count: excluded, adjustment_reason: adjustment, stopped, reason,
+					portions: JSON.stringify(Object.fromEntries(portions)),
 				}, () => { saved = true; });
 			} catch {
 				// Keep the current meal open if Frappe rejected the save.
@@ -353,6 +357,13 @@
 			const planned = !Number.isInteger(excluded) || excluded < 0 || excluded >= base
 				? "请核对停餐调整人数" : stopped ? "整餐停供" : `计划供餐 ${base - excluded} 人`;
 			$("<strong>", { role: "status" }).text(planned).appendTo($summary);
+			updatePortionTotals?.();
+		}
+
+		function servingCount() {
+			if (Number(dialog.get_value("stopped"))) return 0;
+			const count = base - Number(dialog.get_value("excluded_count") || 0);
+			return Number.isInteger(count) && count > 0 && count <= base ? count : null;
 		}
 
 		function resetSearch() {
@@ -362,6 +373,8 @@
 		}
 
 		function renderChosen(focusBom, focusAction) {
+			portionView += 1;
+			updatePortionTotals = undefined;
 			renderCounts();
 			const $list = $("<div>", { class: "tgy-picker-list" }).appendTo($chosen.empty());
 			if (!selected.length) message($list, "请从标准菜品库添加本餐菜品。");
@@ -386,6 +399,7 @@
 					.attr({ "aria-label": `下移${label}`, title: "下移" }).prop("disabled", position === selected.length - 1);
 				const $remove = button($actions, "×", () => {
 					selected.splice(position, 1);
+					portions.delete(dish.bom);
 					if (expanded) expandedBom = undefined;
 					renderChosen(selected[Math.min(position, selected.length - 1)]?.bom, "remove");
 					renderOptions(lastOptions, $options.find(".tgy-picker-options").scrollTop());
@@ -408,17 +422,17 @@
 		}
 
 		async function renderIngredients($entry, dish) {
-			const $detail = $("<div>", { class: "tgy-picker-detail", role: "status" }).appendTo($entry);
+			const view = portionView;
+			const $detail = $("<div>", { class: "tgy-picker-detail" }).appendTo($entry);
 			$detail.text("正在读取带量…");
 			if (!previews.has(dish.bom)) {
-				previews.set(dish.bom, call("ingredients", { week_name: args.week_name, bom_name: dish.bom }));
+				previews.set(dish.bom, window.tjyMealPortions.load({ ...args, bom_name: dish.bom }));
 			}
 			try {
-				const ingredients = await previews.get(dish.bom);
-				$detail.empty();
-				$("<strong>").text("人均采购毛重").appendTo($detail);
-				$("<div>").text(ingredients?.map((row) => `${row.name} ${row.gross ?? "—"} ${row.uom || ""}`).join("；")
-					|| "暂无可查看的带量。").appendTo($detail);
+				const data = await previews.get(dish.bom);
+				if (closed || view !== portionView) return;
+				updatePortionTotals = window.tjyMealPortions.render($detail, data, portions.get(dish.bom), servingCount,
+					(changes) => { portions.set(dish.bom, changes); });
 			} catch {
 				previews.delete(dish.bom);
 				$detail.text("带量读取失败。可收起后重新打开。");

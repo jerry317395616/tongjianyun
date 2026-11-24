@@ -2,6 +2,8 @@
 
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
+from tongjianyun.meal_portions import PENDING, SCOPE, SOURCE
+
 WEEK = "Meal Planning Week"
 BASIC_TAB = "custom_tjy_week_basic_tab"
 CALENDAR_TAB = "custom_tjy_week_calendar_tab"
@@ -17,4 +19,12 @@ def install():
          "insert_after": "amended_from", "depends_on": saved_only, "module": "Tongjianyun"},
         {"fieldname": CALENDAR_FIELD, "fieldtype": "HTML", "label": "周历",
          "insert_after": CALENDAR_TAB, "depends_on": saved_only, "module": "Tongjianyun"},
+    ], "BOM": [
+        {"fieldname": SOURCE, "fieldtype": "Link", "options": "BOM", "label": "本餐来源配方",
+         "insert_after": "item", "hidden": 1, "read_only": 1, "no_copy": 1, "module": "Tongjianyun"},
+        {"fieldname": SCOPE, "fieldtype": "Data", "label": "本餐用量归属", "insert_after": SOURCE,
+         "hidden": 1, "read_only": 1, "no_copy": 1, "module": "Tongjianyun"},
+    ], "Meal Plan Adjustment": [
+        {"fieldname": PENDING, "fieldtype": "Long Text", "label": "本餐带量调整", "insert_after": "dishes",
+         "hidden": 1, "read_only": 1, "no_copy": 1, "module": "Tongjianyun"},
     ]})

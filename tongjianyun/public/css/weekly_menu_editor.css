@@ -497,6 +497,63 @@ button.tgy-meal-cell:hover {
 	overflow-wrap: anywhere;
 }
 
+.tgy-meal-portions {
+	min-width: 0;
+	color: var(--text-color);
+}
+
+.tgy-portion-scroll {
+	margin-top: 6px;
+	overflow-x: auto;
+}
+
+.tgy-meal-portions table {
+	width: 100%;
+	min-width: 320px;
+	font-size: var(--text-sm, 12px);
+	font-variant-numeric: tabular-nums;
+}
+
+.tgy-meal-portions :is(th, td) {
+	padding: 5px 4px;
+	border-bottom: 1px solid var(--border-color);
+	vertical-align: middle;
+	text-align: start;
+}
+
+.tgy-meal-portions thead th {
+	font-weight: 500;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.tgy-meal-portions small {
+	display: block;
+	color: var(--text-muted);
+}
+
+.tgy-meal-portions input {
+	width: 100%;
+	min-width: 50px;
+}
+
+.tgy-portion-note {
+	margin-top: 5px;
+	color: var(--text-muted);
+	font-size: var(--text-sm, 12px);
+}
+
+.tgy-portion-note:empty {
+	display: none;
+}
+
+.tgy-portion-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 7px;
+}
+
 .tgy-picker-adjustments {
 	margin-top: 12px;
 }

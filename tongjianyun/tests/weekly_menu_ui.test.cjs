@@ -25,6 +25,8 @@ function element(tag, attrs = {}) {
 			return this;
 		},
 		find() { return this; }, on(type, action) { this.events[type] = action; return this; },
+		first() { return this; },
+		val(value) { if (value === undefined) return this.inputValue; this.inputValue = value; return this; },
 		one(type, action) { return this.on(type, action); },
 		trigger(type) { this.events[type]?.(); return this; },
 		scrollTop(value) { if (value === undefined) return this.scroll || 0; this.scroll = value; return this; },
@@ -107,7 +109,9 @@ test("native week shows the calendar and supports editing meals in order", async
 				&& (!args.category || args.category === (dish.category || "未分类"))
 				&& (!args.search || dish.name.includes(args.search) || dish.item.includes(args.search)),
 			) } };
-			if (operation === "ingredients") return { message: [{ name: "小白菜", gross: 60, uom: "克" }] };
+			if (method === "tongjianyun.meal_portions.details") return { message: { adjustable: true, rows: [
+				{ row: "ING-1", name: "小白菜", standard_gross: 60, standard_net: null, gross: 60, net: null, uom: "克" },
+			] } };
 			if (operation === "save_meal") {
 				if (rejectSave) return { exc: true };
 				saved = args;
@@ -126,8 +130,10 @@ test("native week shows the calendar and supports editing meals in order", async
 		set_intro(text) { intro = text; },
 		remove_custom_button() {}, reload_doc: async () => hooks.refresh(form),
 	};
-	runInNewContext(readFileSync(resolve(__dirname, "../public/js/weekly_menu_editor.js"), "utf8"),
-		{ frappe, $: element, window: { location: { hash: "" } } });
+	const context = { frappe, $: element, window: { location: { hash: "" } } };
+	for (const file of ["meal_portions.js", "weekly_menu_editor.js"]) {
+		runInNewContext(readFileSync(resolve(__dirname, "../public/js", file), "utf8"), context);
+	}
 	await hooks.refresh(form);
 	assert.equal(page.attrs.class, "tgy-week-create");
 	assert.equal(intro, "保存后，在「供餐周历」选择空白编排或复制上周。");
@@ -146,7 +152,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
 	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
 	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
-	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-catalog-table.css"]);
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-portions.css"]);
 	assert.equal(page.all("<progress>")[0].attrs.value, 1);
 	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();
@@ -208,7 +214,14 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.ok(chosen.all("<small>").some((node) => node.content === "素菜"));
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "查看新菜的带量").events.click();
 	await new Promise(setImmediate);
-	assert.ok(chosen.all("<div>").some((node) => node.content === "小白菜 60 克"));
+	assert.ok(chosen.all("<th>").some((node) => node.content === "小白菜"));
+	assert.ok(chosen.all("<div>").some((node) => node.content === "待补可食净量"));
+	chosen.all("<button>").find((node) => node.content === "调整本餐带量").events.click();
+	const input = (name) => chosen.all("<input>").find((node) => node.attrs["aria-label"].includes(name));
+	input("本餐毛重").events.input.call({value: "35", validity: {badInput: false}});
+	input("可食净量").events.input.call({value: "30", validity: {badInput: false}});
+	assert.ok(chosen.all("<td>").some((node) => node.content === "1.295 kg"));
+	assert.ok(!chosen.all("<div>").some((node) => node.content === "待补可食净量"));
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "上移新菜").events.click();
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "下移新菜").events.click();
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "上移新菜").events.click();
@@ -231,6 +244,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(saved.excluded_count, 3);
 	assert.equal(saved.modified, "revision-0");
 	assert.deepEqual(JSON.parse(saved.boms), ["BOM-B", "BOM-A-1"]);
+	assert.deepEqual(JSON.parse(saved.portions), {"BOM-B": [{ row: "ING-1", gross: "35", net: "30" }]});
 	assert.equal(lunch.hidden, true);
 	assert.match(dialog.options.title, /周二 · 午点/);
 	const snack = dialog;
