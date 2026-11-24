@@ -29,21 +29,24 @@
    "fieldname": "service_date",
    "label": "日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "meal_type",
    "label": "餐次",
    "fieldtype": "Select",
    "options": "早餐\n早点\n午餐\n午点\n晚餐",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "supplier",
    "label": "供餐单位",
    "fieldtype": "Link",
    "options": "Supplier",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "batch",
@@ -72,14 +75,16 @@
    "fieldname": "portions",
    "label": "到园份数",
    "fieldtype": "Int",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "result",
    "label": "验收结果",
    "fieldtype": "Select",
    "options": "\n接收\n拒收",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "exception",
@@ -92,19 +97,41 @@
    "fieldtype": "Link",
    "read_only": 1,
    "options": "User"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "供餐与配送"
+  },
+  {
+   "fieldname": "column_meal_type",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_prepared_at",
+   "fieldtype": "Section Break",
+   "label": "到园交接"
+  },
+  {
+   "fieldname": "column_portions",
+   "fieldtype": "Column Break"
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "publication",
   "service_date",
+  "column_meal_type",
   "meal_type",
   "supplier",
   "batch",
+  "section_prepared_at",
   "prepared_at",
   "arrived_at",
   "served_at",
+  "column_portions",
   "portions",
   "result",
   "exception",

@@ -76,17 +76,22 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "supplier",
+  "column_from_date",
   "from_date",
   "to_date",
   "currency",
+  "section_supplier_statement_no",
   "supplier_statement_no",
   "supplier_response",
   "supplier_confirmed_at",
+  "column_net_total",
   "net_total",
   "policy",
+  "section_items",
   "items",
   "remarks",
   "amended_from"
@@ -106,7 +111,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
+   "options": "Tongjianyun Canteen",
+   "in_list_view": 1
   },
   {
    "fieldname": "supplier",
@@ -114,7 +120,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Supplier"
+   "options": "Supplier",
+   "in_list_view": 1
   },
   {
    "fieldname": "from_date",
@@ -126,7 +133,8 @@
    "fieldname": "to_date",
    "label": "结束日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "currency",
@@ -156,7 +164,8 @@
    "fieldname": "net_total",
    "label": "本期无争议税前金额",
    "fieldtype": "Currency",
-   "read_only": 1
+   "read_only": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "policy",
@@ -184,6 +193,29 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Canteen Reconciliation"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "对账期间"
+  },
+  {
+   "fieldname": "column_from_date",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_supplier_statement_no",
+   "fieldtype": "Section Break",
+   "label": "确认与结算"
+  },
+  {
+   "fieldname": "column_net_total",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_items",
+   "fieldtype": "Section Break",
+   "label": "对账明细"
   }
  ]
 }

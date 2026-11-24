@@ -69,13 +69,17 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "section_company",
   "company",
   "canteen",
+  "column_employee",
   "employee",
   "designation",
+  "section_topic",
   "topic",
   "training_date",
   "trainer",
+  "column_result",
   "result",
   "hours",
   "evidence",
@@ -105,7 +109,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Employee"
+   "options": "Employee",
+   "in_list_view": 1
   },
   {
    "fieldname": "designation",
@@ -165,6 +170,24 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Canteen Training"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "培训人员"
+  },
+  {
+   "fieldname": "column_employee",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_topic",
+   "fieldtype": "Section Break",
+   "label": "培训与考核"
+  },
+  {
+   "fieldname": "column_result",
+   "fieldtype": "Column Break"
   }
  ]
 }

@@ -132,17 +132,22 @@
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "finding_title",
   "category",
+  "column_finding_key",
   "finding_key",
   "source_type",
   "source",
+  "section_due_date",
   "due_date",
   "assigned_to",
+  "column_description",
   "description",
   "progress",
+  "section_rectification",
   "rectification",
   "evidence",
   "review_note"
@@ -176,7 +181,6 @@
    "label": "类型",
    "fieldtype": "Select",
    "reqd": 1,
-   "in_list_view": 1,
    "options": "采购与验收\n库存\n供餐\n人员与证照\n食品安全\n财务"
   },
   {
@@ -212,7 +216,8 @@
    "label": "整改责任人",
    "fieldtype": "Link",
    "reqd": 1,
-   "options": "User"
+   "options": "User",
+   "in_list_view": 1
   },
   {
    "fieldname": "description",
@@ -243,6 +248,30 @@
    "fieldname": "review_note",
    "label": "复核意见",
    "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "问题登记"
+  },
+  {
+   "fieldname": "column_finding_key",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_due_date",
+   "fieldtype": "Section Break",
+   "label": "责任与期限"
+  },
+  {
+   "fieldname": "column_description",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_rectification",
+   "fieldtype": "Section Break",
+   "label": "整改与复核"
   }
- ]
+ ],
+ "show_title_field_in_link": 1
 }

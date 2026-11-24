@@ -23,20 +23,23 @@
    "label": "班级",
    "fieldtype": "Link",
    "options": "Student Batch Name",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "service_date",
    "label": "日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "meal_type",
    "label": "餐次",
    "fieldtype": "Select",
    "options": "早餐\n早点\n午餐\n午点\n晚餐",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "meal_week",
@@ -56,7 +59,8 @@
    "fieldname": "attendance",
    "label": "实际就餐人数",
    "fieldtype": "Int",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "observations",
@@ -68,17 +72,34 @@
    "fieldname": "remarks",
    "label": "进餐观察",
    "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "班级与餐次"
+  },
+  {
+   "fieldname": "column_service_date",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_observations",
+   "fieldtype": "Section Break",
+   "label": "菜品反馈"
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "student_group",
+  "column_service_date",
   "service_date",
   "meal_type",
   "meal_week",
   "publication",
   "attendance",
+  "section_observations",
   "observations",
   "remarks"
  ],

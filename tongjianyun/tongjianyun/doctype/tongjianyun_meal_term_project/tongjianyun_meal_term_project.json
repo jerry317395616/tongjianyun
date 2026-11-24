@@ -187,7 +187,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
+   "options": "Tongjianyun Canteen",
+   "in_list_view": 1
   },
   {
    "fieldname": "service_scope",
@@ -202,7 +203,8 @@
    "fieldname": "from_date",
    "label": "起始日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "dates_column",
@@ -212,7 +214,8 @@
    "fieldname": "to_date",
    "label": "结束日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "preview_section",
@@ -286,5 +289,6 @@
    "label": "适用年龄组（选填）",
    "fieldtype": "Data"
   }
- ]
+ ],
+ "show_title_field_in_link": 1
 }

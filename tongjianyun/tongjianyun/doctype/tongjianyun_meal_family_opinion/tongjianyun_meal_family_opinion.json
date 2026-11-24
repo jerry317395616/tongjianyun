@@ -16,7 +16,8 @@
    "label": "食堂",
    "fieldtype": "Link",
    "options": "Tongjianyun Canteen",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "publication",
@@ -29,14 +30,16 @@
    "fieldname": "service_date",
    "label": "日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "category",
    "label": "类别",
    "fieldtype": "Select",
    "options": "菜品与营养\n食品安全\n供餐服务",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "opinion",
@@ -79,19 +82,48 @@
    "fieldname": "menu_detail",
    "label": "相关餐次或菜品",
    "fieldtype": "Small Text",
-   "read_only": 1
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "意见来源"
+  },
+  {
+   "fieldname": "column_service_date",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_opinion",
+   "fieldtype": "Section Break",
+   "label": "意见与答复"
+  },
+  {
+   "fieldname": "section_assigned_to",
+   "fieldtype": "Section Break",
+   "label": "后续处理"
+  },
+  {
+   "fieldname": "column_due_date",
+   "fieldtype": "Column Break"
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "publication",
+  "column_service_date",
   "service_date",
   "category",
   "menu_detail",
+  "section_opinion",
   "opinion",
   "reply",
+  "section_assigned_to",
   "assigned_to",
+  "column_due_date",
   "due_date",
   "finding",
   "receipt_hash"

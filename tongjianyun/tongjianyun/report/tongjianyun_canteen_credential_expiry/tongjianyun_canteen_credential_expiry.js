@@ -30,3 +30,5 @@ frappe.query_reports["Tongjianyun Canteen Credential Expiry"] = {
 ],
     onload(report) { report.page.set_title("食堂证照到期提醒"); },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Credential Expiry", "食堂证照到期提醒");

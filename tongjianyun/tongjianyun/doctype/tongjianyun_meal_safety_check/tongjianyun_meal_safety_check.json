@@ -16,7 +16,8 @@
    "label": "食堂",
    "fieldtype": "Link",
    "options": "Tongjianyun Canteen",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "period",
@@ -30,7 +31,8 @@
    "fieldname": "service_date",
    "label": "日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "checks",
@@ -59,7 +61,8 @@
    "label": "确认人",
    "fieldtype": "Link",
    "read_only": 1,
-   "options": "User"
+   "options": "User",
+   "in_list_view": 1
   },
   {
    "fieldname": "finding",
@@ -67,17 +70,45 @@
    "fieldtype": "Link",
    "read_only": 1,
    "options": "Tongjianyun Canteen Finding"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "检查信息"
+  },
+  {
+   "fieldname": "column_period",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_checks",
+   "fieldtype": "Section Break",
+   "label": "检查项目"
+  },
+  {
+   "fieldname": "section_assigned_to",
+   "fieldtype": "Section Break",
+   "label": "整改跟进"
+  },
+  {
+   "fieldname": "column_signed_by",
+   "fieldtype": "Column Break"
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
+  "column_period",
   "period",
   "service_date",
+  "section_checks",
   "checks",
   "summary",
+  "section_assigned_to",
   "assigned_to",
   "due_date",
+  "column_signed_by",
   "signed_by",
   "finding"
  ],

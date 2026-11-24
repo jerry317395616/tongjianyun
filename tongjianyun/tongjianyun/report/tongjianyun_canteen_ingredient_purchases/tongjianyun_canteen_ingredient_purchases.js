@@ -37,3 +37,5 @@ frappe.query_reports["Tongjianyun Canteen Ingredient Purchases"] = {
 ],
     onload(report) { report.page.set_title("食材采购报表"); },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Ingredient Purchases", "食材采购报表");

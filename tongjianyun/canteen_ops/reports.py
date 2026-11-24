@@ -570,4 +570,5 @@ REPORT_FUNCTIONS = {
 def run(report_name, filters=None):
     permission(frappe.session.user != "Guest" and report_name in REPORT_FUNCTIONS)
     frappe.has_permission(CANTEEN, "read", throw=True)
-    return REPORT_FUNCTIONS[report_name](Context(filters))
+    from tongjianyun.canteen_ops.desk_labels import report_labels
+    return report_labels(REPORT_FUNCTIONS[report_name](Context(filters)))

@@ -70,3 +70,5 @@
 		},
 	};
 })();
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Ingredient Analysis", "食材采购与消耗分析");

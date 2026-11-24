@@ -23,26 +23,30 @@
    "label": "班级",
    "fieldtype": "Link",
    "options": "Student Batch Name",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "student",
    "label": "幼儿",
    "fieldtype": "Link",
    "options": "Student",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "from_date",
    "label": "生效日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "to_date",
    "label": "截止日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "avoid",
@@ -55,16 +59,38 @@
    "label": "已确认的替代安排",
    "fieldtype": "Data",
    "reqd": 1
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "幼儿与有效期"
+  },
+  {
+   "fieldname": "column_student",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_avoid",
+   "fieldtype": "Section Break",
+   "label": "膳食安排"
+  },
+  {
+   "fieldname": "column_alternative",
+   "fieldtype": "Column Break"
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "student_group",
+  "column_student",
   "student",
   "from_date",
   "to_date",
+  "section_avoid",
   "avoid",
+  "column_alternative",
   "alternative"
  ],
  "permissions": [

@@ -59,3 +59,5 @@
 		},
 	};
 })();
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Staffing Analysis", "人员配置分析");

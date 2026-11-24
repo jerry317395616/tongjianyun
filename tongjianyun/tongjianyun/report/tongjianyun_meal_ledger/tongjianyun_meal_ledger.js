@@ -44,3 +44,5 @@
 		},
 	};
 })();
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Meal Ledger", "膳食台账");

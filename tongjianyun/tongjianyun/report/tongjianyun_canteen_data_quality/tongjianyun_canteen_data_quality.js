@@ -53,3 +53,5 @@ frappe.query_reports["Tongjianyun Canteen Data Quality"] = {
         });
     },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Data Quality", "监管数据质量");

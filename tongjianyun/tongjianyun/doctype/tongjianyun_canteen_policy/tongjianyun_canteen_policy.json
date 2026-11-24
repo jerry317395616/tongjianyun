@@ -121,12 +121,14 @@
   "company",
   "canteen",
   "policy_name",
+  "column_from_date",
   "from_date",
   "to_date",
   "purchase_section",
   "procurement_mode",
   "purchase_assignee",
   "lead_days",
+  "column_min_quotations",
   "min_quotations",
   "price_deviation",
   "contract_deviation",
@@ -135,6 +137,7 @@
   "require_location",
   "require_dual_review",
   "require_supplier_credential",
+  "column_stock_warning_days",
   "stock_warning_days",
   "credential_warning_days",
   "sample_required",
@@ -145,6 +148,7 @@
   "finance_section",
   "finance_reviewer",
   "settlement_limit",
+  "column_settlement_cycle",
   "settlement_cycle",
   "cost_center",
   "report_template",
@@ -166,7 +170,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
+   "options": "Tongjianyun Canteen",
+   "in_list_view": 1
   },
   {
    "fieldname": "policy_name",
@@ -179,7 +184,8 @@
    "fieldname": "from_date",
    "label": "起始日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "to_date",
@@ -198,7 +204,8 @@
    "fieldtype": "Select",
    "reqd": 1,
    "options": "校内采购\n框架协议采购\n区域集中采购",
-   "default": "校内采购"
+   "default": "校内采购",
+   "in_list_view": 1
   },
   {
    "fieldname": "purchase_assignee",
@@ -358,6 +365,23 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Canteen Policy"
+  },
+  {
+   "fieldname": "column_from_date",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_min_quotations",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_stock_warning_days",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_settlement_cycle",
+   "fieldtype": "Column Break"
   }
- ]
+ ],
+ "show_title_field_in_link": 1
 }

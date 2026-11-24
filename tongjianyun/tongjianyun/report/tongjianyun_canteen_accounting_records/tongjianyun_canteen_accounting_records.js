@@ -25,3 +25,5 @@ frappe.query_reports["Tongjianyun Canteen Accounting Records"] = {
 ],
     onload(report) { report.page.set_title("食堂账务记录"); },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Accounting Records", "食堂账务记录");

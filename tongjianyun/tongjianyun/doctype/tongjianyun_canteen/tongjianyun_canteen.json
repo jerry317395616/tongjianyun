@@ -133,6 +133,7 @@
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen_name",
   "region",
@@ -142,9 +143,11 @@
   "service_supplier",
   "service_contract",
   "responsibilities",
+  "section_raw_warehouse",
   "raw_warehouse",
   "kitchen_warehouse",
   "quarantine_warehouse",
+  "column_manager",
   "manager",
   "site_address",
   "disabled"
@@ -156,7 +159,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Company"
+   "options": "Company",
+   "in_list_view": 1
   },
   {
    "fieldname": "canteen_name",
@@ -208,7 +212,8 @@
    "fieldname": "manager",
    "label": "食堂责任人",
    "fieldtype": "Link",
-   "options": "User"
+   "options": "User",
+   "in_list_view": 1
   },
   {
    "fieldname": "site_address",
@@ -226,7 +231,8 @@
    "fieldtype": "Select",
    "default": "自主经营",
    "options": "自主经营\n委托承包\n园外供餐",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "service_supplier",
@@ -243,6 +249,21 @@
    "fieldname": "responsibilities",
    "label": "园方与供餐方责任约定",
    "fieldtype": "Small Text"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "食堂档案"
+  },
+  {
+   "fieldname": "section_raw_warehouse",
+   "fieldtype": "Section Break",
+   "label": "仓库与管理"
+  },
+  {
+   "fieldname": "column_manager",
+   "fieldtype": "Column Break"
   }
- ]
+ ],
+ "show_title_field_in_link": 1
 }

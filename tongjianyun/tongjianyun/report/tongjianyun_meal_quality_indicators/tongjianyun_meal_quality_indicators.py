@@ -1,4 +1,5 @@
 import frappe
+from tongjianyun.canteen_ops.desk_labels import report_labels
 from frappe.utils import getdate
 
 from tongjianyun.canteen_ops.common import CANTEEN, DAY, FINDING, SAMPLE, WEEK, linked, require
@@ -91,4 +92,4 @@ def execute(filters=None):
     cols = [{"fieldname": k, "label": label, "fieldtype": typ, "width":width}
             for k,label,typ,width in (("metric","指标","Data",215),("numerator","分子","Float",100),
             ("denominator","分母","Float",100),("unit","单位","Data",110),("rate","比例（%）","Float",110))]
-    return cols, data, "按可读记录汇总；分母为零时比例留空。餐盘剩余仅统计已称重且有实际供出量的菜品。"
+    return report_labels((cols, data, "按可读记录汇总；分母为零时比例留空。餐盘剩余仅统计已称重且有实际供出量的菜品。"))

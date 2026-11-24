@@ -87,20 +87,25 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "external_handover",
+  "column_meal_day",
   "meal_day",
   "meal_date",
   "meal_type",
+  "section_dish",
   "dish",
   "external_dish",
   "weight",
+  "column_sampled_at",
   "sampled_at",
   "dispose_after",
   "storage_location",
   "photo",
   "operator",
+  "section_disposed_at",
   "disposed_at",
   "disposal_note",
   "remarks",
@@ -161,7 +166,8 @@
    "label": "留样量（克）",
    "fieldtype": "Float",
    "reqd": 1,
-   "non_negative": 1
+   "non_negative": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "sampled_at",
@@ -236,6 +242,29 @@
    "fieldtype": "Data",
    "depends_on": "eval:doc.external_handover",
    "mandatory_depends_on": "eval:doc.external_handover"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "供餐来源"
+  },
+  {
+   "fieldname": "column_meal_day",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_dish",
+   "fieldtype": "Section Break",
+   "label": "成品留样"
+  },
+  {
+   "fieldname": "column_sampled_at",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_disposed_at",
+   "fieldtype": "Section Break",
+   "label": "留样处置"
   }
  ]
 }

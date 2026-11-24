@@ -69,16 +69,21 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "external_handover",
+  "column_meal_day",
   "meal_day",
   "meal_date",
   "meal_type",
+  "section_companion",
   "companion",
   "attended_at",
+  "column_evaluation",
   "evaluation",
   "feedback",
+  "section_photo",
   "photo",
   "video",
   "attested",
@@ -188,6 +193,29 @@
    "fieldtype": "Link",
    "options": "Tongjianyun Meal Delivery Handover",
    "depends_on": "eval:!doc.meal_day"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "供餐来源"
+  },
+  {
+   "fieldname": "column_meal_day",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_companion",
+   "fieldtype": "Section Break",
+   "label": "陪餐评价"
+  },
+  {
+   "fieldname": "column_evaluation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_photo",
+   "fieldtype": "Section Break",
+   "label": "附件与确认"
   }
  ]
 }

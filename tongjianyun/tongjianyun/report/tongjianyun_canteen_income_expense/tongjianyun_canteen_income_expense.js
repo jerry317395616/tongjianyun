@@ -25,3 +25,5 @@ frappe.query_reports["Tongjianyun Canteen Income Expense"] = {
 ],
     onload(report) { report.page.set_title("食堂收支报表"); },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Income Expense", "食堂收支报表");

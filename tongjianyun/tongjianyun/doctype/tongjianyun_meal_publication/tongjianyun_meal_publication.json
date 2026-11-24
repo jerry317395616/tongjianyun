@@ -16,13 +16,15 @@
    "label": "食堂",
    "fieldtype": "Link",
    "options": "Tongjianyun Canteen",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "week_start",
    "label": "供餐周一",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "meal_week",
@@ -34,7 +36,8 @@
    "fieldname": "operator_name",
    "label": "公开供餐单位",
    "fieldtype": "Data",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "origins",
@@ -74,26 +77,50 @@
    "fieldname": "public_revision",
    "label": "公示版本",
    "fieldtype": "Int",
-   "read_only": 1
+   "read_only": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "change_notice",
    "label": "最近变更通知",
    "fieldtype": "Small Text",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "供餐公示"
+  },
+  {
+   "fieldname": "column_operator_name",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_origins",
+   "fieldtype": "Section Break",
+   "label": "食材与菜单"
+  },
+  {
+   "fieldname": "section_public_key",
+   "fieldtype": "Section Break",
+   "label": "发布信息"
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "week_start",
   "meal_week",
+  "column_operator_name",
   "operator_name",
   "public_revision",
   "change_notice",
+  "section_origins",
   "origins",
   "additives",
   "meals",
+  "section_public_key",
   "public_key",
   "public_menu"
  ],

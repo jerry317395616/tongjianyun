@@ -6,7 +6,7 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "autoname": "format:MEAL-REC-{#####}",
- "title_field": "delivery",
+ "title_field": "supplier",
  "track_changes": 1,
  "allow_rename": 0,
  "permissions": [
@@ -97,9 +97,11 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "delivery",
+  "column_supplier",
   "supplier",
   "arrived_at",
   "field_section",
@@ -108,10 +110,12 @@
   "accuracy",
   "location_at",
   "location_note",
+  "column_received_at",
   "received_at",
   "inspector",
   "reviewer",
   "purchase_receipt",
+  "section_items",
   "items",
   "remarks",
   "amended_from"
@@ -131,14 +135,14 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
+   "options": "Tongjianyun Canteen",
+   "in_list_view": 1
   },
   {
    "fieldname": "delivery",
    "label": "随货配送批次",
    "fieldtype": "Link",
    "reqd": 1,
-   "in_list_view": 1,
    "options": "Tongjianyun Canteen Delivery"
   },
   {
@@ -147,13 +151,15 @@
    "fieldtype": "Link",
    "read_only": 1,
    "in_standard_filter": 1,
-   "options": "Supplier"
+   "options": "Supplier",
+   "in_list_view": 1
   },
   {
    "fieldname": "arrived_at",
    "label": "实际到货时间",
    "fieldtype": "Datetime",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "field_section",
@@ -199,7 +205,8 @@
    "fieldtype": "Link",
    "read_only": 1,
    "no_copy": 1,
-   "options": "User"
+   "options": "User",
+   "in_list_view": 1
   },
   {
    "fieldname": "reviewer",
@@ -235,6 +242,24 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Canteen Receiving"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "到货验收"
+  },
+  {
+   "fieldname": "column_supplier",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_received_at",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_items",
+   "fieldtype": "Section Break",
+   "label": "批次验收明细"
   }
  ]
 }

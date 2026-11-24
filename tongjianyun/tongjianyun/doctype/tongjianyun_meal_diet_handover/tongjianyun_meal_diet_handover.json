@@ -29,28 +29,32 @@
    "fieldname": "service_date",
    "label": "日期",
    "fieldtype": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "meal_type",
    "label": "餐次",
    "fieldtype": "Select",
    "options": "早餐\n早点\n午餐\n午点\n晚餐",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "student_group",
    "label": "班级",
    "fieldtype": "Link",
    "options": "Student Batch Name",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "student",
    "label": "幼儿",
    "fieldtype": "Link",
    "options": "Student",
-   "reqd": 1
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "alternate",
@@ -70,17 +74,39 @@
    "label": "交接时间",
    "fieldtype": "Datetime",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "特殊餐交接"
+  },
+  {
+   "fieldname": "column_meal_type",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_alternate",
+   "fieldtype": "Section Break",
+   "label": "替代餐与确认"
+  },
+  {
+   "fieldname": "column_received_by",
+   "fieldtype": "Column Break"
   }
  ],
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "arrangement",
   "service_date",
+  "column_meal_type",
   "meal_type",
   "student_group",
   "student",
+  "section_alternate",
   "alternate",
+  "column_received_by",
   "received_by",
   "confirmed_at"
  ],
@@ -121,5 +147,5 @@
  "is_submittable": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
- "title_field": "student_group"
+ "title_field": "student"
 }

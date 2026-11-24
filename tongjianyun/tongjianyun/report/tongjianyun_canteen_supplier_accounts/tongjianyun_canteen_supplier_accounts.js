@@ -31,3 +31,5 @@ frappe.query_reports["Tongjianyun Canteen Supplier Accounts"] = {
 ],
     onload(report) { report.page.set_title("供应商对账与结算"); },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Supplier Accounts", "供应商对账与结算");

@@ -9,6 +9,8 @@ app_description = "ERP 周食谱与食谱分析"
 app_email = "admin@example.com"
 app_license = "mit"
 required_apps = ["erpnext", "ione_core"]
+app_include_js = ["/assets/tongjianyun/js/meal_desk.js?v=20261124.2"]
+app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.2"]
 app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
 add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]
@@ -129,3 +131,11 @@ for _record in _MEAL_RECORDS:
     has_permission[_record] = "tongjianyun.canteen_ops.meal_operations.permitted"
     doctype_js[_record] = "public/js/meal_operations.js"
 doctype_js["Material Request"] = "public/js/canteen_forms.js"
+
+
+# Install after native list scripts, keeping actions such as receiving scans and label printing.
+from tongjianyun.canteen_ops.navigation import GROUPS as _MEAL_GROUPS
+
+for _dt in {target for _, _, entries in _MEAL_GROUPS for kind, target, _, _ in entries if kind == "DocType"}:
+    _previous = doctype_list_js.get(_dt)
+    doctype_list_js[_dt] = ([_previous] if _previous else []) + ["public/js/meal_desk_list.js"]

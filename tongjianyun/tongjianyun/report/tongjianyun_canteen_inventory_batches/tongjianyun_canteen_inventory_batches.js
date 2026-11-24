@@ -32,3 +32,5 @@ frappe.query_reports["Tongjianyun Canteen Inventory Batches"] = {
 ],
     onload(report) { report.page.set_title("实时库存与效期"); },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Inventory Batches", "实时库存与效期");

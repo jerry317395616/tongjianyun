@@ -1,0 +1,1 @@
+frappe.tjyMealDesk.installLists();

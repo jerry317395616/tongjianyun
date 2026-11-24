@@ -8,7 +8,8 @@ from frappe.desk.doctype.sidebar.sidebar import item_key
 from tongjianyun.canteen_ops import common
 from tongjianyun.ingredient_library import LAYOUT, LIBRARY, MARKER
 
-INGREDIENT_URL = "/desk/item/view/list?" + urlencode({"layout": LAYOUT, MARKER: 1})
+_OLD_INGREDIENT_URL = "/desk/item/view/list?" + urlencode({"layout": LAYOUT, MARKER: 1})
+INGREDIENT_URL = _OLD_INGREDIENT_URL.replace("/desk/", "/desk/膳食与食堂/", 1)
 
 _OLD_GROUPS = (
     ("菜品与食谱", "book-open", (
@@ -97,10 +98,15 @@ def install_navigation(module, dish_route_options):
     sidebar = (frappe.get_doc("Custom Sidebar", saved.name, for_update=True) if saved
                else frappe.new_doc("Custom Sidebar").update({"module": module, "user": ""}))
     previous = list(sidebar.sidebar_items)
+    updated = False
+    for row in previous:
+        if row.link_type == "URL" and row.url == _OLD_INGREDIENT_URL and row.label == LIBRARY:
+            row.url = INGREDIENT_URL
+            row.key = item_key(row)
+            updated = True
     headings = {row.label: row for row in previous if row.type == "Section Break"}
     links = {_entry_key(row): row for row in previous if row.type == "Link"}
     layout, managed = [], set()
-    updated = False
     for index, (title, icon, entries) in enumerate(GROUPS):
         section = headings.get(title) or headings.get(PREVIOUS_TITLES.get(title))
         heading = {"type": "Section Break", "label": title, "icon": icon, "indent": 1,

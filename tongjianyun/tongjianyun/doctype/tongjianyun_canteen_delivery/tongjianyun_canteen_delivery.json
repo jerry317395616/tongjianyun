@@ -6,7 +6,7 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "autoname": "format:MEAL-DEL-{#####}",
- "title_field": "purchase_order",
+ "title_field": "supplier",
  "track_changes": 1,
  "allow_rename": 0,
  "permissions": [
@@ -93,16 +93,19 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "supplier",
   "purchase_order",
+  "column_expected_on",
   "expected_on",
   "package_reference",
   "qr_token",
   "progress",
   "progress_at",
   "progress_note",
+  "section_items",
   "items",
   "evidence",
   "remarks",
@@ -123,7 +126,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
+   "options": "Tongjianyun Canteen",
+   "in_list_view": 1
   },
   {
    "fieldname": "supplier",
@@ -131,14 +135,14 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Supplier"
+   "options": "Supplier",
+   "in_list_view": 1
   },
   {
    "fieldname": "purchase_order",
    "label": "采购订单",
    "fieldtype": "Link",
    "reqd": 1,
-   "in_list_view": 1,
    "options": "Purchase Order"
   },
   {
@@ -212,6 +216,20 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Canteen Delivery"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "配送信息"
+  },
+  {
+   "fieldname": "column_expected_on",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_items",
+   "fieldtype": "Section Break",
+   "label": "随货明细"
   }
  ]
 }

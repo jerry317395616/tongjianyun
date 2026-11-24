@@ -37,3 +37,5 @@ frappe.query_reports["Tongjianyun Canteen Stock Count"] = {
 ],
     onload(report) { report.page.set_title("食堂盘点报表"); },
 };
+
+frappe.tjyMealDesk?.registerReport("Tongjianyun Canteen Stock Count", "食堂盘点报表");

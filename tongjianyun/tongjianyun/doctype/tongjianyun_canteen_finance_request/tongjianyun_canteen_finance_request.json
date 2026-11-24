@@ -53,16 +53,20 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "section_company",
   "company",
   "canteen",
   "operation",
+  "column_posting_date",
   "posting_date",
   "financial_project",
   "external_reference",
   "amount",
   "evidence",
+  "section_debit_account",
   "debit_account",
   "credit_account",
+  "column_policy",
   "policy",
   "journal_entry",
   "remarks",
@@ -83,7 +87,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
+   "options": "Tongjianyun Canteen",
+   "in_list_view": 1
   },
   {
    "fieldname": "operation",
@@ -118,7 +123,8 @@
    "label": "确认金额",
    "fieldtype": "Currency",
    "reqd": 1,
-   "non_negative": 1
+   "non_negative": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "evidence",
@@ -165,6 +171,24 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Canteen Finance Request"
+  },
+  {
+   "fieldname": "section_company",
+   "fieldtype": "Section Break",
+   "label": "凭证申请"
+  },
+  {
+   "fieldname": "column_posting_date",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_debit_account",
+   "fieldtype": "Section Break",
+   "label": "记账科目"
+  },
+  {
+   "fieldname": "column_policy",
+   "fieldtype": "Column Break"
   }
  ]
 }

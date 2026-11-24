@@ -170,7 +170,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
-   "options": "Tongjianyun Canteen"
+   "options": "Tongjianyun Canteen",
+   "in_list_view": 1
   },
   {
    "fieldname": "term_project",
@@ -207,7 +208,8 @@
    "label": "责任人",
    "fieldtype": "Link",
    "reqd": 1,
-   "options": "User"
+   "options": "User",
+   "in_list_view": 1
   },
   {
    "fieldname": "meal_week",
