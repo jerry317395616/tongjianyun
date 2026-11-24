@@ -5,7 +5,6 @@
 	const prefix = "tongjianyun.canteen_ops.";
 	const site = "Tongjianyun Canteen";
 	const term = "Tongjianyun Meal Term Project";
-	const task = "Tongjianyun Meal Weekly Task";
 	const dispatch = "Tongjianyun Canteen Purchase Dispatch";
 	const delivery = "Tongjianyun Canteen Delivery";
 	const receiving = "Tongjianyun Canteen Receiving";
@@ -370,7 +369,7 @@
 			}
 		}
 	});
-	for (const doctype of [rule, review, task, "Tongjianyun Canteen Credential", "Tongjianyun Canteen Training"]) {
+	for (const doctype of [rule, review, "Tongjianyun Canteen Credential", "Tongjianyun Canteen Training"]) {
 		f.ui.form.on(doctype, { setup: setSiteQuery, refresh: photoExisting });
 	}
 	f.ui.form.on(site, {

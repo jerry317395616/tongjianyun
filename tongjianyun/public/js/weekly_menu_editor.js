@@ -138,6 +138,18 @@
 		}
 	}
 
+	function openTaskDestination(frm) {
+		const target = frappe.tjy_week_task_destination;
+		if (!target || target.name !== frm.doc.name || !isCurrentWeek(frm, target.name)) return;
+		delete frappe.tjy_week_task_destination;
+		frm.layout.select_tab(basicTab);
+		const procurement = target.section === "procurement";
+		if (procurement) frm.custom_buttons?.[__("采购需求预览")]?.trigger("click");
+		const field = procurement ? "procurement_html" : "kitchen_reconciled";
+		const section = frm.fields_dict[field]?.$wrapper?.closest(".form-section");
+		section?.[0]?.scrollIntoView({ block: "center" });
+	}
+
 	async function refresh(frm) {
 		const $grid = frm.fields_dict.meals?.$wrapper;
 		if (!$grid?.length) return;
@@ -192,6 +204,7 @@
 			$mealSection?.show();
 			$grid.show();
 		}
+		openTaskDestination(frm);
 	}
 
 	function isCurrentWeek(frm, name) {

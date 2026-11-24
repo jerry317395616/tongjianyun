@@ -122,20 +122,28 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "scope_summary",
+  "assignment_section",
+  "assigned_to",
+  "assignment_column",
+  "due_date",
+  "work_section",
+  "menu_panel",
+  "record_section",
+  "remarks",
+  "confirmed_at",
+  "details_section",
   "company",
   "canteen",
   "term_project",
-  "week_start",
+  "details_column",
   "task_kind",
-  "due_date",
-  "assigned_to",
-  "menu_panel",
+  "week_start",
+  "management_task",
+  "task_id",
+  "amended_from",
   "menu_confirmed",
   "meal_week",
-  "management_task",
-  "confirmed_at",
-  "remarks",
-  "amended_from",
   "generated_by_term"
  ],
  "fields": [
@@ -216,7 +224,8 @@
    "label": "完成时间",
    "fieldtype": "Datetime",
    "read_only": 1,
-   "no_copy": 1
+   "no_copy": 1,
+   "depends_on": "eval:!!doc.confirmed_at"
   },
   {
    "fieldname": "remarks",
@@ -242,7 +251,7 @@
   },
   {
    "fieldname": "menu_panel",
-   "label": "本周食谱",
+   "label": "任务办理",
    "fieldtype": "HTML"
   },
   {
@@ -253,6 +262,47 @@
    "read_only": 1,
    "no_copy": 1,
    "default": "0"
+  },
+  {
+   "fieldname": "scope_summary",
+   "fieldtype": "HTML",
+   "depends_on": "eval:!doc.__islocal",
+   "label": "供餐周"
+  },
+  {
+   "fieldname": "assignment_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "assignment_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "work_section",
+   "fieldtype": "Section Break",
+   "depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "record_section",
+   "fieldtype": "Section Break",
+   "label": "办理记录"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:doc.__islocal",
+   "label": "任务详情"
+  },
+  {
+   "fieldname": "details_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "task_id",
+   "fieldtype": "HTML",
+   "depends_on": "eval:!doc.__islocal",
+   "label": "任务编号"
   }
  ]
 }

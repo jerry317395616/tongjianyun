@@ -137,7 +137,10 @@ def _visible(week):
 
 @frappe.whitelist(methods=["GET"])
 def menu_context(task):
-    doc = linked(TASK, task)
+    return _menu_context(linked(TASK, task))
+
+
+def _menu_context(doc):
     monday = getdate(doc.week_start)
     if doc.docstatus:
         menu = frappe.db.get_value(WEEK, doc.meal_week, ["name", "title", "docstatus"], as_dict=True) if doc.meal_week else None
