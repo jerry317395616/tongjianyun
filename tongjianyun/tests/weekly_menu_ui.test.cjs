@@ -49,6 +49,13 @@ test("native week shows the calendar and supports editing meals in order", async
 	const calendar = element("<div>").appendTo(page);
 	const days = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
 	const slots = ["早餐", "早点", "午餐", "午点", "晚餐"];
+	const dishes = [
+		{ item: "A", bom: "BOM-A-2", name: "原菜", category: "素菜", meal_slots: ["早餐", "午餐"] },
+		{ item: "D", bom: "BOM-D", name: "原菜", category: "主食", meal_slots: ["午餐"] },
+		{ item: "B", bom: "BOM-B", name: "新菜", category: "素菜", meal_slots: [] },
+		{ item: "C", name: "待审菜", status: "配方待审核", meal_slots: [] },
+		{ item: "E", bom: "BOM-E", name: "晚餐菜", category: "荤菜", meal_slots: ["晚餐"] },
+	];
 	const calls = [];
 	const assets = [];
 	const tabsOpened = [];
@@ -93,13 +100,13 @@ test("native week shows the calendar and supports editing meals in order", async
 				[{ date: days[1], slot: "早餐", menu: "", stopped: true, reason: "园所活动", headcount: 0 }] : [] } };
 			if (operation === "initialize") { initialized = true; return { message: { skipped_recipes: 0 } }; }
 			if (operation === "get_meal") return { message: { modified: `revision-${revision}`, base_headcount: 40, dishes: [
-				{ item: "A", bom: "BOM-A-1", name: "原菜" },
+				{ item: "A", bom: "BOM-A-1", name: "原菜", category: "素菜" },
 			] } };
-			if (operation === "dishes") return { message: { page_size: 15, has_more: false, rows: [
-				{ item: "A", bom: "BOM-A-2", name: "原菜", category: "素菜" },
-				{ item: "B", bom: "BOM-B", name: "新菜", category: "素菜" },
-				{ item: "C", name: "待审菜", status: "配方待审核" },
-			] } };
+			if (operation === "dishes") return { message: { page_size: 15, has_more: false, rows: dishes.filter((dish) =>
+				(args.all_slots || !dish.meal_slots.length || dish.meal_slots.includes(args.meal_type))
+				&& (!args.category || args.category === (dish.category || "未分类"))
+				&& (!args.search || dish.name.includes(args.search) || dish.item.includes(args.search)),
+			) } };
 			if (operation === "ingredients") return { message: [{ name: "小白菜", gross: 60, uom: "克" }] };
 			if (operation === "save_meal") {
 				if (rejectSave) return { exc: true };
@@ -139,7 +146,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
 	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
 	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
-	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-composer.css"]);
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-catalog-table.css"]);
 	assert.equal(page.all("<progress>")[0].attrs.value, 1);
 	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();
@@ -148,6 +155,9 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(dialog.options.no_submit_on_enter, true);
 	assert.equal(dialog.options.primary_action_label, "保存并编排下一餐");
 	assert.equal(dialog.options.secondary_action_label, "保存本餐");
+	const field = (name) => dialog.options.fields.find((item) => item.fieldname === name);
+	assert.equal(field("catalog_slot").default, "午餐");
+	assert.equal(field("catalog_slot").options.at(-1).label, "全部餐次");
 	const adjustments = dialog.fields_dict.adjustments.$wrapper.all("<details>")[0];
 	assert.equal(adjustments.attrs.open, undefined);
 	dialog.values.excluded_count = 3;
@@ -158,10 +168,44 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(dialog.fields_dict.counts_summary.$wrapper.all("<strong>")[0].content, "整餐停供");
 	dialog.values.stopped = 0;
 	const options = dialog.fields_dict.options.$wrapper;
+	const table = options.all("<table>")[0];
+	assert.deepEqual(table.all("<thead>")[0].all("<th>").map((node) => node.content), ["菜品名称", "适用餐次", "菜品分类", "操作"]);
+	assert.equal(table.all("<tbody>")[0].all("<tr>").length, 4);
+	assert.deepEqual(table.all("<strong>").map((node) => node.content), ["午餐", "午餐"]);
+	assert.ok(table.all("<div>").some((node) => node.content === "未限定"));
+	assert.ok(table.all("<td>").some((node) => node.content === "未分类"));
+	assert.deepEqual(table.all("<small>").map((node) => node.content), ["A", "D", "B", "C"]);
 	assert.ok(options.all("<span>").some((node) => node.content === "配方待审核"));
 	assert.ok(options.all("<button>").some((node) => node.content === "已选" && node.attrs.disabled));
-	options.all("<button>").find((node) => node.content === "添加").events.click();
+
+	async function setFilter(name, value) {
+		dialog.values[name] = value;
+		await field(name).onchange();
+		return calls.at(-1)[2];
+	}
+	const all = await setFilter("catalog_slot", "all");
+	assert.equal(all.all_slots, 1);
+	assert.ok(options.all("<span>").some((node) => node.content === "晚餐菜"));
+	assert.equal((await setFilter("catalog_slot", "晚餐")).meal_type, "晚餐");
+	assert.equal(calls.at(-1)[2].all_slots, 0);
+	await setFilter("category", "未分类");
+	assert.deepEqual(options.all("<small>").map((node) => node.content), ["C"]);
+	await setFilter("category", "");
+	await setFilter("catalog_slot", "午餐");
+	dialog.values.search = "D";
+	dialog.fields_dict.search.$input.events.input();
+	await new Promise(setImmediate);
+	assert.equal(calls.at(-1)[2].search, "D");
+	assert.equal(options.all("<button>")[0].attrs["aria-label"], "添加原菜（D）");
+	options.all("<button>")[0].events.click();
 	const chosen = dialog.fields_dict.chosen.$wrapper;
+	assert.ok(chosen.all("<small>").some((node) => node.content === "主食 · D"));
+	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "移除原菜（D）").events.click();
+	dialog.values.search = "";
+	dialog.fields_dict.search.$input.events.input();
+	await new Promise(setImmediate);
+	options.all("<button>").find((node) => node.attrs["aria-label"] === "添加新菜（B）").events.click();
+	assert.ok(chosen.all("<small>").some((node) => node.content === "素菜"));
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "查看新菜的带量").events.click();
 	await new Promise(setImmediate);
 	assert.ok(chosen.all("<div>").some((node) => node.content === "小白菜 60 克"));

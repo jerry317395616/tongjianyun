@@ -17,7 +17,7 @@
 	});
 	function loadStyles() {
 		// The Frappe asset loader looks for the file extension after the version query.
-		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-composer.css"))
+		styles ??= Promise.resolve(frappe.require("/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-catalog-table.css"))
 			.catch(() => { styles = undefined; });
 	}
 	function dateLabel(value, year = false) {
@@ -239,9 +239,12 @@
 				{ fieldname: "catalog_column", fieldtype: "Column Break" },
 				{ fieldname: "catalog_heading", fieldtype: "HTML" },
 				{ fieldname: "search", fieldtype: "Data", label: "搜索菜品", placeholder: "菜名或编码" },
+				{ fieldname: "catalog_slot", fieldtype: "Select", label: "餐次", default: args.meal_type,
+					options: [{ label: `当前餐次 · ${args.meal_type}`, value: args.meal_type },
+						...slots.filter((slot) => slot !== args.meal_type), { label: "全部餐次", value: "all" }],
+					onchange: resetSearch },
 				{ fieldname: "category", fieldtype: "Select", label: "菜品分类",
-					options: [{ label: "全部分类", value: "" }, ...categories], onchange: resetSearch },
-				{ fieldname: "all_slots", fieldtype: "Check", label: "显示其他餐次的菜品", onchange: resetSearch },
+					options: [{ label: "全部分类", value: "" }, ...categories, "未分类"], onchange: resetSearch },
 				{ fieldname: "options", fieldtype: "HTML" },
 				{ fieldname: "menu_column", fieldtype: "Column Break" },
 				{ fieldname: "counts_summary", fieldtype: "HTML" },
@@ -367,25 +370,27 @@
 				const $entry = $("<div>").appendTo($list);
 				const $row = $("<div>", { class: "tgy-picker-row" }).appendTo($entry);
 				const $label = $("<div>", { class: "tgy-picker-name" }).appendTo($row);
+				const sameName = selected.some((other) => other !== dish && other.name === dish.name);
+				const label = sameName ? `${dish.name}（${dish.item}）` : dish.name;
 				$("<span>").text(dish.name).appendTo($label);
-				if (dish.category) $("<small>").text(dish.category).appendTo($label);
+				$("<small>").text(sameName ? `${dish.category || "未分类"} · ${dish.item}` : dish.category || "未分类").appendTo($label);
 				const $actions = $("<div>", { class: "tgy-picker-row-actions" }).appendTo($row);
 				const expanded = expandedBom === dish.bom;
 				const $quantity = button($actions, "带量", () => {
 					expandedBom = expanded ? undefined : dish.bom;
 					renderChosen(dish.bom, "quantity");
-				}).attr({ "aria-expanded": String(expanded), "aria-label": `查看${dish.name}的带量` });
+				}).attr({ "aria-expanded": String(expanded), "aria-label": `查看${label}的带量` });
 				const $up = button($actions, "↑", () => move(-1, "up"))
-					.attr({ "aria-label": `上移${dish.name}`, title: "上移" }).prop("disabled", position === 0);
+					.attr({ "aria-label": `上移${label}`, title: "上移" }).prop("disabled", position === 0);
 				const $down = button($actions, "↓", () => move(1, "down"))
-					.attr({ "aria-label": `下移${dish.name}`, title: "下移" }).prop("disabled", position === selected.length - 1);
+					.attr({ "aria-label": `下移${label}`, title: "下移" }).prop("disabled", position === selected.length - 1);
 				const $remove = button($actions, "×", () => {
 					selected.splice(position, 1);
 					if (expanded) expandedBom = undefined;
 					renderChosen(selected[Math.min(position, selected.length - 1)]?.bom, "remove");
 					renderOptions(lastOptions, $options.find(".tgy-picker-options").scrollTop());
 					if (!selected.length) fields.search.$input.trigger("focus");
-				}).attr({ "aria-label": `移除${dish.name}`, title: "移除" });
+				}).attr({ "aria-label": `移除${label}`, title: "移除" });
 				if (expanded) renderIngredients($entry, dish);
 				if (focusBom === dish.bom) {
 					const actions = { quantity: $quantity, up: position > 0 ? $up : $down,
@@ -425,10 +430,11 @@
 			lastOptions = null;
 			message($options.empty(), "正在查找标准菜品…");
 			try {
+				const slot = dialog.get_value("catalog_slot") || args.meal_type;
 				const result = await call("dishes", {
-					week_name: args.week_name, meal_type: args.meal_type, start: offset,
+					week_name: args.week_name, meal_type: slot === "all" ? args.meal_type : slot, start: offset,
 					search: dialog.get_value("search") || "", category: dialog.get_value("category") || "",
-					all_slots: dialog.get_value("all_slots") || 0,
+					all_slots: Number(slot === "all"),
 				});
 				if (!closed && sequence === request) {
 					lastOptions = result;
@@ -444,28 +450,40 @@
 
 		function renderOptions(result, scrollTop = 0, afterItem) {
 			if (!result) return;
-			const $list = $("<div>", { class: "tgy-picker-list tgy-picker-options" }).appendTo($options.empty());
+			const $list = $("<div>", { class: "tgy-picker-options" }).appendTo($options.empty());
+			const $table = $("<table>", { class: "tgy-picker-table", "aria-label": "标准菜品列表" }).appendTo($list);
+			const $head = $("<tr>").appendTo($("<thead>").appendTo($table));
+			for (const label of ["菜品名称", "适用餐次", "菜品分类", "操作"]) {
+				$("<th>", { scope: "col" }).text(label).appendTo($head);
+			}
+			const $body = $("<tbody>").appendTo($table);
 			if (!result.rows.length) message($list, "暂无符合条件的标准菜品。");
 			let passedItem = false;
 			let $nextOption;
 			for (const dish of result.rows) {
-				const $entry = $("<div>").appendTo($list);
-				const $row = $("<div>", { class: "tgy-picker-row" }).appendTo($entry);
-				const $label = $("<div>", { class: "tgy-picker-name" }).appendTo($row);
+				const $row = $("<tr>").appendTo($body);
+				const $label = $("<th>", { scope: "row", class: "tgy-picker-name" }).appendTo($row);
 				$("<span>").text(dish.name).appendTo($label);
-				if (dish.category) $("<small>").text(dish.category).appendTo($label);
+				$("<small>").text(dish.item).appendTo($label);
+				const $slots = $("<div>", { class: "tgy-picker-slots" }).appendTo($("<td>").appendTo($row));
+				for (const slot of dish.meal_slots || []) {
+					$(slot === args.meal_type ? "<strong>" : "<span>").text(slot).appendTo($slots);
+				}
+				if (!dish.meal_slots?.length) $slots.text("未限定");
+				$("<td>").text(dish.category || "未分类").appendTo($row);
+				const $actions = $("<td>", { class: "tgy-picker-option-action" }).appendTo($row);
 				if (!dish.bom) {
-					$("<span>", { class: "text-muted" }).text(dish.status).appendTo($row);
+					$("<span>", { class: "text-muted" }).text(dish.status).appendTo($actions);
 					continue;
 				}
 				const picked = selected.some((item) => item.item === dish.item);
-				const $add = button($row, picked ? "已选" : "添加", () => {
+				const $add = button($actions, picked ? "已选" : "添加", () => {
 					if (closed || frm.__meal_action_running) return;
 					if (selected.length >= 20) return frappe.msgprint("每餐最多选择 20 道菜。");
 					selected.push(dish);
 					renderChosen();
 					renderOptions(result, $list.scrollTop(), dish.item);
-				}).attr("aria-label", `${picked ? "已选" : "添加"}${dish.name}`).prop("disabled", picked);
+				}).attr("aria-label", `${picked ? "已选" : "添加"}${dish.name}（${dish.item}）`).prop("disabled", picked);
 				if (passedItem && !picked && !$nextOption) $nextOption = $add;
 				if (afterItem === dish.item) passedItem = true;
 			}

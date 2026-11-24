@@ -19,6 +19,7 @@ from tongjianyun.dish_library import _preview_ingredients, _require, _visible
 from tongjianyun.standard_recipes import CATEGORIES, DISH, DISH_CATEGORY, MARKER, PENDING, STATE
 
 PAGE_SIZE = 15
+UNCLASSIFIED = "未分类"
 
 
 class MealMenuDraftPlan:
@@ -198,12 +199,20 @@ def get_meal(week_name: str, meal_date: str, meal_type: str):
     row = _meal(week, meal_date, meal_type)
     plan = planning._bound_plan(week, row)
     plan.check_permission("read")
+    codes = {line.item_code for line in plan.po_items}
+    categories = {}
+    if codes and frappe.has_permission("Item", "read"):
+        categories = {item.name: item.get(DISH_CATEGORY) for item in frappe.get_list(
+            "Item", filters={"name": ["in", sorted(codes)]}, fields=["name", DISH_CATEGORY], limit_page_length=0,
+        )}
     return {
         "modified": str(week.modified), "base_headcount": row.base_student_count,
         "excluded_count": row.excluded_count, "adjustment_reason": row.adjustment_reason,
         "stopped": bool(row.service_suspended), "reason": row.suspension_reason,
-        "dishes": [dict(bom=line.bom_no, item=line.item_code, name=line.custom_dish_name or line.item_code)
-                   for line in plan.po_items],
+        "dishes": [dict(
+            bom=line.bom_no, item=line.item_code, name=line.custom_dish_name or line.item_code,
+            category=categories.get(line.item_code),
+        ) for line in plan.po_items],
     }
 
 
@@ -212,14 +221,18 @@ def dishes(week_name: str, meal_type: str, search: str = "", category: str = "",
            all_slots: int = 0):
     week = _editable_week(week_name)
     _require("BOM")
-    if meal_type not in planning.SLOTS or (category and category not in CATEGORIES):
+    if meal_type not in planning.SLOTS or (category and category not in (*CATEGORIES, UNCLASSIFIED)):
         frappe.throw("请选择有效的餐次和菜品分类。")
     item = frappe.qb.DocType("Item")
     filters = {DISH: 1, "disabled": 0, "is_purchase_item": 0, "has_variants": 0}
-    if category:
+    if category in CATEGORIES:
         filters[DISH_CATEGORY] = category
-    query = Engine().get_query(item, fields=["name", "item_name", DISH_CATEGORY], filters=filters,
-                               ignore_permissions=False, order_by="item_name asc, name asc")
+    query = Engine().get_query(
+        item, fields=["name", "item_name", DISH_CATEGORY, *planning.SLOT_FIELDS.values()], filters=filters,
+        ignore_permissions=False, order_by="item_name asc, name asc",
+    )
+    if category == UNCLASSIFIED:
+        query = query.where(Coalesce(getattr(item, DISH_CATEGORY), "") == "")
     if not all_slots:
         slot_field = planning.SLOT_FIELDS[meal_type]
         no_slots = Coalesce(getattr(item, slot_field), 0) == 0
@@ -245,8 +258,11 @@ def dishes(week_name: str, meal_type: str, search: str = "", category: str = "",
         recipes = by_item.get(row.name, [])
         active = next((bom for bom in recipes if bom.docstatus == 1 and bom.is_active and bom.quantity == 1), None)
         status = "可选" if active else _unavailable_status(recipes)
-        result.append(dict(item=row.name, name=row.item_name, category=row.get(DISH_CATEGORY),
-                           bom=active.name if active else None, status=status))
+        result.append(dict(
+            item=row.name, name=row.item_name, category=row.get(DISH_CATEGORY),
+            meal_slots=[slot for slot, field in planning.SLOT_FIELDS.items() if cint(row.get(field)) == 1],
+            bom=active.name if active else None, status=status,
+        ))
     return {"rows": result, "has_more": len(rows) > PAGE_SIZE, "page_size": PAGE_SIZE}
 
 

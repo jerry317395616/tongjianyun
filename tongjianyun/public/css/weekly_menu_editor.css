@@ -267,7 +267,7 @@ button.tgy-meal-cell:hover {
 
 .tgy-week-picker .modal-dialog {
 	width: calc(100% - 32px);
-	max-width: 920px;
+	max-width: 1000px;
 	margin-inline: auto;
 }
 
@@ -301,11 +301,11 @@ button.tgy-meal-cell:hover {
 
 .tgy-week-picker .form-section[data-fieldname="composer"] > .section-body {
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
 	margin: 0;
 }
 
-.tgy-week-picker .form-column {
+.tgy-week-picker .form-section[data-fieldname="composer"] > .section-body > .form-column {
 	width: auto;
 	min-width: 0;
 	max-width: none;
@@ -318,12 +318,13 @@ button.tgy-meal-cell:hover {
 
 .tgy-week-picker .form-column[data-fieldname="catalog_column"] > form {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, .65fr);
+	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, .9fr);
 	gap: 8px 10px;
 	align-items: start;
 }
 
-.tgy-week-picker .form-column[data-fieldname="catalog_column"] > form > :not([data-fieldname="search"], [data-fieldname="category"]) {
+.tgy-week-picker .form-column[data-fieldname="catalog_column"] > form >
+	:not([data-fieldname="search"], [data-fieldname="catalog_slot"], [data-fieldname="category"]) {
 	grid-column: 1 / -1;
 }
 
@@ -377,6 +378,70 @@ button.tgy-meal-cell:hover {
 	overscroll-behavior: contain;
 }
 
+.tgy-picker-table {
+	width: 100%;
+	table-layout: fixed;
+	border-spacing: 0;
+	border-collapse: separate;
+}
+
+.tgy-picker-table :is(th, td) {
+	padding: 8px 6px;
+	border-bottom: 1px solid var(--tgy-line);
+	text-align: start;
+	vertical-align: middle;
+	overflow-wrap: anywhere;
+}
+
+.tgy-picker-table thead th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--tgy-shade);
+	color: var(--tgy-muted);
+	font-size: var(--text-sm, 12px);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.tgy-picker-table thead th:nth-child(2) {
+	width: 27%;
+}
+
+.tgy-picker-table thead th:nth-child(3) {
+	width: 66px;
+}
+
+.tgy-picker-table thead th:last-child {
+	width: 72px;
+}
+
+.tgy-picker-table tr > :last-child {
+	text-align: end;
+}
+
+.tgy-picker-slots {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 7px;
+	color: var(--tgy-muted);
+	font-size: var(--text-sm, 12px);
+}
+
+.tgy-picker-slots strong {
+	color: var(--tgy-green);
+	font-weight: 650;
+}
+
+.tgy-picker-option-action {
+	font-size: var(--text-sm, 12px);
+}
+
+.tgy-picker-options > [role="status"] {
+	padding: 8px 6px;
+}
+
 .tgy-picker-list > div {
 	border-bottom: 1px solid var(--tgy-line);
 }
@@ -390,7 +455,7 @@ button.tgy-meal-cell:hover {
 	padding: 8px 0;
 }
 
-.tgy-week-picker :is(.modal-actions, .tgy-picker-row, .tgy-picker-pages) .btn {
+.tgy-week-picker :is(.modal-actions, .tgy-picker-row, .tgy-picker-pages, .tgy-picker-option-action) .btn {
 	margin: 0 !important;
 	white-space: nowrap;
 }
@@ -453,6 +518,16 @@ button.tgy-meal-cell:hover {
 	margin: 0;
 }
 
+@media (max-width: 850px) {
+	.tgy-week-picker .form-column[data-fieldname="catalog_column"] > form {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.tgy-week-picker .form-column[data-fieldname="catalog_column"] > form > [data-fieldname="search"] {
+		grid-column: 1 / -1;
+	}
+}
+
 @media (max-width: 700px) {
 	.tgy-week-picker .modal-dialog {
 		width: calc(100% - 16px);
@@ -472,8 +547,22 @@ button.tgy-meal-cell:hover {
 		border-top: 1px solid var(--tgy-line);
 	}
 
-	.tgy-week-picker .form-column {
+	.tgy-week-picker .form-section[data-fieldname="composer"] > .section-body > .form-column {
 		padding: 12px 16px;
+	}
+}
+
+@media (max-width: 400px) {
+	.tgy-picker-table :is(th, td) {
+		padding-inline: 4px;
+	}
+
+	.tgy-picker-table thead th:nth-child(3) {
+		width: 57px;
+	}
+
+	.tgy-picker-table thead th:last-child {
+		width: 58px;
 	}
 }
 
