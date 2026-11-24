@@ -129,11 +129,21 @@
   "due_date",
   "assigned_to",
   "meal_week",
+  "management_task",
   "confirmed_at",
   "remarks",
   "amended_from"
  ],
  "fields": [
+  {
+   "fieldname": "management_task",
+   "label": "管理项目任务",
+   "fieldtype": "Link",
+   "options": "Task",
+   "read_only": 1,
+   "no_copy": 1,
+   "search_index": 1
+  },
   {
    "fieldname": "company",
    "label": "园所 / 账套",

@@ -34,6 +34,7 @@ doctype_js = {
                              "public/js/special_ingredients.js", "public/js/special_orders.js", "public/js/canteen_forms.js"],
     **{doctype: "public/js/canteen_forms.js" for doctype in (*_CANTEEN_DOCTYPES, "Meal Kitchen Day",
                                                            "Purchase Order", "Request for Quotation")},
+    "Tongjianyun Meal Term Project": ["public/js/canteen_forms.js", "public/js/meal_term_project.js"],
 }
 doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js",
                    "Tongjianyun Canteen Receiving": "public/js/canteen_receiving_list.js",
@@ -55,7 +56,18 @@ doc_events = {
         "before_submit": "tongjianyun.recipe_nutrition.freeze_week",
         "on_submit": "tongjianyun.special_ingredients.freeze",
         "on_trash": "tongjianyun.weekly_menu_editor.delete_draft_meal_plans",
+        "on_change": "tongjianyun.canteen_ops.term_projects.queue_week",
     },
+    "Meal Kitchen Day": {
+        event: "tongjianyun.canteen_ops.term_projects.queue_day" for event in ("on_submit", "on_cancel")
+    },
+    "Tongjianyun Meal Term Project": {
+        event: "tongjianyun.canteen_ops.term_projects.queue_term" for event in ("on_update", "on_update_after_submit")
+    },
+    "Tongjianyun Meal Weekly Task": {
+        event: "tongjianyun.canteen_ops.term_projects.queue_weekly_task" for event in ("on_update", "on_cancel")
+    },
+    "Task": {"validate": "tongjianyun.canteen_ops.term_projects.protect_task"},
     "Production Plan": {"before_validate": "tongjianyun.meal_portions.validate_plan_scope"},
     "Meal Plan Adjustment": {
         "validate": "tongjianyun.meal_portions.validate_adjustment",
@@ -63,8 +75,9 @@ doc_events = {
         "on_submit": "tongjianyun.special_ingredients.freeze",
     },
     "Material Request": {
-        event: "tongjianyun.special_orders.check_request"
-        for event in ("validate", "before_submit", "before_update_after_submit")
+        **{event: "tongjianyun.special_orders.check_request"
+           for event in ("validate", "before_submit", "before_update_after_submit")},
+        "on_cancel": "tongjianyun.canteen_ops.term_projects.queue_request",
     },
     "Purchase Order": {
         "validate": "tongjianyun.special_orders.check_order",

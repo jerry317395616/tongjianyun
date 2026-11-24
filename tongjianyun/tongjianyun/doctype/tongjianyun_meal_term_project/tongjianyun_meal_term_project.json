@@ -119,20 +119,64 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "term_details",
   "company",
   "canteen",
   "project_title",
+  "term_dates_column",
   "from_date",
   "to_date",
   "responsible_user",
+  "management_project",
+  "week_progress_section",
+  "week_progress",
+  "service_details",
+  "service_scope",
+  "service_finance_column",
   "nutrition_plan",
   "financial_project",
-  "service_scope",
   "approved_budget",
   "remarks",
   "amended_from"
  ],
  "fields": [
+  {
+   "fieldname": "term_details",
+   "label": "学期信息",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "term_dates_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "management_project",
+   "label": "管理项目",
+   "fieldtype": "Link",
+   "options": "Project",
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "week_progress_section",
+   "fieldtype": "Section Break",
+   "label": "按周进度",
+   "depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "week_progress",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "service_details",
+   "label": "供餐与专项",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "service_finance_column",
+   "fieldtype": "Column Break"
+  },
   {
    "fieldname": "company",
    "label": "园所 / 账套",

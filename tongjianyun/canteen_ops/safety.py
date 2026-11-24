@@ -74,6 +74,8 @@ class Training(Handler):
 
 class Term(Handler):
     def validate(self):
+        from tongjianyun.canteen_ops.term_projects import validate_project_link
+
         doc = self.doc
         dates(doc.from_date, doc.to_date)
         if doc.nutrition_plan:
@@ -82,6 +84,12 @@ class Term(Handler):
                     "营养计划应覆盖该学期的适用日期。")
         if doc.financial_project:
             company_doc(doc, "Project", doc.financial_project)
+        validate_project_link(doc)
+
+    def before_update_after_submit(self):
+        from tongjianyun.canteen_ops.term_projects import validate_project_link
+
+        validate_project_link(self.doc)
 
     def before_cancel(self):
         require(not frappe.db.exists(TASK, {"term_project": self.doc.name, "docstatus": ("<", 2)}),
@@ -91,6 +99,9 @@ class Term(Handler):
 class WeeklyTask(Handler):
     def validate(self):
         doc = self.doc
+        previous = doc.get_doc_before_save()
+        require((doc.get("management_task") or None) == ((previous and previous.get("management_task")) or None),
+                "管理项目任务由每周任务自动关联。")
         term = submitted(company_doc(doc, TERM, doc.term_project))
         monday = getdate(doc.week_start)
         require(monday.weekday() == 0 and monday <= getdate(term.to_date)
