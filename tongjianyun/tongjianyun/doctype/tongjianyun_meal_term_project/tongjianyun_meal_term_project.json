@@ -127,17 +127,19 @@
   "from_date",
   "to_date",
   "responsible_user",
-  "management_project",
   "week_progress_section",
   "week_progress",
   "service_details",
   "service_scope",
   "service_finance_column",
-  "nutrition_plan",
-  "financial_project",
   "approved_budget",
   "remarks",
-  "amended_from"
+  "amended_from",
+  "advanced_settings",
+  "management_project",
+  "advanced_finance_column",
+  "nutrition_plan",
+  "financial_project"
  ],
  "fields": [
   {
@@ -176,6 +178,16 @@
   },
   {
    "fieldname": "service_finance_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "advanced_settings",
+   "label": "高级设置",
+   "fieldtype": "Section Break",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "advanced_finance_column",
    "fieldtype": "Column Break"
   },
   {
