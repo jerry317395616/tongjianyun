@@ -341,7 +341,7 @@ body.tjy-meal-desk {
 	.tjy-meal-desk .tjy-filter-toggle { margin-inline-start: auto; }
 	.tjy-meal-desk .layout-main-list > .page-form { padding: 8px; }
 }
-.tjy-meal-desk .tjy-filter-icon { display: none; }
+.tjy-meal-desk .tjy-filter-short { display: none; }
 .tjy-meal-desk .tjy-completion-line { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: 13px; }
 .tjy-meal-desk .tjy-completion-line strong { color: var(--tjy-ink); font-variant-numeric: tabular-nums; }
 .tjy-meal-desk .tjy-completion-meter { appearance: none; width: 100%; height: 5px; border: 0; border-radius: 8px; margin: 8px 0; background: var(--tjy-pale); }
@@ -360,7 +360,7 @@ body.tjy-meal-desk {
 	.tjy-meal-desk .tjy-quick-views { flex-wrap: nowrap; }
 	.tjy-meal-desk .tjy-view-choices { scrollbar-width: none; }
 	.tjy-meal-desk .tjy-view-choices::-webkit-scrollbar { display: none; }
-	.tjy-meal-desk .tjy-filter-icon { display: inline-flex; align-items: center; }
+	.tjy-meal-desk .tjy-filter-short { display: inline-flex; align-items: center; }
 	.tjy-meal-desk .tjy-filter-text, .tjy-meal-desk .tjy-filter-toggle::after { display: none; }
 	.tjy-meal-desk .tjy-quick-views button { min-height: 36px; }
 }

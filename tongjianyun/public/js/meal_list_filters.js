@@ -98,11 +98,10 @@
 		const text = document.createElement("span");
 		text.className = "tjy-filter-text";
 		text.textContent = caption;
-		const icon = document.createElement("span");
-		icon.className = "tjy-filter-icon";
-		icon.setAttribute("aria-hidden", "true");
-		icon.innerHTML = frappe.utils.icon("filter","sm");
-		toggle.append(icon, text);
+		const shortLabel = document.createElement("span");
+		shortLabel.className = "tjy-filter-short";
+		shortLabel.textContent = "筛选";
+		toggle.append(shortLabel, text);
 		if (!form.id) form.id = "tjy-filters-" + frappe.scrub(list.doctype);
 		toggle.setAttribute("aria-controls", form.id);
 		toggle.setAttribute("aria-expanded", String(!main.classList.contains("tjy-filters-closed")));
