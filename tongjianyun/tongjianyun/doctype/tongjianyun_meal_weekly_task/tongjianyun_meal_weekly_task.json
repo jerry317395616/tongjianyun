@@ -129,6 +129,8 @@
   "task_kind",
   "due_date",
   "assigned_to",
+  "menu_panel",
+  "menu_confirmed",
   "meal_week",
   "management_task",
   "confirmed_at",
@@ -201,10 +203,13 @@
   },
   {
    "fieldname": "meal_week",
-   "label": "现有周食谱",
+   "label": "本周食谱",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "options": "Meal Planning Week"
+   "options": "Meal Planning Week",
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "confirmed_at",
@@ -232,6 +237,20 @@
    "label": "由学期项目生成",
    "read_only": 1,
    "hidden": 1,
+   "no_copy": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "menu_panel",
+   "label": "本周食谱",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "menu_confirmed",
+   "label": "已确认食谱归属",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "read_only": 1,
    "no_copy": 1,
    "default": "0"
   }

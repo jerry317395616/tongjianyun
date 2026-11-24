@@ -10,7 +10,14 @@ CALENDAR_TAB = "custom_tjy_week_calendar_tab"
 CALENDAR_FIELD = "custom_tjy_week_calendar"
 
 
+def install_week_canteen():
+    create_custom_fields({WEEK: [{"fieldname": "custom_tjy_canteen", "fieldtype": "Link", "label": "食堂",
+                                  "options": "Tongjianyun Canteen", "insert_after": "company",
+                                  "module": "Tongjianyun"}]})
+
+
 def install():
+    install_week_canteen()
     saved_only = "eval:!doc.__islocal"
     create_custom_fields({WEEK: [
         {"fieldname": BASIC_TAB, "fieldtype": "Tab Break", "label": "基本信息",

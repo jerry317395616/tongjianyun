@@ -10,41 +10,15 @@ import frappe
 from frappe.utils import escape_html, get_url_to_form, getdate
 
 from tongjianyun.canteen_ops.common import (
-    CANTEEN, DAY, TASK, TERM, WEEK, company_doc, linked, lock_company, permission, require, submitted,
+    DAY, TASK, TERM, WEEK, company_doc, linked, lock_company, permission, require, submitted,
 )
 
+from tongjianyun.canteen_ops.task_menus import WeekMenus, confirm, source_weeks as _source_weeks
 from tongjianyun.canteen_ops.term_schedule import KINDS, term_weeks
 
 _SYNCING = ContextVar("tjy_syncing_meal_tasks", default=False)
 _REQUEST = "Material Request"
 PROJECT_RESPONSIBLE = "custom_tjy_meal_responsible_user"
-_WEEK_FIELDS = [
-    "name", "week_start", "docstatus", "raw_material_warehouse", "kitchen_warehouse", "material_request",
-    "procurement_snapshot", "kitchen_reconciled", "kitchen_reconciled_at",
-]
-
-
-def _source_weeks(term, mondays):
-    site = frappe.db.get_value(CANTEEN, {"name": term.canteen, "company": term.company},
-                               ["raw_warehouse", "kitchen_warehouse"], as_dict=True)
-    if not site or not site.raw_warehouse:
-        return {}
-    unique_raw = frappe.db.count(CANTEEN, {
-        "company": term.company, "raw_warehouse": site.raw_warehouse, "disabled": 0,
-    }) == 1
-    candidates = frappe.get_all(WEEK, filters={
-        "company": term.company, "raw_material_warehouse": site.raw_warehouse,
-        "week_start": ["in", mondays], "docstatus": ["<", 2],
-    }, fields=_WEEK_FIELDS)
-    ambiguous = [row.name for row in candidates if not row.kitchen_warehouse and not unique_raw]
-    owners = defaultdict(set)
-    if ambiguous:
-        for row in frappe.get_all(TASK, filters={
-            "company": term.company, "meal_week": ["in", ambiguous], "docstatus": ["<", 2],
-        }, fields=["meal_week", "canteen"]):
-            owners[row.meal_week].add(row.canteen)
-    return {getdate(row.week_start): row for row in candidates if row.kitchen_warehouse == site.kitchen_warehouse
-            or (not row.kitchen_warehouse and (unique_raw or owners[row.name] == {term.canteen}))}
 
 
 def _covered_by_stock(snapshot):
@@ -89,7 +63,9 @@ def _progress(term, schedule):
 
     if not mondays:
         return []
-    weeks = _source_weeks(term, mondays)
+    scope = WeekMenus(term.company, mondays)
+    matches = {day: scope.match(term.canteen, day) for day in mondays}
+    weeks = {day: menu for day, (menu, _) in matches.items() if menu}
     week_names = [row.name for row in weeks.values()]
     requests = [row.material_request for row in weeks.values() if row.material_request]
     active_requests = set(frappe.get_all(_REQUEST, filters={
@@ -111,6 +87,8 @@ def _progress(term, schedule):
         confirmed = {getdate(day.meal_date) for day in kitchen_days if day.docstatus == 1}
         steps = [{"kind": kind, "due": service["due"][kind], "complete": complete, "status": status}
                  for kind, (complete, status) in zip(KINDS, _week_steps(week, confirmed, request, len(allowed)), strict=True)]
+        if not week and matches[monday][1]:
+            steps[0]["status"] = "待确认食谱"
         rows.append(dict(monday=str(monday), first=service["days"][0], last=service["days"][-1],
                          week=week.name if week else None, request=request,
                          kitchen_days=[row.name for row in kitchen_days], steps=steps))
@@ -191,22 +169,31 @@ def attach_management_project(term, method=None):
 
 def ensure_tasks(term, schedule, *, meal_week=None, automatic=False):
     # Submission and explicit generation both hold the same term lock.
+    if not schedule:
+        return []
+    scope = WeekMenus(term.company, schedule, lock=True)
     existing = frappe.get_all(TASK, filters={"term_project": term.name, "docstatus": ["<", 2]},
                               fields=["name", "week_start", "task_kind"])
     by_kind = {(getdate(row.week_start), row.task_kind): row.name for row in existing}
     names = []
     for monday, week in schedule.items():
+        menu, _ = scope.match(term.canteen, monday)
         for kind, due in week["due"].items():
             name = by_kind.get((monday, kind))
             if not name:
                 task = frappe.get_doc({"doctype": TASK, "company": term.company, "canteen": term.canteen,
                                        "term_project": term.name, "week_start": monday, "task_kind": kind,
                                        "assigned_to": term.responsible_user, "due_date": due,
-                                       "meal_week": meal_week, "generated_by_term": int(automatic)})
+                                       "meal_week": menu.name if menu else None, "generated_by_term": int(automatic)})
                 task.flags.generating_term_tasks = True
                 task.insert(ignore_permissions=automatic)
                 name = task.name
             names.append(name)
+        if meal_week:
+            refreshed = WeekMenus(term.company, [monday], lock=True)
+            confirm(refreshed, term.canteen, monday, meal_week)
+        else:
+            scope.apply(monday)
     return names
 
 
@@ -229,7 +216,7 @@ def close_management_task(doc, method=None):
 
 def discard_unstarted_tasks(term):
     rows = frappe.get_all(TASK, filters={"term_project": term.name, "docstatus": ["<", 2]},
-                          fields=["name", "docstatus", "generated_by_term", "remarks", "meal_week", "creation", "modified",
+                          fields=["name", "docstatus", "generated_by_term", "remarks", "menu_confirmed", "creation", "modified",
                                   "week_start", "task_kind", "assigned_to", "due_date"])
     if not rows:
         return
@@ -242,7 +229,7 @@ def discard_unstarted_tasks(term):
     for row in rows:
         week = schedule.get(getdate(row.week_start))
         require(row.generated_by_term and not row.docstatus and row.name not in annotated
-                and row.creation == row.modified and not row.remarks and not row.meal_week
+                and row.creation == row.modified and not row.remarks and not row.menu_confirmed
                 and row.assigned_to == term.responsible_user and week and week["due"].get(row.task_kind) == getdate(row.due_date),
                 f"请先处理已办理或已调整的每周任务 {row.name}，再取消学期项目。")
     for row in rows:
@@ -362,10 +349,6 @@ def _queue_week(week):
         if (matched and matched.name == week.name) or (week.docstatus == 2 and frappe.db.exists(
                 TASK, {"term_project": name, "week_start": monday})):
             _queue(name)
-
-
-def queue_week(doc, method=None):
-    _queue_week(doc)
 
 
 def queue_day(doc, method=None):

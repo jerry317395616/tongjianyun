@@ -34,6 +34,7 @@ doctype_js = {
                              "public/js/canteen_forms.js"],
     **{doctype: "public/js/canteen_forms.js" for doctype in (*_CANTEEN_DOCTYPES, "Meal Kitchen Day",
                                                            "Purchase Order", "Request for Quotation")},
+    "Tongjianyun Meal Weekly Task": ["public/js/canteen_forms.js", "public/js/weekly_task_menu.js"],
     "Tongjianyun Meal Term Project": ["public/js/canteen_forms.js", "public/js/meal_term_project.js"],
 }
 doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js",
@@ -52,10 +53,12 @@ doc_events = {
         "validate": "tongjianyun.ingredient_library.validate_ingredient",
     },
     "Meal Planning Week": {
-        "validate": "tongjianyun.weekly_menu_editor.validate_menu_for_submission",
+        "validate": ["tongjianyun.weekly_menu_editor.validate_menu_for_submission",
+                     "tongjianyun.canteen_ops.task_menus.validate_week_owner"],
         "before_submit": "tongjianyun.recipe_nutrition.freeze_week",
-        "on_trash": "tongjianyun.weekly_menu_editor.delete_draft_meal_plans",
-        "on_change": "tongjianyun.canteen_ops.term_projects.queue_week",
+        "on_trash": ["tongjianyun.weekly_menu_editor.delete_draft_meal_plans", "tongjianyun.canteen_ops.task_menus.sync_menu"],
+        "on_cancel": "tongjianyun.canteen_ops.task_menus.sync_menu",
+        "on_change": "tongjianyun.canteen_ops.task_menus.sync_menu",
     },
     "Meal Kitchen Day": {
         event: "tongjianyun.canteen_ops.term_projects.queue_day" for event in ("on_submit", "on_cancel")

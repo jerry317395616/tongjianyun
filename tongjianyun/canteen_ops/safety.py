@@ -100,21 +100,24 @@ class WeeklyTask(Handler):
         if not doc.flags.get("generating_term_tasks"):
             doc.generated_by_term = previous.generated_by_term if previous else 0
         monday = getdate(doc.week_start)
-        if doc.docstatus == 1 and not doc.meal_week:
-            from tongjianyun.canteen_ops.term_projects import _source_weeks
-
-            source = _source_weeks(term, [monday]).get(monday)
-            if source:
-                doc.meal_week = source.name
         require(monday.weekday() == 0 and monday <= getdate(term.to_date)
                 and monday + timedelta(days=6) >= getdate(term.from_date) and doc.canteen == term.canteen,
                 "请选择学期范围内的自然周及同一食堂。")
-        if doc.meal_week:
-            week = company_doc(doc, WEEK, doc.meal_week)
-            require(getdate(week.week_start) == monday and canteen_for_week(week, doc.canteen).name == doc.canteen,
-                    "关联周食谱须属于本周和本食堂。")
         unique_active(doc, {"term_project": term.name, "week_start": monday, "task_kind": doc.task_kind},
                       "该学期本周已有同名任务。")
+        if doc.flags.get("generating_term_tasks"):
+            doc.menu_confirmed = 0
+        else:
+            from tongjianyun.canteen_ops.task_menus import WeekMenus
+
+            scope = WeekMenus(doc.company, [monday], lock=True)
+            menu, _ = scope.match(doc.canteen, monday)
+            current = next((row for row in scope.tasks[monday] if row.name == doc.name), None)
+            doc.meal_week = menu.name if menu else None
+            doc.menu_confirmed = int(bool(current and current.menu_confirmed and
+                                          current.canteen == doc.canteen and current.meal_week == doc.meal_week))
+            if doc.docstatus == 1:
+                require(doc.meal_week, "请先编排本周食谱，或在任务中确认食谱归属。")
         if not doc.docstatus:
             doc.confirmed_at = None
 

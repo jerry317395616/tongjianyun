@@ -4,3 +4,4 @@
 tongjianyun.patches.simplify_food_nutrition_profiles
 tongjianyun.patches.remove_ingredient_master_audit
 tongjianyun.patches.remove_nutrition_improvement_plan
+tongjianyun.patches.link_weekly_task_menus

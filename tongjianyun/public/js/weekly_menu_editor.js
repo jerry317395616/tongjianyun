@@ -512,6 +512,9 @@
 	}
 
 	frappe.ui.form.on(doctype, {
+		setup(frm) {
+			frm.set_query("custom_tjy_canteen", () => ({ filters: { company: frm.doc.company, disabled: 0 } }));
+		},
 		refresh,
 		before_save(frm) {
 			frm.__tgy_week_first_save = Boolean(frm.is_new());

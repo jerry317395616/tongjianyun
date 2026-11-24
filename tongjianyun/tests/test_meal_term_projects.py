@@ -8,6 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 
+class Row(SimpleNamespace):
+    def get(self, key):
+        return getattr(self, key, None)
+
+
 class TermProjectTests(unittest.TestCase):
     def setUp(self):
         self.frappe = SimpleNamespace(db=Mock(), get_all=Mock(), whitelist=lambda **kwargs: lambda fn: fn)
@@ -24,7 +29,11 @@ class TermProjectTests(unittest.TestCase):
                 Path(__file__).parents[1] / "canteen_ops/term_schedule.py")
             self.schedule = importlib.util.module_from_spec(timetable_spec)
             timetable_spec.loader.exec_module(self.schedule)
-            with patch.dict(sys.modules, {timetable_spec.name: self.schedule}):
+            menu_spec = importlib.util.spec_from_file_location("tongjianyun.canteen_ops.task_menus",
+                Path(__file__).parents[1] / "canteen_ops/task_menus.py")
+            self.menus = importlib.util.module_from_spec(menu_spec)
+            menu_spec.loader.exec_module(self.menus)
+            with patch.dict(sys.modules, {timetable_spec.name: self.schedule, menu_spec.name: self.menus}):
                 spec.loader.exec_module(self.module)
         self.term = SimpleNamespace(company="School", canteen="Kitchen", from_date="2026-11-25", to_date="2026-12-04")
 
@@ -82,15 +91,36 @@ class TermProjectTests(unittest.TestCase):
         self.assertFalse(self.module._covered_by_stock('{"basis_hash":"x","rows":[{"status":"purchase","purchase_qty":"1"}]}'))
         self.assertFalse(self.module._covered_by_stock('{"rows":[]}'))
 
-    def test_shared_material_warehouse_needs_a_matching_kitchen_or_unique_task_owner(self):
-        self.frappe.db.get_value.return_value = SimpleNamespace(raw_warehouse="Raw", kitchen_warehouse="Kitchen WH")
-        self.frappe.db.count.return_value = 2
+    def test_resolves_only_a_unique_compatible_canteen_or_confirmed_owner(self):
+        a = Row(name="A", raw_warehouse="Raw", kitchen_warehouse="K1")
+        b = Row(name="B", raw_warehouse="Raw", kitchen_warehouse="K2")
+        w = Row(name="W", raw_material_warehouse="Raw", kitchen_warehouse=None, custom_tjy_canteen=None)
+        resolve = lambda canteen, tasks: self.menus.resolve(canteen, [a, b], [w], tasks)
+        self.assertEqual(resolve("A", []), (None, [w]))
+        w.kitchen_warehouse = "K1"
+        self.assertEqual(resolve("A", []), (w, [w]))
+        self.assertEqual(resolve("B", []), (None, []))
+        w.kitchen_warehouse = None
+        task = Row(meal_week="W", canteen="A", docstatus=0, menu_confirmed=1)
+        self.assertEqual(resolve("A", [task]), (w, [w]))
+        self.assertEqual(resolve("B", [task]), (None, []))
+        w.custom_tjy_canteen = "B"
+        self.assertEqual(resolve("A", []), (None, []))
+
+    def test_multiple_menus_need_a_choice_and_never_modify_submitted_tasks(self):
         monday = date(2026, 11, 23)
-        week = SimpleNamespace(name="W-1", week_start=monday, kitchen_warehouse=None)
-        self.frappe.get_all.side_effect = [[week], []]
-        self.assertEqual(self.module._source_weeks(self.term, [monday]), {})
-        self.frappe.get_all.side_effect = [[week], [SimpleNamespace(meal_week="W-1", canteen="Kitchen")]]
-        self.assertEqual(self.module._source_weeks(self.term, [monday]), {monday: week})
-        week.kitchen_warehouse = "Other"
-        self.frappe.get_all.side_effect = [[week]]
-        self.assertEqual(self.module._source_weeks(self.term, [monday]), {})
+        site = Row(name="A", raw_warehouse="Raw", kitchen_warehouse="K")
+        menus = [Row(name=n, raw_material_warehouse="Raw", kitchen_warehouse=None) for n in ("W1", "W2")]
+        rows = [Row(name=str(i), docstatus=0, canteen="A", menu_confirmed=0, meal_week=None) for i in range(4)]
+        rows.append(Row(name="historical", docstatus=1, canteen="A", menu_confirmed=0, meal_week="old"))
+        scope = object.__new__(self.menus.WeekMenus)
+        scope.sites, scope.weeks, scope.tasks = [site], {monday: menus}, {monday: rows}
+        self.assertEqual(scope.match("A", monday), (None, menus))
+        scope.apply(monday, confirmation=("A", "W2"))
+        self.assertEqual(scope.match("A", monday), (menus[1], menus))
+        self.assertEqual([c.args[1] for c in self.frappe.db.set_value.call_args_list], ["0", "1", "2", "3"])
+        self.frappe.db.set_value.reset_mock()
+        scope.weeks[monday] = []
+        scope.apply(monday)
+        self.assertEqual([c.args[1] for c in self.frappe.db.set_value.call_args_list], ["0", "1", "2", "3"])
+        self.assertTrue(all(c.args[2]["meal_week"] is None for c in self.frappe.db.set_value.call_args_list))

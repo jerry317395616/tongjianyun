@@ -181,8 +181,10 @@ def canteen_for_week(week, canteen=None):
         value = week.get(key) or (week.get("raw_material_warehouse") if key == "raw_warehouse" else None)
         if value:
             filters[key] = value
-    if canteen:
-        filters["name"] = canteen
+    owner = week.get("custom_tjy_canteen")
+    require(not owner or not canteen or owner == canteen, "该周食谱属于其他食堂。")
+    if canteen or owner:
+        filters["name"] = canteen or owner
     rows = records(CANTEEN, filters)
     require(len(rows) == 1, "请先为周食谱的原料仓和厨房仓维护唯一的食堂档案。")
     return linked(CANTEEN, rows[0].name)
