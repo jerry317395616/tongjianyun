@@ -145,6 +145,9 @@
 			await frm.set_value(defaults);
 		},
 		company: refresh,
+		on_submit(frm) {
+			frm.layout.select_tab("week_progress_section");
+		},
 		from_date: refresh,
 		to_date: refresh,
 		service_holiday_list: refresh,

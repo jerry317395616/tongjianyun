@@ -229,12 +229,20 @@ def close_management_task(doc, method=None):
 
 def discard_unstarted_tasks(term):
     rows = frappe.get_all(TASK, filters={"term_project": term.name, "docstatus": ["<", 2]},
-                          fields=["name", "docstatus", "generated_by_term", "remarks", "meal_week",
+                          fields=["name", "docstatus", "generated_by_term", "remarks", "meal_week", "creation", "modified",
                                   "week_start", "task_kind", "assigned_to", "due_date"])
-    schedule = term_weeks(term) if rows else {}
+    if not rows:
+        return
+    names = [row.name for row in rows]
+    annotated = set(frappe.get_all("File", filters={"attached_to_doctype": TASK, "attached_to_name": ["in", names]},
+                                   pluck="attached_to_name"))
+    annotated.update(frappe.get_all("Comment", filters={"reference_doctype": TASK, "reference_name": ["in", names],
+                                                         "comment_type": "Comment"}, pluck="reference_name"))
+    schedule = term_weeks(term)
     for row in rows:
         week = schedule.get(getdate(row.week_start))
-        require(row.generated_by_term and not row.docstatus and not row.remarks and not row.meal_week
+        require(row.generated_by_term and not row.docstatus and row.name not in annotated
+                and row.creation == row.modified and not row.remarks and not row.meal_week
                 and row.assigned_to == term.responsible_user and week and week["due"].get(row.task_kind) == getdate(row.due_date),
                 f"请先处理已办理或已调整的每周任务 {row.name}，再取消学期项目。")
     for row in rows:
