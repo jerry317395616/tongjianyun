@@ -15,6 +15,7 @@
   · <a href="#开始使用">开始使用</a>
   · <a href="https://github.com/jerry317395616/tongjianyun/releases/latest">下载发布版</a>
   · <a href="CONTRIBUTING.md">参与贡献</a>
+  · <a href="#联系我们">联系我们</a>
 </p>
 
 <p align="center">
@@ -68,6 +69,10 @@ bench build --app tongjianyun
 - [变更记录](CHANGELOG.md)汇总已发布功能，[项目路线图](docs/roadmap.md)列出接下来的验收目标。
 - 欢迎贡献代码、中文文档和可复现的业务案例。一般问题和功能建议可提交到 [GitHub Issues](https://github.com/jerry317395616/tongjianyun/issues)。[贡献指南](CONTRIBUTING.md)
 - 安装、迁移、演示单据和跨园所权限随代码自动检查。发现疑似越权或其他漏洞时，可通过私密渠道报告。[自动化检查](https://github.com/jerry317395616/tongjianyun/actions/workflows/checks.yml) · [安全报告指南](SECURITY.md)
+
+## 联系我们
+
+园所试用和部署咨询请添加微信 `so342910289`。
 
 ## 许可证
 
