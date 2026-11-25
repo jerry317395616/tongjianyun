@@ -69,9 +69,9 @@ def _setup_erp(current):
     frappe.clear_document_cache("System Settings", "System Settings")
 
 
-def _user(email, name, role):
+def _user(email, name, *roles):
     return _insert("User", email=email, first_name=name, send_welcome_email=0, user_type="System User",
-                   roles=[{"role": role}])
+                   roles=[{"role": role} for role in roles])
 
 
 def _school(company, start):
@@ -170,7 +170,7 @@ def seed():
     ensure_food_masters()
     site = _site(COMPANY, "QHT")
     _site(OTHER_COMPANY, "QHL")
-    _user(PLANNER, "演示食谱编排员", "System Manager")
+    _user(PLANNER, "演示食谱编排员", "System Manager", "Manufacturing User")
     _user(READER, "演示食堂安全员", "膳食安全员")
     for doctype, name in (("Company", site.company), (CANTEEN, site.name)):
         _insert("User Permission", user=READER, allow=doctype, for_value=name, apply_to_all_doctypes=1)
