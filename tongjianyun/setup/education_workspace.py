@@ -523,10 +523,13 @@ def ensure_education_workspace():
 		raise RuntimeError(f"Unable to configure Workspace {WORKSPACE_NAME}: {exc}") from exc
 	finally:
 		frappe.flags.in_migrate = previous_in_migrate
+	workspace_fields = {"label": WORKSPACE_TITLE, "title": WORKSPACE_TITLE, "type": "Workspace"}
+	if frappe.get_meta("Workspace").has_field("app"):
+		workspace_fields["app"] = "education"
 	frappe.db.set_value(
 		"Workspace",
 		WORKSPACE_NAME,
-		{"label": WORKSPACE_TITLE, "title": WORKSPACE_TITLE, "type": "Workspace", "app": "education"},
+		workspace_fields,
 		update_modified=False,
 	)
 	results["status"] = "updated"
