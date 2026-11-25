@@ -4,6 +4,8 @@
 
 [十分钟演示](docs/meal-demo.md) · [安装与升级](docs/install.md) · [参与贡献](CONTRIBUTING.md) · [路线图](docs/roadmap.md) · [版本发布](https://github.com/jerry317395616/tongjianyun/releases)
 
+![童健云食堂工作台和示范园的供餐周历](docs/images/meal-demo/canteen-workbench.png)
+
 ## 一份带量食谱如何落地
 
 1. **编排与审核** — 从标准菜品和配方选菜，按在园名册生成计划人数，支持调整单餐的食材用量。
