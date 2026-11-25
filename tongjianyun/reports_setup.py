@@ -6,17 +6,49 @@ import frappe
 from tongjianyun.canteen_ops.setup import report_names
 from tongjianyun.canteen_ops.reminders import METHOD as _EXPIRY_REMINDER
 
+WEEKLY_MENU = "Tongjianyun Weekly Menu"
+LEGACY_WEEKLY_MENU = "Meal Weekly Plan"
+
 REPORTS = (
-    "Tongjianyun Weekly Menu", "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger",
+    WEEKLY_MENU, "Weekly Recipe Nutrition Analysis", "Tongjianyun Meal Ledger",
     "Tongjianyun Ingredient Analysis", "Tongjianyun Canteen Staffing Analysis",
 ) + report_names()
+
+
+def adopt_legacy_weekly_menu():
+    """Resolve old I-ONE report names and saved links through the Tongjianyun report."""
+    source = frappe.db.get_value(
+        "Report", LEGACY_WEEKLY_MENU, ["module", "is_standard", "report_type", "ref_doctype", "disabled"], as_dict=True,
+    )
+    if not source or source.disabled or (source.module, source.is_standard, source.report_type, source.ref_doctype) != (
+        "I ONE AI", "Yes", "Script Report", "Meal Planning Week",
+    ):
+        return
+    # A Frappe alias uses the reference report's roles. Preserve any narrower site-specific access.
+    from frappe.core.doctype.custom_role.custom_role import get_custom_allowed_roles
+
+    def report_roles(name):
+        return set(get_custom_allowed_roles("report", name) or
+                   [row.role for row in frappe.get_doc("Report", name).roles])
+
+    old_roles = report_roles(LEGACY_WEEKLY_MENU)
+    new_roles = report_roles(WEEKLY_MENU)
+    if old_roles and (not new_roles or not new_roles <= old_roles):
+        return
+    frappe.db.set_value("Report", LEGACY_WEEKLY_MENU, {
+        "module": "Tongjianyun",
+        "is_standard": "No",
+        "report_type": "Custom Report",
+        "reference_report": WEEKLY_MENU,
+    })
+    frappe.clear_document_cache("Report", LEGACY_WEEKLY_MENU)
 
 
 def install():
     if frappe.session.user != "Administrator" and "System Manager" not in frappe.get_roles():
         frappe.throw("需要系统管理员部署食谱报表。", frappe.PermissionError)
-    if not frappe.db.exists("Report", "Meal Weekly Plan"):
-        frappe.throw("请先安装并配置 I-ONE Core 的 ERP 周食谱报表。")
+    if not frappe.db.exists("DocType", "Meal Planning Week"):
+        frappe.throw("请先安装 I-ONE Core 的周食谱编排功能。")
     from frappe.modules.import_file import import_file_by_path
 
     root = Path(__file__).parent / "tongjianyun"
@@ -30,6 +62,7 @@ def install():
     try:
         for path in files:
             import_file_by_path(str(path), force=True)
+        adopt_legacy_weekly_menu()
         if frappe.db.exists("DocType", "Desktop Icon"):
             for name in frappe.get_all("Desktop Icon", filters={"app": "tongjianyun"}, pluck="name"):
                 frappe.db.set_value("Desktop Icon", name, "link", "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu")
@@ -37,7 +70,7 @@ def install():
             if row.method != _EXPIRY_REMINDER and not row.stopped:
                 frappe.db.set_value("Scheduled Job Type", row.name, "stopped", 1)
         for row in frappe.get_all("Report", filters={"module": "Tongjianyun"}, fields=["name", "disabled"]):
-            if row.name not in REPORTS and not row.disabled:
+            if row.name != LEGACY_WEEKLY_MENU and row.name not in REPORTS and not row.disabled:
                 frappe.db.set_value("Report", row.name, "disabled", 1)
         # Old Page metadata is executable navigation, not recipe/attendance data.
         for row in frappe.get_all("Page", filters={"module": "Tongjianyun"}, pluck="name"):

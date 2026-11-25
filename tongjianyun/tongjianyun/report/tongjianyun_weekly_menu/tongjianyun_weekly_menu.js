@@ -1,10 +1,11 @@
-// Keep in sync with the I-ONE Core weekly report UI.
 (() => {
 	const reportName = "Tongjianyun Weekly Menu";
+	const weeklyReportNames = new Set([reportName, "Meal Weekly Plan"]);
 	const detailReport = "Meal Ingredient Requirements";
 	const slots = ["早餐", "早点", "午餐", "午点", "晚餐"];
 	const colors = ["#996900", "#26764a", "#295ca4", "#7950a6", "#a24d26"];
-	const isWeeklyReport = (report) => report.report_name === reportName || report.report_doc?.reference_report === reportName;
+	const isWeeklyReport = (report) => weeklyReportNames.has(report.report_name)
+		|| weeklyReportNames.has(report.report_doc?.reference_report);
 	const escape = (value) => frappe.utils.escape_html(String(value ?? ""));
 	const selectedWeek = (report) => !report.get_filter_value("plan_batch") && (report.get_filter_value("week_name") || report.data?.[0]?.week_name);
 	const selectedBatch = (report) => !report.get_filter_value("week_name") && (report.get_filter_value("plan_batch") || report.data?.[0]?.plan_batch);
@@ -97,14 +98,12 @@
 		],
 		async onload(report) {
 			report.page.set_title(__("周食谱（每名幼儿带量）"));
-			if (report.report_doc?.module === "Tongjianyun") {
-				report.page.add_inner_button(__("食谱分析"), () => {
-					const source = selectedWeek(report) || selectedBatch(report)
-						? sourceFilters(report) : { week_start: report.get_filter_value("week_start") };
-					if (!source.week_name && !source.plan_batch && !source.week_start) return frappe.msgprint(__("请先选择可查看的周食谱。"));
-					frappe.set_route("query-report", "Weekly Recipe Nutrition Analysis", source);
-				});
-			}
+			report.page.add_inner_button(__("食谱分析"), () => {
+				const source = selectedWeek(report) || selectedBatch(report)
+					? sourceFilters(report) : { week_start: report.get_filter_value("week_start") };
+				if (!source.week_name && !source.plan_batch && !source.week_start) return frappe.msgprint(__("请先选择可查看的周食谱。"));
+				frappe.set_route("query-report", "Weekly Recipe Nutrition Analysis", source);
+			});
 			report.page.add_inner_button(__("查看计划"), () => openWeek(report));
 			report.page.add_inner_button(__("食材需求明细"), () => {
 				if (!selectedWeek(report) && !selectedBatch(report)) return frappe.msgprint(__("请先选择可查看的周食谱。"));

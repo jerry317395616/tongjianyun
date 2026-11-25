@@ -1,4 +1,4 @@
-"""Use the same permission-checked ERP data as the central weekly report."""
+"""Render Tongjianyun's weekly menu from the permission-checked ERP meal plans."""
 from ione_core.meal_planning import weekly_report_data
 
 
