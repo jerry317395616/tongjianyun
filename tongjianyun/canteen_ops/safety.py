@@ -138,7 +138,7 @@ class WeeklyTask(Handler):
             return
         week = submitted(company_doc(doc, WEEK, doc.meal_week))
         if doc.task_kind == "准备采购":
-            from ione_core.meal_procurement import get_procurement_preview
+            from tongjianyun.meal_procurement import get_procurement_preview
 
             if not week.material_request:
                 preview = get_procurement_preview(week.name)
@@ -161,7 +161,7 @@ class WeeklyTask(Handler):
                 _day_proof(linked(DAY, child.name), _week_proof(week)) for child in children
             ), "须完成并核对本周所有供餐日的厨房日结。")
         if doc.task_kind == "周核销":
-            from ione_core.meal_kitchen import verify_week_kitchen_reconciled
+            from tongjianyun.meal_kitchen import verify_week_kitchen_reconciled
 
             proof = verify_week_kitchen_reconciled(week.name)
             require(proof and proof.get("reconciled"), "请先完成原生厨房周核销。")
@@ -184,7 +184,7 @@ def generate_week_tasks(term_project, week_start, meal_week=None):
 
 
 def meal_context(doc):
-    from ione_core.meal_adjustments import get_effective_meals
+    from tongjianyun.meal_adjustments import get_effective_meals
 
     day = company_doc(doc, DAY, doc.meal_day)
     week = submitted(company_doc(doc, WEEK, day.meal_week))
@@ -209,7 +209,7 @@ def sample_scope_dishes(day, week, meal_type):
     from json import JSONDecodeError, loads
 
     if week.has_permission("read"):
-        from ione_core.meal_adjustments import get_effective_meals
+        from tongjianyun.meal_adjustments import get_effective_meals
 
         row = next((row for row in get_effective_meals(week)
                     if getdate(row.meal_date) == getdate(day.meal_date) and row.meal_type == meal_type), None)

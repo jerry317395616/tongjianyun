@@ -6,8 +6,8 @@ from datetime import timedelta
 
 import frappe
 from frappe.utils import cint, flt, getdate
-from ione_core import meal_kitchen
-from ione_core.meal_adjustments import get_effective_meals
+from tongjianyun import meal_kitchen
+from tongjianyun.meal_adjustments import get_effective_meals
 
 WEEK = "Meal Planning Week"
 DAY = "Meal Kitchen Day"
@@ -313,7 +313,7 @@ def _purchase(week):
             visible = _visible_records(doctype, facts, ["name", date_field], company=week.company)
             groups.append([dict(facts[row.name], **{date_field: row.get(date_field)}) for row in visible])
     else:
-        from ione_core.meal_purchasing import _plan_names
+        from tongjianyun.meal_purchasing import _plan_names
 
         plans = _plan_names(week, for_update=False)
         requests = _linked_parents("Material Request", week.company, "Material Request Item", "production_plan", plans, "transaction_date")

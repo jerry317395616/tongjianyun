@@ -3,8 +3,8 @@ import frappe
 
 
 def load_source(filters):
-    from ione_core.meal_plan_reports import resolve_report_filters
-    from ione_core.meal_planning import ingredient_report_data, weekly_report_data
+    from tongjianyun.meal_plan_reports import resolve_report_filters
+    from tongjianyun.meal_planning import ingredient_report_data, weekly_report_data
 
     filters = resolve_report_filters(filters)
     _columns, weekly = weekly_report_data(filters)

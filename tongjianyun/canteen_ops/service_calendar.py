@@ -38,7 +38,7 @@ def apply_calendar(week, method=None):
 
 
 def effective_dates(week, lock=False):
-    from ione_core.meal_adjustments import get_effective_meals
+    from tongjianyun.meal_adjustments import get_effective_meals
 
     return {getdate(row.meal_date) for row in get_effective_meals(week, lock=lock) if not row.service_suspended}
 

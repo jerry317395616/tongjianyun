@@ -1,0 +1,25 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "format:IEV-{YYYY}-{#####}", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["evaluation_section", "task", "agent", "evaluator", "column_break_evaluation", "score", "grade", "evaluated_at", "dimensions_json", "comments"],
+ "fields": [
+  {"fieldname": "evaluation_section", "fieldtype": "Section Break", "label": "评估信息"},
+  {"fieldname": "task", "fieldtype": "Link", "label": "AI 任务", "options": "I-ONE AI Task", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "agent", "fieldtype": "Link", "label": "智能体", "options": "I-ONE Agent", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "evaluator", "fieldtype": "Link", "label": "评估人", "options": "User", "in_standard_filter": 1},
+  {"fieldname": "column_break_evaluation", "fieldtype": "Column Break"},
+  {"fieldname": "score", "fieldtype": "Float", "label": "综合评分", "precision": "2", "in_list_view": 1},
+  {"fieldname": "grade", "fieldtype": "Select", "label": "等级", "options": "S\nA\nB\nC\nD", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "evaluated_at", "fieldtype": "Datetime", "label": "评估时间", "default": "Now"},
+  {"fieldname": "dimensions_json", "fieldtype": "Code", "label": "维度评分", "options": "JSON"},
+  {"fieldname": "comments", "fieldtype": "Long Text", "label": "评估意见"}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "I ONE AI", "name": "I-ONE Evaluation", "naming_rule": "Expression", "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1, "create": 1},
+  {"role": "I-ONE AI Operator", "read": 1, "write": 1, "create": 1, "report": 1, "export": 1},
+  {"role": "I-ONE Auditor", "read": 1, "report": 1, "export": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "creation", "sort_order": "DESC", "states": [], "track_changes": 1
+}

@@ -1,0 +1,23 @@
+{
+ "actions": [], "allow_rename": 1, "autoname": "format:IEX-{YYYY}-{#####}", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["experience_section", "title", "category", "author_user", "column_break_experience", "status", "useful_count", "source_task", "content", "tags"],
+ "fields": [
+  {"fieldname": "experience_section", "fieldtype": "Section Break", "label": "经验信息"},
+  {"fieldname": "title", "fieldtype": "Data", "label": "经验标题", "reqd": 1, "in_list_view": 1, "search_index": 1},
+  {"fieldname": "category", "fieldtype": "Data", "label": "分类", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "author_user", "fieldtype": "Link", "label": "作者", "options": "User", "reqd": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_experience", "fieldtype": "Column Break"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "状态", "options": "草稿\n已发布\n已归档", "default": "草稿", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "useful_count", "fieldtype": "Int", "label": "有用次数", "default": "0", "read_only": 1},
+  {"fieldname": "source_task", "fieldtype": "Link", "label": "来源 AI 任务", "options": "I-ONE AI Task"},
+  {"fieldname": "content", "fieldtype": "Text Editor", "label": "经验内容", "reqd": 1},
+  {"fieldname": "tags", "fieldtype": "Data", "label": "标签"}
+ ],
+ "index_web_pages_for_search": 1, "links": [], "module": "I ONE AI", "name": "I-ONE Experience", "naming_rule": "Expression", "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1}
+ ],
+ "search_fields": "title,category,tags,content", "sort_field": "modified", "sort_order": "DESC", "states": [], "title_field": "title", "track_changes": 1
+}

@@ -1,0 +1,362 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:MEAL-WEEK-{YYYY}-{#####}",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "planning_section",
+  "title",
+  "company",
+  "raw_material_warehouse",
+  "kitchen_warehouse",
+  "week_start",
+  "week_end",
+  "planning_column",
+  "template_week_start",
+  "academic_year",
+  "academic_term",
+  "revision",
+  "source_week",
+  "active_week_key",
+  "status",
+  "population_section",
+  "population_basis",
+  "population_as_of",
+  "population_snapshot",
+  "meals_section",
+  "meals",
+  "procurement_section",
+  "requirement_weight_basis",
+  "requirement_weight_snapshot",
+  "stock_reviewed",
+  "material_request",
+  "procurement_snapshot",
+  "procurement_html",
+  "kitchen_section",
+  "kitchen_reconciled",
+  "kitchen_reconciled_at",
+  "kitchen_reconciliation_snapshot",
+  "notes_section",
+  "notes",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "planning_section",
+   "fieldtype": "Section Break",
+   "label": "周食谱编排"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "食谱名称",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "园所公司",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "raw_material_warehouse",
+   "fieldtype": "Link",
+   "label": "原料仓库",
+   "options": "Warehouse",
+   "reqd": 1,
+   "description": "选择本园所接收及核算食材的非汇总仓库。"
+  },
+  {
+   "fieldname": "week_start",
+   "fieldtype": "Date",
+   "label": "本周开始日期",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "选择供餐周的星期一。"
+  },
+  {
+   "fieldname": "week_end",
+   "fieldtype": "Date",
+   "label": "本周结束日期",
+   "read_only": 1
+  },
+  {
+   "fieldname": "planning_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "template_week_start",
+   "fieldtype": "Date",
+   "label": "参考食谱周",
+   "default": "2026-10-12",
+   "description": "从已有食谱周复制菜品与配方；人数将从教育管理重新核算。"
+  },
+  {
+   "fieldname": "academic_year",
+   "fieldtype": "Link",
+   "label": "学年",
+   "options": "Academic Year"
+  },
+  {
+   "fieldname": "academic_term",
+   "fieldtype": "Link",
+   "label": "学期",
+   "options": "Academic Term"
+  },
+  {
+   "fieldname": "revision",
+   "fieldtype": "Int",
+   "label": "编排版本",
+   "default": "1",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_week",
+   "fieldtype": "Link",
+   "label": "复制来源周",
+   "options": "Meal Planning Week",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "编排状态",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "population_section",
+   "fieldtype": "Section Break",
+   "label": "教育管理人数依据"
+  },
+  {
+   "fieldname": "population_basis",
+   "fieldtype": "Data",
+   "label": "人数来源",
+   "read_only": 1
+  },
+  {
+   "fieldname": "population_as_of",
+   "fieldtype": "Datetime",
+   "label": "人数核算时间",
+   "read_only": 1
+  },
+  {
+   "fieldname": "population_snapshot",
+   "fieldtype": "Long Text",
+   "label": "人数依据快照",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "meals_section",
+   "fieldtype": "Section Break",
+   "label": "每日餐次与计划供餐人数",
+   "description": "计划人数以教育管理中的在园学生为依据，扣减停餐调整人数；不代表当天实际出勤或实际进餐。"
+  },
+  {
+   "fieldname": "meals",
+   "fieldtype": "Table",
+   "label": "餐次计划",
+   "options": "Meal Plan Meal",
+   "description": "保存新周后，点击“从上一周编排”建立餐次；提交前须完成整周餐次。"
+  },
+  {
+   "fieldname": "procurement_section",
+   "fieldtype": "Section Break",
+   "label": "采购需求"
+  },
+  {
+   "fieldname": "stock_reviewed",
+   "fieldtype": "Check",
+   "label": "账面库存已核对",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "description": "通过“核对账面库存”操作记录，仅表示账面核对，不表示完成实物盘点。"
+  },
+  {
+   "fieldname": "material_request",
+   "fieldtype": "Link",
+   "label": "采购申请",
+   "options": "Material Request",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "procurement_snapshot",
+   "fieldtype": "Long Text",
+   "label": "采购依据快照",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "procurement_html",
+   "fieldtype": "HTML",
+   "label": "采购需求预览"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "说明",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "备注"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "修订自",
+   "options": "Meal Planning Week",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "active_week_key",
+   "fieldtype": "Data",
+   "label": "有效周唯一键",
+   "unique": 1,
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "kitchen_warehouse",
+   "fieldtype": "Link",
+   "label": "厨房仓库",
+   "options": "Warehouse",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "description": "由受控配置操作选择本园所厨房仓，不得与原料仓库相同。"
+  },
+  {
+   "fieldname": "requirement_weight_basis",
+   "fieldtype": "Select",
+   "label": "食材带量重量口径",
+   "options": "待确认\n采购毛重",
+   "default": "待确认",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "description": "采购毛重指清洗去皮前重量；按原表带量计算，不另加损耗系数。"
+  },
+  {
+   "fieldname": "kitchen_section",
+   "fieldtype": "Section Break",
+   "label": "厨房执行与周核销"
+  },
+  {
+   "fieldname": "kitchen_reconciled",
+   "fieldtype": "Check",
+   "label": "厨房本周已核销",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "kitchen_reconciled_at",
+   "fieldtype": "Datetime",
+   "label": "厨房核销时间",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "kitchen_reconciliation_snapshot",
+   "fieldtype": "Long Text",
+   "label": "厨房核销依据",
+   "read_only": 1,
+   "hidden": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "requirement_weight_snapshot",
+   "fieldtype": "Long Text",
+   "label": "重量口径确认依据",
+   "hidden": 1,
+   "read_only": 1,
+   "allow_on_submit": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "Meal Planning Week",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "share": 1,
+   "email": 1
+  },
+  {
+   "role": "食谱编排员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "食谱审核员",
+   "read": 1,
+   "write": 1,
+   "submit": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "search_fields": "title,company,week_start",
+ "sort_field": "week_start",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

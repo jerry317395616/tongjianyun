@@ -27,7 +27,7 @@ class MealPortionTests(unittest.TestCase):
         utils = SimpleNamespace(flt=lambda value, precision=None: round(float(value), precision), getdate=str)
         stubs = {
             "frappe": frappe, "frappe.utils": utils,
-            "ione_core": SimpleNamespace(meal_planning=SimpleNamespace()),
+            "tongjianyun.meal_planning": SimpleNamespace(),
             "tongjianyun.dish_library": SimpleNamespace(
                 _visible=Mock(), _supports_inline_ingredients=lambda recipe: not recipe.percentage,
             ),

@@ -1,0 +1,32 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["step_code", "option_code", "label", "icon", "description", "sequence", "recommendation_section", "report_type", "report_description", "strengths_json", "team_json", "automation_json", "manual_json"],
+ "fields": [
+  {"fieldname": "step_code", "fieldtype": "Data", "label": "所属步骤编码", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "option_code", "fieldtype": "Data", "label": "选项编码", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "label", "fieldtype": "Data", "label": "选项名称", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "icon", "fieldtype": "Data", "label": "图标"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "选项说明"},
+  {"fieldname": "sequence", "fieldtype": "Int", "label": "顺序", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "recommendation_section", "fieldtype": "Section Break", "label": "方案建议", "collapsible": 1},
+  {"fieldname": "report_type", "fieldtype": "Data", "label": "经营类型"},
+  {"fieldname": "report_description", "fieldtype": "Small Text", "label": "经营类型说明"},
+  {"fieldname": "strengths_json", "fieldtype": "Code", "label": "能力评分", "options": "JSON"},
+  {"fieldname": "team_json", "fieldtype": "Code", "label": "AI 团队建议", "options": "JSON"},
+  {"fieldname": "automation_json", "fieldtype": "Code", "label": "自动化建议", "options": "JSON"},
+  {"fieldname": "manual_json", "fieldtype": "Code", "label": "人工负责事项", "options": "JSON"}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "module": "I ONE Mobile",
+ "name": "I-ONE Onboarding Option",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "sequence",
+ "sort_order": "ASC",
+ "states": []
+}

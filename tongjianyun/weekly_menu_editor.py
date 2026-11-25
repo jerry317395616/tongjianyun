@@ -12,8 +12,8 @@ from frappe.model.delete_doc import (
 )
 from frappe.query_builder.functions import Coalesce
 from frappe.utils import cint, getdate, now_datetime
-from ione_core import meal_planning as planning
-from ione_core.meal_adjustments import get_effective_meals
+from tongjianyun import meal_planning as planning
+from tongjianyun.meal_adjustments import get_effective_meals
 
 from tongjianyun.dish_library import _preview_ingredients, _require, _visible
 from tongjianyun.meal_portions import SOURCE, parse_portions, resolve

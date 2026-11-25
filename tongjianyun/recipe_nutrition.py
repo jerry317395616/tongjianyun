@@ -108,7 +108,7 @@ def freeze_recipe(doc, method=None):
 def freeze_week(doc, method=None):
     if not frappe.get_meta(doc.doctype).has_field(SNAPSHOT):
         return
-    from ione_core.meal_planning import _bound_plan
+    from tongjianyun.meal_planning import _bound_plan
 
     names = {dish.bom_no for meal in doc.meals if not meal.get("service_suspended")
              for dish in _bound_plan(doc, meal).po_items}

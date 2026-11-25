@@ -8,8 +8,7 @@ app_publisher = "Local"
 app_description = "ERP 周食谱与食谱分析"
 app_email = "admin@example.com"
 app_license = "mit"
-required_apps = ["erpnext", "ione_core"]
-ione_core_translation_app = app_name
+required_apps = ["erpnext"]
 app_include_js = ["/assets/tongjianyun/js/meal_overview.js?v=20261124.7", "/assets/tongjianyun/js/meal_list_filters.js?v=20261124.7", "/assets/tongjianyun/js/meal_desk.js?v=20261124.7"]
 app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.7"]
 app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
@@ -27,7 +26,7 @@ after_migrate = [
     "tongjianyun.canteen_ops.setup.install_project_fields",
     "tongjianyun.canteen_ops.setup.install_public_notice_field",
 ]
-after_install = [*after_migrate, "ione_core.translation_overrides.sync_translation_overrides"]
+after_install = [*after_migrate]
 scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_reminders"]}
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",
@@ -140,3 +139,38 @@ from tongjianyun.canteen_ops.navigation import GROUPS as _MEAL_GROUPS
 for _dt in {target for _, _, entries in _MEAL_GROUPS for kind, target, _, _ in entries if kind == "DocType"}:
     _previous = doctype_list_js.get(_dt)
     doctype_list_js[_dt] = ([_previous] if _previous else []) + ["public/js/meal_desk_list.js"]
+
+# Preserve the original ordering when both applications handled the same event.
+from tongjianyun import core_service_hooks as _core
+from tongjianyun.core_legacy_routes import LEGACY_METHODS as _legacy_methods
+
+
+def _handlers(value):
+    return list(value) if isinstance(value, (tuple, list)) else [value]
+
+
+def _combine_hooks(first, second):
+    result = dict(first)
+    for key, value in second.items():
+        result[key] = _handlers(result[key]) + _handlers(value) if key in result else value
+    return result
+
+
+doctype_js = _combine_hooks(_core.doctype_js, doctype_js)
+doctype_list_js = _combine_hooks(_core.doctype_list_js, doctype_list_js)
+extend_doctype_class = _combine_hooks(_core.extend_doctype_class, extend_doctype_class)
+permission_query_conditions = _combine_hooks(_core.permission_query_conditions, permission_query_conditions)
+has_permission = _combine_hooks(_core.has_permission, has_permission)
+doc_events = {
+    name: _combine_hooks(_core.doc_events.get(name, {}), doc_events.get(name, {}))
+    for name in dict.fromkeys([*_core.doc_events, *doc_events])
+}
+scheduler_events = _combine_hooks(_core.scheduler_events, scheduler_events)
+override_whitelisted_methods = {**_core.override_whitelisted_methods, **_legacy_methods}
+boot_session = _core.boot_session
+after_request = _core.after_request
+after_app_install = _core.after_app_install
+fixtures = _core.fixtures
+before_install = [_core.before_install, before_install]
+after_install = [_core.after_install, *after_install]
+after_migrate = [_core.after_migrate, *after_migrate]

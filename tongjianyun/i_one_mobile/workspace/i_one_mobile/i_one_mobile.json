@@ -1,0 +1,44 @@
+{
+ "app": "tongjianyun",
+ "charts": [],
+ "content": "[{\"id\":\"mobile-open\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"打开手机工作台\",\"col\":3}},{\"id\":\"mobile-flow\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"引导流程\",\"col\":3}},{\"id\":\"mobile-record\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"用户引导记录\",\"col\":3}},{\"id\":\"mobile-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"mobile-card\",\"type\":\"card\",\"data\":{\"card_name\":\"手机端引导\",\"col\":6}}]",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "smartphone",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "I-ONE 手机端",
+ "links": [
+  {"type": "Card Break", "label": "手机端引导", "hidden": 0, "link_type": "DocType", "link_count": 2, "onboard": 0, "is_query_report": 0},
+  {"type": "Link", "label": "引导流程", "hidden": 0, "link_type": "DocType", "link_to": "I-ONE Onboarding Flow", "link_count": 0, "onboard": 0, "is_query_report": 0},
+  {"type": "Link", "label": "用户引导记录", "hidden": 0, "link_type": "DocType", "link_to": "I-ONE Onboarding Record", "link_count": 0, "onboard": 0, "is_query_report": 0}
+ ],
+ "module": "I ONE Mobile",
+ "name": "I-ONE Mobile",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "I-ONE AI",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {"role": "I-ONE User"},
+  {"role": "I-ONE Manager"},
+  {"role": "System Manager"}
+ ],
+ "sequence_id": 2,
+ "shortcuts": [
+  {"type": "URL", "link_to": "/ione-mobile", "doc_view": "", "label": "打开手机工作台", "color": "Blue", "stats_filter": "[]"},
+  {"type": "DocType", "link_to": "I-ONE Onboarding Flow", "doc_view": "List", "label": "引导流程", "color": "Blue", "stats_filter": "[]"},
+  {"type": "DocType", "link_to": "I-ONE Onboarding Record", "doc_view": "List", "label": "用户引导记录", "color": "Green", "stats_filter": "[]"}
+ ],
+ "sidebar_items": [
+  {"type": "Link", "label": "引导流程", "link_type": "DocType", "link_to": "I-ONE Onboarding Flow", "icon": "list", "default_workspace": 0, "child": 0, "open_in_new_tab": 0, "collapsible": 1, "indent": 0, "keep_closed": 0, "show_arrow": 0},
+  {"type": "Link", "label": "用户引导记录", "link_type": "DocType", "link_to": "I-ONE Onboarding Record", "icon": "users", "default_workspace": 0, "child": 0, "open_in_new_tab": 0, "collapsible": 1, "indent": 0, "keep_closed": 0, "show_arrow": 0}
+ ],
+ "standard": 1,
+ "title": "I-ONE 手机端",
+ "type": "Workspace"
+}

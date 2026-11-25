@@ -61,7 +61,7 @@ def install():
 
 
 def _install_layout():
-    from ione_core.meal_planning import SLOT_FIELDS
+    from tongjianyun.meal_planning import SLOT_FIELDS
 
     _install_layout_fields()
     _save_layout("Item", LAYOUT, {

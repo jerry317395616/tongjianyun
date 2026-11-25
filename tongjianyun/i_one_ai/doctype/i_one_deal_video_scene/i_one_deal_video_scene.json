@@ -1,0 +1,23 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["scene_order", "scene_type", "title", "duration_seconds", "subtitle", "bullets", "narration", "asset_file", "evidence"],
+ "fields": [
+  {"fieldname": "scene_order", "fieldtype": "Int", "label": "顺序", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "scene_type", "fieldtype": "Select", "label": "场景类型", "options": "开场\n客户现状\n核心痛点\n解决方案\n核心能力\n实施路径\n预期价值\n结束", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "title", "fieldtype": "Data", "label": "标题", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "duration_seconds", "fieldtype": "Float", "label": "时长（秒）", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "subtitle", "fieldtype": "Small Text", "label": "副标题"},
+  {"fieldname": "bullets", "fieldtype": "Small Text", "label": "要点", "description": "每行一个要点，最多六项"},
+  {"fieldname": "narration", "fieldtype": "Long Text", "label": "旁白与字幕"},
+  {"fieldname": "asset_file", "fieldtype": "Link", "label": "画面素材", "options": "File"},
+  {"fieldname": "evidence", "fieldtype": "Small Text", "label": "内容依据", "description": "记录商机字段、方案章节或附件名称，防止生成无依据的承诺"}
+ ],
+ "istable": 1,
+ "module": "I ONE AI",
+ "name": "I-ONE Deal Video Scene",
+ "owner": "Administrator",
+ "permissions": []
+}

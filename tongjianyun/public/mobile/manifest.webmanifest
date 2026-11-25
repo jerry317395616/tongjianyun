@@ -1,0 +1,20 @@
+{
+  "name": "I-ONE 企业智能工作台",
+  "short_name": "I-ONE",
+  "description": "基于 Frappe 的企业智能移动工作台",
+  "lang": "zh-CN",
+  "start_url": "/ione-mobile",
+  "scope": "/ione-mobile",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f5f5",
+  "theme_color": "#1677ff",
+  "icons": [
+    {
+      "src": "/assets/tongjianyun/images/ione-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

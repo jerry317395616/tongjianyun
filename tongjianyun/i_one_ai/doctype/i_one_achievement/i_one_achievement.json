@@ -1,0 +1,27 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "format:IAC-{YYYY}-{#####}", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["achievement_section", "user", "achievement_code", "title", "column_break_achievement", "achievement_type", "points", "gold", "awarded_at", "description", "source_section", "source_doctype", "source_name"],
+ "fields": [
+  {"fieldname": "achievement_section", "fieldtype": "Section Break", "label": "成就信息"},
+  {"fieldname": "user", "fieldtype": "Link", "label": "用户", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "achievement_code", "fieldtype": "Data", "label": "成就编码", "reqd": 1, "in_standard_filter": 1},
+  {"fieldname": "title", "fieldtype": "Data", "label": "成就名称", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "column_break_achievement", "fieldtype": "Column Break"},
+  {"fieldname": "achievement_type", "fieldtype": "Select", "label": "成就类型", "options": "入门\n经营\n效率\n成长\n协作\n智能化", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "points", "fieldtype": "Int", "label": "经验值", "default": "0"},
+  {"fieldname": "gold", "fieldtype": "Int", "label": "金币", "default": "0"},
+  {"fieldname": "awarded_at", "fieldtype": "Datetime", "label": "获得时间", "default": "Now", "in_list_view": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "成就说明"},
+  {"fieldname": "source_section", "fieldtype": "Section Break", "label": "业务来源"},
+  {"fieldname": "source_doctype", "fieldtype": "Link", "label": "来源单据类型", "options": "DocType"},
+  {"fieldname": "source_name", "fieldtype": "Dynamic Link", "label": "来源单据", "options": "source_doctype"}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "I ONE AI", "name": "I-ONE Achievement", "naming_rule": "Expression", "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1},
+  {"role": "I-ONE AI Operator", "read": 1, "create": 1, "report": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "awarded_at", "sort_order": "DESC", "states": [], "title_field": "title", "track_changes": 1
+}

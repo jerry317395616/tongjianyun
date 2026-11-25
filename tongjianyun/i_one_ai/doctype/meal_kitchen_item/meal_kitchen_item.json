@@ -1,0 +1,10 @@
+{
+ "doctype": "DocType", "name": "Meal Kitchen Item", "module": "I ONE AI", "engine": "InnoDB", "istable": 1,
+ "field_order": ["item_code", "planned_qty", "stock_uom"],
+ "fields": [
+  {"fieldname": "item_code", "fieldtype": "Link", "label": "食材", "options": "Item", "read_only": 1, "in_list_view": 1, "columns": 5},
+  {"fieldname": "planned_qty", "fieldtype": "Float", "label": "计划用量", "precision": "6", "read_only": 1, "in_list_view": 1, "columns": 3},
+  {"fieldname": "stock_uom", "fieldtype": "Link", "label": "库存单位", "options": "UOM", "read_only": 1, "in_list_view": 1, "columns": 2}
+ ],
+ "permissions": [], "actions": [], "links": [], "states": [], "sort_field": "modified", "sort_order": "DESC"
+}

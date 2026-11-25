@@ -1,0 +1,33 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["action_index", "title", "action_type", "target_app", "target_doctype", "operation", "payload_json", "confidence", "risk_level", "approval_required", "status", "target_name", "target_route", "result_message"],
+ "fields": [
+  {"fieldname": "action_index", "fieldtype": "Int", "label": "序号", "in_list_view": 1},
+  {"fieldname": "title", "fieldtype": "Data", "label": "动作标题", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "action_type", "fieldtype": "Select", "label": "动作类型", "options": "创建待办\n创建客户\n创建销售线索\n创建客户工单\n创建请假\n创建财务草稿\n归档文件\n仅记录", "default": "仅记录", "in_list_view": 1},
+  {"fieldname": "target_app", "fieldtype": "Data", "label": "目标应用", "in_list_view": 1},
+  {"fieldname": "target_doctype", "fieldtype": "Link", "label": "目标单据类型", "options": "DocType"},
+  {"fieldname": "operation", "fieldtype": "Select", "label": "执行方式", "options": "创建记录\n创建草稿\n归档文件\n仅记录", "default": "仅记录"},
+  {"fieldname": "payload_json", "fieldtype": "Code", "label": "结构化参数", "options": "JSON", "reqd": 1},
+  {"fieldname": "confidence", "fieldtype": "Percent", "label": "置信度"},
+  {"fieldname": "risk_level", "fieldtype": "Select", "label": "风险等级", "options": "低\n中\n高\n关键", "default": "低"},
+  {"fieldname": "approval_required", "fieldtype": "Check", "label": "需要审批", "default": "0"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "状态", "options": "待确认\n待审批\n执行中\n已执行\n需补充\n已跳过\n执行失败", "default": "待确认", "in_list_view": 1},
+  {"fieldname": "target_name", "fieldtype": "Dynamic Link", "label": "生成单据", "options": "target_doctype", "read_only": 1},
+  {"fieldname": "target_route", "fieldtype": "Data", "label": "单据地址", "read_only": 1},
+  {"fieldname": "result_message", "fieldtype": "Small Text", "label": "执行结果", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "I-ONE Record Action",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": []
+}

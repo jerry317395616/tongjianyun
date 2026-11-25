@@ -65,8 +65,8 @@ FIELDS = {
 
 def install():
     frappe.only_for("System Manager")
-    from ione_core.meal_dish_catalog import classify_existing_dishes, install_meal_slot_fields
-    from ione_core.meal_planning import SLOT_FIELDS
+    from tongjianyun.meal_dish_catalog import classify_existing_dishes, install_meal_slot_fields
+    from tongjianyun.meal_planning import SLOT_FIELDS
 
     create_custom_fields({
         doctype: [
@@ -123,8 +123,8 @@ def _install_dish_layout_fields():
 
 
 def _arrange_dish_details(metadata, fields):
-    from ione_core.meal_dish_catalog import SECTION
-    from ione_core.meal_planning import SLOT_FIELDS
+    from tongjianyun.meal_dish_catalog import SECTION
+    from tongjianyun.meal_planning import SLOT_FIELDS
 
     rows = {row["fieldname"]: row for row in fields}
     start = next(i for i, row in enumerate(metadata) if row.fieldname == "details")

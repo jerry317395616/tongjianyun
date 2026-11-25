@@ -1,0 +1,273 @@
+{
+ "doctype": "DocType",
+ "name": "Meal Kitchen Day",
+ "module": "I ONE AI",
+ "engine": "InnoDB",
+ "autoname": "format:MEAL-KITCHEN-{YYYY}-{#####}",
+ "naming_rule": "Expression",
+ "is_submittable": 1,
+ "allow_rename": 0,
+ "track_changes": 1,
+ "title_field": "meal_date",
+ "sort_field": "meal_date",
+ "sort_order": "DESC",
+ "field_order": [
+  "day_section",
+  "meal_week",
+  "meal_date",
+  "company",
+  "day_column",
+  "source_warehouse",
+  "kitchen_warehouse",
+  "status",
+  "prepared_by",
+  "approved_by",
+  "approved_at",
+  "meals_section",
+  "meals",
+  "items_section",
+  "items",
+  "ledger_section",
+  "ledger_html",
+  "carry_section",
+  "carry_confirmed",
+  "carry_notes",
+  "carry_confirmation_snapshot",
+  "notes_section",
+  "notes",
+  "execution_snapshot",
+  "active_day_key",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "day_section",
+   "fieldtype": "Section Break",
+   "label": "厨房每日执行"
+  },
+  {
+   "fieldname": "meal_week",
+   "fieldtype": "Link",
+   "label": "周食谱",
+   "options": "Meal Planning Week",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "meal_date",
+   "fieldtype": "Date",
+   "label": "供餐日期",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "园所公司",
+   "options": "Company",
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "day_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "原料来源仓",
+   "options": "Warehouse",
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "kitchen_warehouse",
+   "fieldtype": "Link",
+   "label": "厨房仓库",
+   "options": "Warehouse",
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "label": "日结状态",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "prepared_by",
+   "fieldtype": "Link",
+   "label": "录入人",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "审核人",
+   "options": "User",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "approved_at",
+   "fieldtype": "Datetime",
+   "label": "审核时间",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "meals_section",
+   "fieldtype": "Section Break",
+   "label": "实际供餐记录",
+   "description": "每餐均须明确确认实际供餐人数；零人代表实际停供，须填写原因。实际供餐人数不等于实际营养摄入。"
+  },
+  {
+   "fieldname": "meals",
+   "fieldtype": "Table",
+   "label": "五餐执行",
+   "options": "Meal Kitchen Meal",
+   "reqd": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "计划食材依据"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "计划食材",
+   "options": "Meal Kitchen Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ledger_section",
+   "fieldtype": "Section Break",
+   "label": "本日库存流水与食材留存",
+   "description": "期初留存加本日已提交领用，减去耗用、退料和损耗，为期末留厨食材；留存本身不生成库存移动。"
+  },
+  {
+   "fieldname": "ledger_html",
+   "fieldtype": "HTML",
+   "label": "库存执行明细"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "说明"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "执行备注"
+  },
+  {
+   "fieldname": "active_day_key",
+   "fieldtype": "Data",
+   "label": "有效执行日唯一键",
+   "unique": 1,
+   "read_only": 1,
+   "hidden": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "修订自",
+   "options": "Meal Kitchen Day",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "execution_snapshot",
+   "fieldtype": "Long Text",
+   "label": "日结核销依据",
+   "hidden": 1,
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "carry_section",
+   "fieldtype": "Section Break",
+   "label": "食材余料实盘确认"
+  },
+  {
+   "fieldname": "carry_confirmed",
+   "fieldtype": "Check",
+   "label": "余料已实盘确认",
+   "default": "0",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "由清点操作生成；库存流水、实际人数或留存说明改变后须重新确认。"
+  },
+  {
+   "fieldname": "carry_notes",
+   "fieldtype": "Small Text",
+   "label": "食材留厨说明",
+   "no_copy": 1,
+   "description": "有食材余料留厨时填写说明；更改说明后须重新清点确认。"
+  },
+  {
+   "fieldname": "carry_confirmation_snapshot",
+   "fieldtype": "Long Text",
+   "label": "余料实盘确认依据",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "actions": [],
+ "links": [],
+ "states": [],
+ "index_web_pages_for_search": 0
+}

@@ -1,0 +1,39 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["log_section", "task", "agent", "event_type", "column_break_log", "level", "duration_ms", "message", "payload_json", "model_name", "input_tokens", "output_tokens"],
+ "fields": [
+  {"fieldname": "log_section", "fieldtype": "Section Break", "label": "运行日志"},
+  {"fieldname": "task", "fieldtype": "Link", "label": "AI 任务", "options": "I-ONE AI Task", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "agent", "fieldtype": "Link", "label": "智能体", "options": "I-ONE Agent", "in_standard_filter": 1},
+  {"fieldname": "event_type", "fieldtype": "Data", "label": "事件类型", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_log", "fieldtype": "Column Break"},
+  {"fieldname": "level", "fieldtype": "Select", "label": "级别", "options": "信息\n警告\n错误", "default": "信息", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "duration_ms", "fieldtype": "Int", "label": "耗时（毫秒）"},
+  {"fieldname": "message", "fieldtype": "Small Text", "label": "日志内容", "reqd": 1},
+  {"fieldname": "payload_json", "fieldtype": "Code", "label": "详细数据", "options": "JSON"},
+  {"fieldname": "model_name", "fieldtype": "Data", "label": "模型"},
+  {"fieldname": "input_tokens", "fieldtype": "Int", "label": "输入 Token"},
+  {"fieldname": "output_tokens", "fieldtype": "Int", "label": "输出 Token"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "I-ONE AI Run Log",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1},
+  {"role": "I-ONE AI Operator", "read": 1, "create": 1, "report": 1, "export": 1},
+  {"role": "I-ONE Auditor", "read": 1, "report": 1, "export": 1, "print": 1},
+  {"role": "I-ONE Manager", "read": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "print": 1},
+  {"role": "System Manager", "read": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "print": 1}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

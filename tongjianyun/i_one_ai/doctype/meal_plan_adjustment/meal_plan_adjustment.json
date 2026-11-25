@@ -1,0 +1,230 @@
+{
+ "doctype": "DocType",
+ "name": "Meal Plan Adjustment",
+ "module": "I ONE AI",
+ "engine": "InnoDB",
+ "autoname": "format:MEAL-CHANGE-{YYYY}-{#####}",
+ "naming_rule": "Expression",
+ "is_submittable": 1,
+ "allow_rename": 0,
+ "track_changes": 1,
+ "title_field": "meal_week",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "field_order": [
+  "request_section",
+  "meal_week",
+  "meal_date",
+  "meal_type",
+  "reason",
+  "source_plan",
+  "source_adjustment",
+  "source_snapshot",
+  "target_section",
+  "target_headcount",
+  "service_suspended",
+  "dishes",
+  "review_section",
+  "review_notes",
+  "replacement_plan",
+  "material_request",
+  "purchase_change_summary",
+  "applied_snapshot",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "request_section",
+   "fieldtype": "Section Break",
+   "label": "已审核食谱变更申请"
+  },
+  {
+   "fieldname": "meal_week",
+   "fieldtype": "Link",
+   "label": "原周食谱",
+   "options": "Meal Planning Week",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "meal_date",
+   "fieldtype": "Date",
+   "label": "变更供餐日期",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "meal_type",
+   "fieldtype": "Select",
+   "label": "变更餐次",
+   "options": "早餐\n早点\n午餐\n午点\n晚餐",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "变更原因",
+   "reqd": 1,
+   "description": "说明人数、菜品或整餐停供的变更依据。额外供餐不会改写教育学生名册。"
+  },
+  {
+   "fieldname": "target_section",
+   "fieldtype": "Section Break",
+   "label": "申请变更后的安排"
+  },
+  {
+   "fieldname": "target_headcount",
+   "fieldtype": "Int",
+   "label": "目标计划供餐人数",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "service_suspended",
+   "fieldtype": "Check",
+   "label": "整餐停供",
+   "default": "0",
+   "description": "停供时目标人数须为零，并填写原因；正常供餐须有正数人数和至少一个菜品配方。"
+  },
+  {
+   "fieldname": "dishes",
+   "fieldtype": "Table",
+   "label": "变更后的完整菜品配方",
+   "options": "Meal Adjustment Dish"
+  },
+  {
+   "fieldname": "review_section",
+   "fieldtype": "Section Break",
+   "label": "审核与应用结果"
+  },
+  {
+   "fieldname": "review_notes",
+   "fieldtype": "Small Text",
+   "label": "审核意见"
+  },
+  {
+   "fieldname": "replacement_plan",
+   "fieldtype": "Link",
+   "label": "替代生产计划",
+   "options": "Production Plan",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "material_request",
+   "fieldtype": "Link",
+   "label": "调整后的采购申请",
+   "options": "Material Request",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "purchase_change_summary",
+   "fieldtype": "Long Text",
+   "label": "采购变化及后续处理",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "applied_snapshot",
+   "fieldtype": "Long Text",
+   "label": "应用依据快照",
+   "read_only": 1,
+   "hidden": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "修订自",
+   "options": "Meal Plan Adjustment",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "source_plan",
+   "fieldtype": "Link",
+   "label": "申请时有效生产计划",
+   "options": "Production Plan",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_adjustment",
+   "fieldtype": "Link",
+   "label": "前次有效变更",
+   "options": "Meal Plan Adjustment",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_snapshot",
+   "fieldtype": "Long Text",
+   "label": "申请来源依据",
+   "hidden": 1,
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "食谱编排员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "食谱审核员",
+   "read": 1,
+   "write": 1,
+   "submit": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "膳食业务经办员",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "actions": [],
+ "links": [],
+ "states": [],
+ "index_web_pages_for_search": 0
+}

@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:AIA-{YYYY}-{#####}",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["request_section", "task", "request_summary", "risk_level", "column_break_request", "status", "requested_by", "approver", "expires_at", "decision_section", "decision_note", "decided_at"],
+ "fields": [
+  {"fieldname": "request_section", "fieldtype": "Section Break", "label": "审批信息"},
+  {"fieldname": "task", "fieldtype": "Link", "label": "AI 任务", "options": "I-ONE AI Task", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "request_summary", "fieldtype": "Small Text", "label": "申请说明", "reqd": 1},
+  {"fieldname": "risk_level", "fieldtype": "Select", "label": "风险等级", "options": "低\n中\n高\n关键", "default": "中", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_request", "fieldtype": "Column Break"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "状态", "options": "待审批\n批准\n拒绝\n已过期\n已取消", "default": "待审批", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "requested_by", "fieldtype": "Link", "label": "申请人", "options": "User", "reqd": 1, "read_only": 1, "in_standard_filter": 1},
+  {"fieldname": "approver", "fieldtype": "Link", "label": "审批人", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "expires_at", "fieldtype": "Datetime", "label": "审批截止时间"},
+  {"fieldname": "decision_section", "fieldtype": "Section Break", "label": "审批结果"},
+  {"fieldname": "decision_note", "fieldtype": "Small Text", "label": "审批意见"},
+  {"fieldname": "decided_at", "fieldtype": "Datetime", "label": "处理时间", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "I-ONE Approval Request",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1, "write": 1, "create": 1},
+  {"role": "I-ONE AI Operator", "read": 1, "write": 1, "create": 1, "report": 1},
+  {"role": "I-ONE Auditor", "read": 1, "report": 1, "export": 1, "print": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "request_summary",
+ "track_changes": 1
+}

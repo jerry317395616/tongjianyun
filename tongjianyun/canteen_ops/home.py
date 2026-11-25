@@ -5,8 +5,8 @@ from datetime import timedelta
 import frappe
 from frappe.utils import getdate
 
-from ione_core import meal_kitchen
-from ione_core.meal_adjustments import get_effective_meals
+from tongjianyun import meal_kitchen
+from tongjianyun.meal_adjustments import get_effective_meals
 from tongjianyun import meal_ledger
 from tongjianyun.canteen_ops import common
 from tongjianyun.canteen_ops.meal_operations import PUBLIC, DELIVERY as HANDOVER

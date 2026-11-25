@@ -1,0 +1,22 @@
+{
+ "actions": [], "allow_rename": 1, "autoname": "field:channel_name", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["channel_section", "channel_name", "channel_type", "column_break_channel", "status", "account_name", "integration_reference", "configuration_json", "last_published_at"],
+ "fields": [
+  {"fieldname": "channel_section", "fieldtype": "Section Break", "label": "渠道信息"},
+  {"fieldname": "channel_name", "fieldtype": "Data", "label": "渠道名称", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "channel_type", "fieldtype": "Select", "label": "渠道类型", "options": "微信公众号\n视频号\n抖音\n小红书\n微博\n网站\n邮件\n其他", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_channel", "fieldtype": "Column Break"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "状态", "options": "启用\n暂停\n停用", "default": "启用", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "account_name", "fieldtype": "Data", "label": "账号名称"},
+  {"fieldname": "integration_reference", "fieldtype": "Data", "label": "集成配置引用", "description": "敏感凭据应保存在集成配置或 Password 字段中"},
+  {"fieldname": "configuration_json", "fieldtype": "Code", "label": "非敏感配置", "options": "JSON"},
+  {"fieldname": "last_published_at", "fieldtype": "Datetime", "label": "最近发布时间", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "I ONE AI", "name": "I-ONE Channel", "naming_rule": "By fieldname", "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE AI Operator", "read": 1, "write": 1, "create": 1, "report": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "modified", "sort_order": "DESC", "states": [], "title_field": "channel_name", "track_changes": 1
+}

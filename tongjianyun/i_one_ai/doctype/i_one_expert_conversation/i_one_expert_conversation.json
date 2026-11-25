@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:IEC-{YYYY}-{#####}",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "conversation_section",
+  "title",
+  "user",
+  "column_break_conversation",
+  "status",
+  "provider",
+  "last_message_at",
+  "service_section",
+  "deepseek_conversation_url",
+  "last_error"
+ ],
+ "fields": [
+  {"fieldname": "conversation_section", "fieldtype": "Section Break", "label": "对话信息"},
+  {"fieldname": "title", "fieldtype": "Data", "label": "对话标题", "reqd": 1, "in_list_view": 1, "search_index": 1},
+  {"fieldname": "user", "fieldtype": "Link", "label": "用户", "options": "User", "reqd": 1, "read_only": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_conversation", "fieldtype": "Column Break"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "状态", "options": "活动\n等待回复\n服务异常\n已归档", "default": "活动", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "provider", "fieldtype": "Data", "label": "专家服务", "default": "DeepSeek Web", "read_only": 1},
+  {"fieldname": "last_message_at", "fieldtype": "Datetime", "label": "最近消息时间", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "service_section", "fieldtype": "Section Break", "label": "网页会话", "collapsible": 1},
+  {"fieldname": "deepseek_conversation_url", "fieldtype": "Data", "label": "DeepSeek 对话地址", "read_only": 1, "hidden": 1},
+  {"fieldname": "last_error", "fieldtype": "Long Text", "label": "最近错误", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "I-ONE Expert Conversation",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1, "write": 1, "create": 1, "report": 1},
+  {"role": "I-ONE AI Operator", "read": 1, "write": 1, "create": 1, "report": 1, "export": 1},
+  {"role": "I-ONE Auditor", "read": 1, "report": 1, "export": 1, "print": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1}
+ ],
+ "search_fields": "title,user",
+ "sort_field": "last_message_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1,
+ "track_seen": 1
+}

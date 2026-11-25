@@ -106,7 +106,7 @@ def native_parents(child, field, values, parent, *, positive_only=False):
 
 @frappe.whitelist(methods=["POST"])
 def prepare_dispatch(week_name, meal_adjustment=None):
-    from ione_core.meal_procurement import create_material_request
+    from tongjianyun.meal_procurement import create_material_request
 
     week = submitted(linked(WEEK, week_name))
     site = canteen_for_week(week)

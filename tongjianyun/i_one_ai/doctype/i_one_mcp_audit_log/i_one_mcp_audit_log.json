@@ -1,0 +1,42 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:MCPA-{YYYY}-{#####}",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "overview_section", "user", "tool_name", "operation", "column_break_overview", "status", "duration_ms",
+  "target_section", "target_doctype", "target_name", "details_section", "request_summary", "result_summary", "error_message"
+ ],
+ "fields": [
+  {"fieldname": "overview_section", "fieldtype": "Section Break", "label": "调用信息"},
+  {"fieldname": "user", "fieldtype": "Link", "label": "调用用户", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "tool_name", "fieldtype": "Data", "label": "工具名称", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "operation", "fieldtype": "Select", "label": "操作类型", "options": "读取\n写入", "reqd": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_overview", "fieldtype": "Column Break"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "状态", "options": "成功\n失败", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "duration_ms", "fieldtype": "Int", "label": "耗时（毫秒）"},
+  {"fieldname": "target_section", "fieldtype": "Section Break", "label": "业务对象"},
+  {"fieldname": "target_doctype", "fieldtype": "Data", "label": "单据类型", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "target_name", "fieldtype": "Data", "label": "单据名称", "in_list_view": 1},
+  {"fieldname": "details_section", "fieldtype": "Section Break", "label": "审计详情"},
+  {"fieldname": "request_summary", "fieldtype": "Code", "label": "请求摘要", "options": "JSON", "read_only": 1},
+  {"fieldname": "result_summary", "fieldtype": "Code", "label": "结果摘要", "options": "JSON", "read_only": 1},
+  {"fieldname": "error_message", "fieldtype": "Small Text", "label": "错误信息", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "I-ONE MCP Audit Log",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE Auditor", "read": 1, "report": 1, "export": 1, "print": 1},
+  {"role": "I-ONE Manager", "read": 1, "report": 1, "export": 1, "print": 1},
+  {"role": "System Manager", "read": 1, "report": 1, "export": 1, "print": 1}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

@@ -1,0 +1,1 @@
+import{n as t,Z as a,r as n,a4 as l}from"./index-Dt314ZAG.js";const c={closeOnMaskClick:!1,closeIcon:t.createElement(a,null),destroyOnClose:!1,disableBodyScroll:!0,forceRender:!1,getContainer:()=>document.body,mask:!0,showCloseButton:!1,stopPropagation:["click"],visible:!1};function i(e){const[s,o]=n.useState(e);return l(()=>{o(e)},[e]),s}export{c as d,i as u};

@@ -128,7 +128,7 @@ def week_for(doc):
 def menu_lines(pub):
     if not pub.meal_week:
         return [{"date": str(r.service_date), "slot": r.meal_type, "menu": r.menu} for r in pub.meals]
-    from ione_core.meal_adjustments import get_effective_meals
+    from tongjianyun.meal_adjustments import get_effective_meals
     week = week_for(pub)
     rows = get_effective_meals(week)
     return [{"date": str(row.meal_date), "slot": row.meal_type, "menu": row.menu or "",
@@ -194,7 +194,7 @@ class ClassFeedback(Operation):
 
 
 def member(group, student):
-    from ione_core.meal_population import STUDENT_BATCH_FIELD
+    from tongjianyun.meal_population import STUDENT_BATCH_FIELD
     return frappe.db.get_value("Student", student, STUDENT_BATCH_FIELD) == group
 
 

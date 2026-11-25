@@ -1,0 +1,49 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "hash",
+ "description": "按科室控制 Flow 工具调用是否需要人工批准，不改变 Frappe 原有角色和数据权限。",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "scope_section",
+  "department",
+  "company",
+  "column_break_scope",
+  "enabled",
+  "apply_to_desk",
+  "apply_to_ai_employees",
+  "execution_section",
+  "execution_mode",
+  "auto_approved_tools",
+  "notes"
+ ],
+ "fields": [
+  {"fieldname": "scope_section", "fieldtype": "Section Break", "label": "适用范围"},
+  {"fieldname": "department", "fieldtype": "Link", "label": "科室", "options": "Department", "reqd": 1, "unique": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "company", "fieldtype": "Link", "label": "公司", "options": "Company", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "column_break_scope", "fieldtype": "Column Break"},
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "启用", "default": "1", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "apply_to_desk", "fieldtype": "Check", "label": "应用于 Desk Flow", "default": "1", "description": "控制用户通过 Ctrl+I 打开的交互式 Flow。"},
+  {"fieldname": "apply_to_ai_employees", "fieldtype": "Check", "label": "应用于 AI 员工", "default": "1", "description": "控制该科室 AI 员工执行工作单时的工具批准。"},
+  {"fieldname": "execution_section", "fieldtype": "Section Break", "label": "执行策略"},
+  {"fieldname": "execution_mode", "fieldtype": "Select", "label": "执行模式", "options": "始终确认\n指定工具自动执行\n全部自动执行", "default": "始终确认", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "auto_approved_tools", "fieldtype": "Table MultiSelect", "label": "自动执行工具", "options": "I-ONE Agent Tool", "depends_on": "eval:doc.execution_mode=='指定工具自动执行'", "mandatory_depends_on": "eval:doc.execution_mode=='指定工具自动执行'", "description": "建议先放行 create、update；delete、execute 等高风险工具继续保留批准。"},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "策略说明"}
+ ],
+ "index_web_pages_for_search": 0,
+ "module": "I ONE AI",
+ "name": "I-ONE Flow Execution Policy",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1}
+ ],
+ "search_fields": "department,company,execution_mode",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "department",
+ "track_changes": 1
+}

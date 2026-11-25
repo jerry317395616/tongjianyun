@@ -1,0 +1,27 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "format:IPJ-{YYYY}-{#####}", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["job_section", "title", "channel", "status", "column_break_job", "scheduled_at", "published_at", "content", "result_url", "error_message", "source_section", "source_doctype", "source_name"],
+ "fields": [
+  {"fieldname": "job_section", "fieldtype": "Section Break", "label": "发布任务"},
+  {"fieldname": "title", "fieldtype": "Data", "label": "任务标题", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "channel", "fieldtype": "Link", "label": "发布渠道", "options": "I-ONE Channel", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "状态", "options": "草稿\n待发布\n发布中\n已发布\n发布失败\n已取消", "default": "草稿", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_job", "fieldtype": "Column Break"},
+  {"fieldname": "scheduled_at", "fieldtype": "Datetime", "label": "计划发布时间"},
+  {"fieldname": "published_at", "fieldtype": "Datetime", "label": "实际发布时间", "read_only": 1},
+  {"fieldname": "content", "fieldtype": "Text Editor", "label": "发布内容", "reqd": 1},
+  {"fieldname": "result_url", "fieldtype": "Data", "label": "发布结果地址", "options": "URL", "read_only": 1},
+  {"fieldname": "error_message", "fieldtype": "Long Text", "label": "错误信息", "read_only": 1},
+  {"fieldname": "source_section", "fieldtype": "Section Break", "label": "内容来源"},
+  {"fieldname": "source_doctype", "fieldtype": "Link", "label": "来源单据类型", "options": "DocType"},
+  {"fieldname": "source_name", "fieldtype": "Dynamic Link", "label": "来源单据", "options": "source_doctype"}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "I ONE AI", "name": "I-ONE Publish Job", "naming_rule": "Expression", "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1, "write": 1, "create": 1},
+  {"role": "I-ONE AI Operator", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1}
+ ],
+ "sort_field": "modified", "sort_order": "DESC", "states": [], "title_field": "title", "track_changes": 1
+}

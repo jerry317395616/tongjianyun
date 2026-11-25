@@ -116,7 +116,7 @@ async function act(a) {
   if(a.kind==="form") return frappe.set_route("Form",a.doctype,a.name);
   if(a.kind==="reason") return frappe.msgprint({title:"停供原因",message:esc(a.reason)});
   if(a.kind==="kitchen") {
-    const res=await frappe.call({method:"ione_core.meal_kitchen.get_kitchen_day",type:"POST",args:{week_name:a.week,meal_date:a.date},freeze:true});
+    const res=await frappe.call({method:"tongjianyun.meal_kitchen.get_kitchen_day",type:"POST",args:{week_name:a.week,meal_date:a.date},freeze:true});
     return frappe.set_route("Form","Meal Kitchen Day",res.message.name);
   }
   if(a.kind==="receive") {

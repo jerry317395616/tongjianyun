@@ -4,7 +4,7 @@ from pathlib import Path
 import frappe
 
 from tongjianyun.canteen_ops.setup import report_names
-from tongjianyun.canteen_ops.reminders import METHOD as _EXPIRY_REMINDER
+from frappe.core.doctype.scheduled_job_type.scheduled_job_type import get_scheduler_events
 
 WEEKLY_MENU = "Tongjianyun Weekly Menu"
 LEGACY_WEEKLY_MENU = "Meal Weekly Plan"
@@ -48,7 +48,7 @@ def install():
     if frappe.session.user != "Administrator" and "System Manager" not in frappe.get_roles():
         frappe.throw("需要系统管理员部署食谱报表。", frappe.PermissionError)
     if not frappe.db.exists("DocType", "Meal Planning Week"):
-        frappe.throw("请先安装 I-ONE Core 的周食谱编排功能。")
+        frappe.throw("周食谱编排 DocType 尚未同步。")
     from frappe.modules.import_file import import_file_by_path
 
     root = Path(__file__).parent / "tongjianyun"
@@ -66,8 +66,10 @@ def install():
         if frappe.db.exists("DocType", "Desktop Icon"):
             for name in frappe.get_all("Desktop Icon", filters={"app": "tongjianyun"}, pluck="name"):
                 frappe.db.set_value("Desktop Icon", name, "link", "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu")
-        for row in frappe.get_all("Scheduled Job Type", filters={"method": ["like", "tongjianyun.%"]}, fields=["name", "stopped"]):
-            if row.method != _EXPIRY_REMINDER and not row.stopped:
+        active_jobs = {method for events in get_scheduler_events().values()
+                       for methods in (events.values() if isinstance(events, dict) else [events]) for method in methods}
+        for row in frappe.get_all("Scheduled Job Type", filters={"method": ["like", "tongjianyun.%"]}, fields=["name", "method", "stopped"]):
+            if row.method not in active_jobs and not row.stopped:
                 frappe.db.set_value("Scheduled Job Type", row.name, "stopped", 1)
         for row in frappe.get_all("Report", filters={"module": "Tongjianyun"}, fields=["name", "disabled"]):
             if row.name != LEGACY_WEEKLY_MENU and row.name not in REPORTS and not row.disabled:

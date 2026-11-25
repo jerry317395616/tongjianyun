@@ -1,0 +1,26 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["step_code", "step_type", "title", "description", "sequence", "required", "multiple_select"],
+ "fields": [
+  {"fieldname": "step_code", "fieldtype": "Data", "label": "步骤编码", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "step_type", "fieldtype": "Select", "label": "步骤类型", "options": "欢迎页\n单选题\n多选题\n资料页\n报告页", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "title", "fieldtype": "Data", "label": "标题", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "说明"},
+  {"fieldname": "sequence", "fieldtype": "Int", "label": "顺序", "description": "输入目标位置后自动插入，其他步骤将依次顺延。", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "required", "fieldtype": "Check", "label": "必填", "default": "0"},
+  {"fieldname": "multiple_select", "fieldtype": "Check", "label": "允许多选", "default": "0"}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "module": "I ONE Mobile",
+ "name": "I-ONE Onboarding Step",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "sequence",
+ "sort_order": "ASC",
+ "states": []
+}

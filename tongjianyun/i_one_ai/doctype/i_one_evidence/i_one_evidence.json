@@ -1,0 +1,28 @@
+{
+ "actions": [], "allow_rename": 1, "autoname": "format:IEV-{YYYY}-{#####}", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["evidence_section", "title", "source_type", "confidence", "column_break_evidence", "ai_task", "file", "source_url", "link_section", "source_doctype", "source_name", "summary", "excerpt"],
+ "fields": [
+  {"fieldname": "evidence_section", "fieldtype": "Section Break", "label": "证据信息"},
+  {"fieldname": "title", "fieldtype": "Data", "label": "证据标题", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "source_type", "fieldtype": "Select", "label": "来源类型", "options": "业务单据\n文件\n网页\n知识库\n人工输入\nAI 推理", "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "confidence", "fieldtype": "Percent", "label": "可信度", "default": "100", "in_list_view": 1},
+  {"fieldname": "column_break_evidence", "fieldtype": "Column Break"},
+  {"fieldname": "ai_task", "fieldtype": "Link", "label": "关联 AI 任务", "options": "I-ONE AI Task", "in_standard_filter": 1},
+  {"fieldname": "file", "fieldtype": "Attach", "label": "附件"},
+  {"fieldname": "source_url", "fieldtype": "Data", "label": "来源网址", "options": "URL"},
+  {"fieldname": "link_section", "fieldtype": "Section Break", "label": "业务关联"},
+  {"fieldname": "source_doctype", "fieldtype": "Link", "label": "单据类型", "options": "DocType"},
+  {"fieldname": "source_name", "fieldtype": "Dynamic Link", "label": "业务单据", "options": "source_doctype"},
+  {"fieldname": "summary", "fieldtype": "Small Text", "label": "摘要"},
+  {"fieldname": "excerpt", "fieldtype": "Long Text", "label": "证据内容"}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "I ONE AI", "name": "I-ONE Evidence", "naming_rule": "Expression", "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "I-ONE AI Operator", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1},
+  {"role": "I-ONE Auditor", "read": 1, "report": 1, "export": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1}
+ ],
+ "sort_field": "modified", "sort_order": "DESC", "states": [], "title_field": "title", "track_changes": 1
+}

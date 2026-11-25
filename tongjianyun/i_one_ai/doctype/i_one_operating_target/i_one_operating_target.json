@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:IOT-{YYYY}-{#####}",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["target_section", "target_month", "company", "column_break_target", "currency", "enabled", "values_section", "revenue_target", "profit_target", "customer_target", "notes_section", "notes"],
+ "fields": [
+  {"fieldname": "target_section", "fieldtype": "Section Break", "label": "目标周期"},
+  {"fieldname": "target_month", "fieldtype": "Date", "label": "目标月份", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "company", "fieldtype": "Link", "label": "公司", "options": "Company", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "column_break_target", "fieldtype": "Column Break"},
+  {"fieldname": "currency", "fieldtype": "Link", "label": "币种", "options": "Currency", "fetch_from": "company.default_currency", "read_only": 1},
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "启用", "default": "1", "in_list_view": 1},
+  {"fieldname": "values_section", "fieldtype": "Section Break", "label": "经营目标"},
+  {"fieldname": "revenue_target", "fieldtype": "Currency", "label": "收入目标", "options": "currency", "non_negative": 1},
+  {"fieldname": "profit_target", "fieldtype": "Currency", "label": "利润目标", "options": "currency", "non_negative": 1, "reqd": 1, "in_list_view": 1},
+  {"fieldname": "customer_target", "fieldtype": "Int", "label": "客户目标", "non_negative": 1},
+  {"fieldname": "notes_section", "fieldtype": "Section Break", "label": "说明", "collapsible": 1},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "备注"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "I-ONE Operating Target",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE User", "read": 1},
+  {"role": "I-ONE Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1},
+  {"role": "Accounts Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "print": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1, "share": 1, "print": 1}
+ ],
+ "search_fields": "company,target_month",
+ "sort_field": "target_month",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "company",
+ "track_changes": 1
+}

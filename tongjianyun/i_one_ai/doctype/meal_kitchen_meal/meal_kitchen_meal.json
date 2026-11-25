@@ -1,0 +1,12 @@
+{
+ "doctype": "DocType", "name": "Meal Kitchen Meal", "module": "I ONE AI", "engine": "InnoDB", "istable": 1, "editable_grid": 1,
+ "field_order": ["meal_type", "planned_headcount", "actual_headcount", "actual_confirmed", "reason"],
+ "fields": [
+  {"fieldname": "meal_type", "fieldtype": "Select", "label": "餐次", "options": "早餐\n早点\n午餐\n午点\n晚餐", "read_only": 1, "in_list_view": 1, "columns": 1},
+  {"fieldname": "planned_headcount", "fieldtype": "Int", "label": "计划人数", "read_only": 1, "in_list_view": 1, "columns": 2},
+  {"fieldname": "actual_headcount", "fieldtype": "Int", "label": "实际供餐人数", "non_negative": 1, "in_list_view": 1, "columns": 2},
+  {"fieldname": "actual_confirmed", "fieldtype": "Check", "label": "人数已确认", "default": "0", "in_list_view": 1, "columns": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "调整或停供原因", "in_list_view": 1, "columns": 4}
+ ],
+ "permissions": [], "actions": [], "links": [], "states": [], "sort_field": "modified", "sort_order": "DESC"
+}

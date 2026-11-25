@@ -1,0 +1,36 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["ai_section", "enable_ai", "provider", "model_name", "column_break_ai", "llm_base_url", "api_key", "openclaw_section", "openclaw_url", "openclaw_token", "safety_section", "require_confirmation_for_writes", "default_approver", "retain_run_logs_days"],
+ "fields": [
+  {"fieldname": "ai_section", "fieldtype": "Section Break", "label": "模型服务"},
+  {"fieldname": "enable_ai", "fieldtype": "Check", "label": "启用 AI", "default": "1"},
+  {"fieldname": "provider", "fieldtype": "Select", "label": "服务类型", "options": "OpenClaw\nOpenAI Compatible", "default": "OpenAI Compatible"},
+  {"fieldname": "model_name", "fieldtype": "Data", "label": "模型名称", "default": "qwen"},
+  {"fieldname": "column_break_ai", "fieldtype": "Column Break"},
+  {"fieldname": "llm_base_url", "fieldtype": "Data", "label": "OpenAI 兼容接口地址", "default": "http://127.0.0.1:1234/v1"},
+  {"fieldname": "api_key", "fieldtype": "Password", "label": "接口密钥"},
+  {"fieldname": "openclaw_section", "fieldtype": "Section Break", "label": "OpenClaw"},
+  {"fieldname": "openclaw_url", "fieldtype": "Data", "label": "OpenClaw 地址", "default": "http://127.0.0.1:18789"},
+  {"fieldname": "openclaw_token", "fieldtype": "Password", "label": "OpenClaw 令牌"},
+  {"fieldname": "safety_section", "fieldtype": "Section Break", "label": "安全与审计"},
+  {"fieldname": "require_confirmation_for_writes", "fieldtype": "Check", "label": "业务写入必须人工确认", "default": "1"},
+  {"fieldname": "default_approver", "fieldtype": "Link", "label": "默认审批人", "options": "User", "default": "Administrator"},
+  {"fieldname": "retain_run_logs_days", "fieldtype": "Int", "label": "运行日志保留天数", "default": "180"}
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "module": "I ONE AI",
+ "name": "I-ONE Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "I-ONE Manager", "read": 1, "write": 1},
+  {"role": "System Manager", "read": 1, "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

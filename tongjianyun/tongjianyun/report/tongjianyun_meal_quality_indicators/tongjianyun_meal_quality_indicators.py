@@ -8,7 +8,7 @@ from tongjianyun.canteen_ops.task_menus import WeekMenus
 
 
 def execute(filters=None):
-    from ione_core.meal_adjustments import get_effective_meals
+    from tongjianyun.meal_adjustments import get_effective_meals
     from tongjianyun.canteen_ops.safety import sample_scope_dishes
     f = frappe._dict(filters or {})
     site = linked(CANTEEN, f.canteen)

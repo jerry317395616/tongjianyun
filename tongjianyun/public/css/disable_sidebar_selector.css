@@ -1,0 +1,4 @@
+/* The site keeps the sidebar items but removes the workspace title/selector row. */
+.sidebar-header {
+	display: none !important;
+}

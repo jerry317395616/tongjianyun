@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 
 import frappe
 from frappe.utils import flt, getdate
-from ione_core import meal_planning as planning
+from tongjianyun import meal_planning as planning
 
 from tongjianyun.dish_library import _supports_inline_ingredients, _visible
 from tongjianyun.recipe_nutrition import SNAPSHOT
