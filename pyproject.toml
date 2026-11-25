@@ -8,7 +8,7 @@ license = { file = "license.txt" }
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = ["openpyxl>=3.1,<4", "requests>=2.31,<3", "beautifulsoup4>=4.12", "markdownify>=0.13"]
+dependencies = ["openpyxl>=3.1,<4", "requests>=2.31,<3", "beautifulsoup4>=4.12", "markdownify>=0.13", "Werkzeug>=3.1,<4"]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]

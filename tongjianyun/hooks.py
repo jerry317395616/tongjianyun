@@ -28,6 +28,7 @@ after_migrate = [
     "tongjianyun.canteen_ops.setup.install_public_notice_field",
 ]
 after_install = [*after_migrate]
+setup_wizard_success = "tongjianyun.ingredient_library_setup.ensure_food_masters"
 scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_reminders"]}
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",

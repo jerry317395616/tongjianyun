@@ -24,7 +24,13 @@ bench new-site "$site" --db-host 127.0.0.1 --db-port "$db_port" \
 bench --site "$site" install-app erpnext education tongjianyun
 bench --site "$site" set-config tongjianyun_demo 1 --parse
 bench --site "$site" execute tongjianyun.demo.seed
-bench --site "$site" execute tongjianyun.demo.verify
+before="$(bench --site "$site" execute tongjianyun.demo.verify)"
+printf '%s\n' "$before"
 bench --site "$site" migrate
 bench --site "$site" execute tongjianyun.demo.seed
-bench --site "$site" execute tongjianyun.demo.verify
+after="$(bench --site "$site" execute tongjianyun.demo.verify)"
+printf '%s\n' "$after"
+if [[ "$before" != "$after" ]]; then
+  echo "The demo document identifiers changed after migration." >&2
+  exit 1
+fi

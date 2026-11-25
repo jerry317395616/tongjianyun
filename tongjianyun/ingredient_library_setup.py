@@ -4,10 +4,12 @@ import json
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.utils.nestedset import get_root_of
 
 from tongjianyun.canteen_ops.navigation import install_navigation
+from tongjianyun.dish_library import DEFAULT_DISH_GROUP
 from tongjianyun.food_nutrition import MISSING, STATUS
-from tongjianyun.ingredient_library import ALIASES, LAYOUT, MARKER
+from tongjianyun.ingredient_library import ALIASES, CLASSIFIED_GROUPS, LAYOUT, MARKER
 from tongjianyun.standard_recipe_setup import DISH_LAYOUT_FIELDS, DISH_OPTIONS, MODULE, _save_layout
 
 FIELDS = [
@@ -54,10 +56,24 @@ ADVANCED_SWITCHES = ("is_purchase_item", "is_sales_item", "allow_alternative_ite
 def install():
     frappe.only_for("System Manager")
     create_custom_fields({"Item": [dict(field, module="Tongjianyun") for field in FIELDS]})
+    ensure_food_masters()
     _install_layout()
     frappe.db.set_value("Item", {MARKER: 1, STATUS: ["is", "not set"]}, STATUS, MISSING, update_modified=False)
     install_navigation(MODULE, json.dumps(DISH_OPTIONS, ensure_ascii=False))
     frappe.clear_cache()
+
+
+def ensure_food_masters(_args=None):
+    root = get_root_of("Item Group")
+    if not root:
+        return
+    for group in sorted(CLASSIFIED_GROUPS | {DEFAULT_DISH_GROUP}):
+        if not frappe.db.exists("Item Group", group):
+            frappe.get_doc({"doctype": "Item Group", "item_group_name": group,
+                            "parent_item_group": root, "is_group": 0}).insert()
+    if not frappe.db.exists("UOM", "份"):
+        frappe.get_doc({"doctype": "UOM", "uom_name": "份",
+                        "enabled": 1, "must_be_whole_number": 1}).insert()
 
 
 def _install_layout():
