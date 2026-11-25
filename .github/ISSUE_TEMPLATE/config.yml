@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密报告安全问题
+    url: https://github.com/jerry317395616/tongjianyun/security/advisories/new
+    about: 通过私密渠道报告漏洞或权限问题。

@@ -3,7 +3,8 @@ name = "tongjianyun"
 authors = [
     { name = "Local", email = "admin@example.com"}
 ]
-description = "Tongjianyun backend app for Frappe"
+description = "Kindergarten meal planning and canteen management for Frappe and ERPNext"
+license = { file = "license.txt" }
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]

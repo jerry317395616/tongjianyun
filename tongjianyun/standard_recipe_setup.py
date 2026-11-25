@@ -200,8 +200,11 @@ def _save_layout(doctype, title, overrides, *, arrange_fields=None, **properties
 
 def _install_sidebar():
     app = frappe.db.get_value("Module Def", MODULE, "app_name")
-    if app and app != APP:
+    if frappe.db.exists("Module Def", MODULE) and app != APP:
         frappe.throw(f"模块「{MODULE}」已被其他应用使用。")
+    if not app:
+        frappe.get_doc({"doctype": "Module Def", "module_name": MODULE,
+                        "app_name": APP, "custom": 1}).insert()
     entries = resolve_app_dock(APP, upto="site", gated=False)
     if not any(row["link_type"] == "Sidebar" and row["link_to"] == MODULE for row in entries):
         dock = get_dock(APP)
@@ -209,7 +212,7 @@ def _install_sidebar():
         rows.append({
             "link_type": "Sidebar", "link_to": MODULE, "title": MODULE, "icon": "utensils", "added": 1,
         })
-        save_site_dock(APP, rows, [] if app else [MODULE])
+        save_site_dock(APP, rows)
     _install_dish_link()
     _install_week_link()
     _install_meal_ledger_link()

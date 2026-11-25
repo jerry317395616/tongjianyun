@@ -27,7 +27,7 @@ def install_meal_planning():
 
 	from tongjianyun.meal_population import STUDENT_BATCH_CUSTOM_FIELD
 
-	definitions = json.loads((Path(__file__).parent / "meal_planning_fields.json").read_text())
+	definitions = json.loads((Path(__file__).parent / "meal_planning_fields.json").read_text(encoding="utf-8"))
 	definitions += [
 		STUDENT_BATCH_CUSTOM_FIELD,
 		{
@@ -173,7 +173,8 @@ def install_meal_planning():
 	for definition in definitions:
 		item = dict(definition)
 		dt = item.pop("dt")
-		if not frappe.get_meta(dt).has_field(item["fieldname"]):
+		if frappe.db.exists("DocType", dt) and not frappe.get_meta(dt).has_field(item["fieldname"]):
+			item.setdefault("module", "Tongjianyun")
 			missing.setdefault(dt, []).append(item)
 	if missing:
 		create_custom_fields(missing, update=False)
@@ -221,7 +222,8 @@ def install_meal_planning():
 		"Material Request",
 		"Purchase Order",
 	):
-		frappe.clear_cache(doctype=dt)
+		if frappe.db.exists("DocType", dt):
+			frappe.clear_cache(doctype=dt)
 	return {
 		"doctype": "Meal Planning Week",
 		"created_fields": sum(map(len, missing.values())),
@@ -262,6 +264,8 @@ def _install_operator_permissions():
 		"Academic Year",
 		"Academic Term",
 	):
+		if not frappe.db.exists("DocType", doctype):
+			continue
 		if not frappe.db.exists("Custom DocPerm", {"parent": doctype, "role": role, "permlevel": 0}):
 			add_permission(doctype, role)
 		frappe.clear_cache(doctype=doctype)

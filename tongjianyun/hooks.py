@@ -5,7 +5,7 @@ from tongjianyun.canteen_ops.common import MANAGED as _CANTEEN_DOCTYPES, PERMISS
 app_name = "tongjianyun"
 app_title = "童健云"
 app_publisher = "Local"
-app_description = "ERP 周食谱与食谱分析"
+app_description = "幼儿园膳食、采购与食堂管理"
 app_email = "admin@example.com"
 app_license = "mit"
 required_apps = ["erpnext"]
@@ -21,6 +21,7 @@ after_migrate = [
     "tongjianyun.reports_setup.install",
     "tongjianyun.nutrition_setup.install",
     "tongjianyun.standard_recipe_setup.install",
+    "tongjianyun.meal_planning_setup.install_meal_planning",
     "tongjianyun.ingredient_library_setup.install",
     "tongjianyun.weekly_menu_setup.install",
     "tongjianyun.canteen_ops.setup.install_project_fields",
