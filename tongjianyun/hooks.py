@@ -9,6 +9,7 @@ app_description = "ERP 周食谱与食谱分析"
 app_email = "admin@example.com"
 app_license = "mit"
 required_apps = ["erpnext", "ione_core"]
+ione_core_translation_app = app_name
 app_include_js = ["/assets/tongjianyun/js/meal_overview.js?v=20261124.7", "/assets/tongjianyun/js/meal_list_filters.js?v=20261124.7", "/assets/tongjianyun/js/meal_desk.js?v=20261124.7"]
 app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.7"]
 app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
@@ -16,7 +17,7 @@ app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
 add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]
 before_install = "tongjianyun.canteen_ops.setup.ensure_roles"
 before_migrate = before_install
-after_install = [
+after_migrate = [
     before_install,
     "tongjianyun.reports_setup.install",
     "tongjianyun.nutrition_setup.install",
@@ -26,7 +27,7 @@ after_install = [
     "tongjianyun.canteen_ops.setup.install_project_fields",
     "tongjianyun.canteen_ops.setup.install_public_notice_field",
 ]
-after_migrate = after_install
+after_install = [*after_migrate, "ione_core.translation_overrides.sync_translation_overrides"]
 scheduler_events = {"daily": ["tongjianyun.canteen_ops.reminders.send_expiry_reminders"]}
 doctype_js = {
     "BOM": "public/js/standard_recipes.js",
