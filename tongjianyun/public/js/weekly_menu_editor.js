@@ -238,7 +238,6 @@
 		}
 		if (canEdit && pending) {
 			frm.remove_custom_button("采购需求预览");
-			frm.remove_custom_button("核对账面库存");
 			frm.remove_custom_button("确认采购毛重口径", "采购操作");
 		}
 	}
@@ -349,8 +348,8 @@
 		frm.layout.select_tab(basicTab);
 		const procurement = target.section === "procurement";
 		if (procurement) frm.custom_buttons?.[__("采购需求预览")]?.trigger("click");
-		const field = procurement ? "procurement_html" : "kitchen_reconciled";
-		const section = frm.fields_dict[field]?.$wrapper?.closest(".form-section");
+		if (procurement) return;
+		const section = frm.fields_dict.kitchen_reconciled?.$wrapper?.closest(".form-section");
 		section?.[0]?.scrollIntoView({ block: "center" });
 	}
 
@@ -394,8 +393,6 @@
 				frm.layout.select_tab(calendarTab);
 			}
 			frm.__tgy_week_open_calendar = false;
-			frm.custom_buttons?.["采购需求预览"]?.off("click.tgyWeekTab")
-				.on("click.tgyWeekTab", () => frm.layout.select_tab(basicTab));
 		}
 		message($content, "正在读取周食谱…");
 		try {

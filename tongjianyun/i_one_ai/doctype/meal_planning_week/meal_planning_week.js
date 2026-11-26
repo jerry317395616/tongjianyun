@@ -7,22 +7,7 @@
 	const canUseKitchen = () => hasRole("System Manager", "Stock Manager", "Stock User", "膳食业务经办员");
 	const editable = (frm) => frm.doc.docstatus === 0 && !!frm.perm?.[0]?.write;
 	const reportName = "Tongjianyun Weekly Menu";
-	const statuses = {
-		purchase: "需采购",
-		kitchen_water: "厨房用水，不采购",
-		needs_recipe: "待补配方",
-		needs_policy: "待确认采购分类",
-		needs_conversion: "待确认单位换算",
-	};
-	const displayQty = (value) => {
-		if (value === undefined || value === null || value === "") return "—";
-		const number = Number(value);
-		return Number.isFinite(number)
-			? number.toLocaleString("zh-CN", { maximumFractionDigits: 6 })
-			: String(value);
-	};
-	const field = (value) => `<td>${escape(value || "—")}</td>`;
-	const quantity = (value) => `<td class="text-right">${escape(displayQty(value))}</td>`;
+	let previewAssets;
 
 	function ensureSaved(frm) {
 		if (frm.is_new() || frm.is_dirty()) {
@@ -66,63 +51,35 @@
 		return button;
 	}
 
-	function renderPreview(frm, preview) {
-		const wrapper = frm.fields_dict.procurement_html?.$wrapper;
-		if (!wrapper) return;
-		const rows = Array.isArray(preview?.rows) ? preview.rows : [];
-		const totals = preview?.totals || {};
-		const warnings = Array.isArray(preview?.warnings) ? preview.warnings : [];
-		const blockers = Array.isArray(preview?.blockers) ? preview.blockers : [];
-		const stockClaims = Array.isArray(preview?.stock_claims) ? preview.stock_claims : [];
-		const advanceMode = preview?.advance_purchase_mode === true || totals.advance_purchase_mode === true;
-		const notes = (values, indicator) => values.length
-			? `<div class="alert alert-${indicator}"><ul style="margin-bottom:0">${values
-				.map((value) => `<li>${escape(value)}</li>`).join("")}</ul></div>`
-			: "";
-		const body = rows.map((row) => {
-			const status = statuses[row.status] || row.status || "待确认";
-			const price = row.status === "kitchen_water"
-				? "不适用"
-				: row.price_status === "available" ? "有参考价格" : "待询价";
-			const plan = row.production_plan
-				? `<a href="/desk/production-plan/${encodeURIComponent(row.production_plan)}">${escape(row.production_plan)}</a>`
-				: "—";
-			return `<tr>${field(row.meal_date)}${field(row.meal_type)}${field(row.item_name || row.item_code)}
-				${quantity(row.required_qty)}${quantity(row.allocated_stock_qty)}${quantity(row.allocated_owned_stock_qty)}${quantity(row.new_physical_claim_qty)}${quantity(row.expected_receipt_qty)}
-				${quantity(row.already_requested_qty)}${field(row.stock_uom)}${quantity(row.purchase_qty)}
-				${field(row.purchase_uom)}${field(status)}${field(price)}<td>${plan}</td></tr>`;
-		}).join("");
-		const claimBody = stockClaims.map((claim) => {
-			const demand = rows.find((row) => row.item_code === claim.item_code && row.warehouse === claim.warehouse) || {};
-			return `<tr>${field(demand.item_name || claim.item_code)}${field(claim.warehouse)}${field(demand.stock_uom || "库存单位待核对")}
-				${quantity(claim.physical_qty)}${quantity(claim.own_claim_qty)}${quantity(claim.other_week_claim_qty)}
-				${quantity(claim.free_qty)}${quantity(claim.available_free_qty)}</tr>`;
-		}).join("");
-		wrapper.html(`<div class="meal-procurement-preview">
-			<p><strong>本周采购需求预览</strong> · 食材 ${escape(totals.ingredient_count ?? "—")} 种，
-			需采购 ${escape(totals.purchase_row_count ?? "—")} 行，待询价 ${escape(totals.need_quote_count ?? "—")} 项。</p>
-			<p class="text-muted">需求、库存、待到货和已申请数量使用库存单位；本次申请量使用采购单位。
-			厨房用水不采购，骨汤按采购食材处理。价格未确认时仅核算数量。</p>
-			${advanceMode ? `<div class="alert alert-warning"><strong>${escape("提前采购")}</strong>：${escape(preview?.advance_purchase_note || "不预支未核销周的库存余量，可能多备，请采购人员核对。")}</div>` : ""}
-			${notes(warnings, "warning")}${notes(blockers, "danger")}
-			<div style="overflow-x:auto"><table class="table table-bordered table-condensed" style="min-width:1600px">
-			<thead><tr><th>使用日期</th><th>餐次</th><th>食材</th><th>需求量</th><th>分配库存</th>
-			<th>其中本周已有归属</th><th>其中本次认领现货</th>
-			<th>分配待到货</th><th>已申请量</th><th>库存单位</th><th>本次申请量</th><th>采购单位</th>
-			<th>处理状态</th><th>价格</th><th>生产计划</th></tr></thead>
-			<tbody>${body || '<tr><td colspan="15">暂无食材需求。请先完成本周餐次编排和人数核算。</td></tr>'}</tbody>
-			</table></div>
-			<p class="text-muted small">分配库存包含本周已有归属及本次从无归属现货认领的数量；同一现货不会重复安排给不同周。本次新增归属涉及 ${escape(totals.new_claim_item_count ?? "—")} 种食材。</p>
-			${stockClaims.length ? `<details><summary>${escape("查看原料仓库存安排")}</summary>
-			<p class="text-muted small">${escape("以下均为对应食材的库存单位，仅列原料仓现货；厨房留存见每日执行。提前采购时，尚未释放的共享现货不预支给新周。")}</p>
-			<div style="overflow-x:auto"><table class="table table-bordered table-condensed"><thead><tr><th>食材</th><th>仓库</th><th>单位</th><th>现货实存</th><th>本周已安排</th><th>其他周已安排</th><th>尚无归属</th><th>本次可用无归属</th></tr></thead><tbody>${claimBody}</tbody></table></div></details>` : ""}
-			<p class="text-muted small">账面库存${preview?.stock_reviewed ? "已核对" : "尚未核对"}；
-			此处预览不会提交采购、收货或库存单据。已被后续日期引用的货源，取消前须按关联业务处理；不能手工清除库存安排。</p></div>`);
-		frm.__meal_procurement_preview = preview;
+	async function openProcurementPreview(frm, preview) {
+		if (!preview || preview.week_name !== frm.doc.name) return;
+		const assets = "/assets/tongjianyun";
+		previewAssets ??= Promise.resolve(frappe.require([
+			`${assets}/css/meal_procurement_preview.css?v=procurement-preview-1.css`,
+			`${assets}/js/meal_procurement_preview.js?v=procurement-preview-1.js`,
+		])).catch((error) => {
+			previewAssets = undefined;
+			throw error;
+		});
+		await previewAssets;
+		if (cur_frm !== frm || frm.doc.name !== preview.week_name || frm.is_dirty()) return;
+		const canReview = canReviewStock() && frm.doc.docstatus === 0 && Boolean(frm.doc.meals?.length);
+		window.tjyProcurementPreview.open(frm, preview, canReview ? (button, afterReview) => {
+			frappe.confirm(
+				__("请确认已核对采购预览中的账面库存、待到货及采购分类。此操作只记录账面核对，不表示完成实物盘点。"),
+				() => runAction(frm, button, "tongjianyun.meal_planning.confirm_stock_review",
+					{ name: preview.week_name }, async () => {
+						afterReview();
+						await frm.reload_doc();
+					}),
+				null,
+				__("确认核对"),
+				__("返回检查")
+			);
+		} : null);
 	}
 
 	function resetPreview(frm, message) {
-		frm.__meal_procurement_preview = null;
 		frm.fields_dict.procurement_html?.$wrapper.html(
 			`<p class="text-muted">${escape(message || "点击“采购需求预览”核对食材、库存、到货和采购分类。")}</p>`
 		);
@@ -327,17 +284,7 @@
 				}, __("采购操作"));
 			}
 			actionButton(frm, "采购需求预览", "tongjianyun.meal_procurement.get_procurement_preview",
-				() => ({ week_name: frm.doc.name }), (preview) => renderPreview(frm, preview));
-			if (canReviewStock() && frm.doc.docstatus === 0 && (frm.doc.meals || []).length) {
-				const button = frm.add_custom_button(__("核对账面库存"), () => {
-					if (frm.__meal_action_running) return;
-					frappe.confirm(
-						__("请确认已核对采购预览中的账面库存、待到货及采购分类。此操作只记录账面核对，不表示完成实物盘点。"),
-						() => runAction(frm, button, "tongjianyun.meal_planning.confirm_stock_review",
-							{ name: frm.doc.name }, async () => { await frm.reload_doc(); })
-					);
-				});
-			}
+				() => ({ week_name: frm.doc.name }), (preview) => openProcurementPreview(frm, preview));
 			if (frm.doc.docstatus === 1) {
 				if (canUseKitchen()) {
 					const dayButton = frm.add_custom_button(__("打开每日执行"), () => openKitchenDay(frm, dayButton), __("厨房执行"));

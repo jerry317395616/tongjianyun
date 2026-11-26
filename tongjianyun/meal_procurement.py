@@ -822,7 +822,14 @@ def _other_stock_commitments(week, *, for_update=False):
 def get_procurement_preview(week_name):
 	"""Read-only dated demand and stock allocation for an authorized meal week."""
 	week = _load_week(week_name)
-	return _compute(week)[3]
+	preview = _compute(week)[3]
+	item_codes = sorted({row["item_code"] for row in preview["rows"]})
+	# Display metadata stays outside the calculation and its stock review hash.
+	images = frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=["name", "image"]) if item_codes else []
+	preview["item_images"] = {
+		item.name: item.image for item in images if (item.image or "").startswith(("/files/", "/assets/"))
+	}
+	return preview
 
 
 def prepare_procurement_rows(week_doc):
