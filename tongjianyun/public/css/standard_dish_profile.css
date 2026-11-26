@@ -1,0 +1,297 @@
+.layout-main-section:has(.tjy-dish-layout) > .tjy-overview[data-mode="form"] {
+	display: none;
+}
+
+.form-page:has(.tjy-dish-layout) {
+	--dish-green: #12623b;
+	--dish-border: #dbe5db;
+	--dish-wash: #edf4eb;
+	--dish-card: var(--card-bg, #fff);
+}
+
+[data-theme="dark"] .form-page:has(.tjy-dish-layout) {
+	--dish-green: #a0d8ae;
+	--dish-border: #3d4c42;
+	--dish-wash: #25332a;
+}
+
+.tjy-dish-steps {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	list-style: none;
+	margin: 0;
+	padding: 22px 16px;
+}
+
+.form-page:has(.tjy-dish-layout.active) > .tjy-dish-steps {
+	display: flex;
+}
+
+.tjy-dish-steps::before {
+	content: "";
+	order: 1;
+	width: clamp(14px, 13%, 190px);
+	height: 1px;
+	background: var(--dish-border);
+}
+
+.tjy-dish-step {
+	display: inline-flex;
+	align-items: center;
+	gap: 9px;
+	border-radius: 999px;
+	color: var(--dish-green);
+	background: var(--dish-wash);
+	font-weight: 650;
+	padding: 3px 15px 3px 4px;
+	white-space: nowrap;
+}
+
+.tjy-dish-step-recipe {
+	order: 2;
+}
+
+.tjy-dish-steps-new .tjy-dish-step-recipe {
+	background: var(--control-bg);
+	color: var(--text-muted);
+}
+
+.tjy-dish-step-icon {
+	display: grid;
+	place-items: center;
+	flex: 0 0 26px;
+	height: 26px;
+	border-radius: 50%;
+}
+
+.tjy-dish-step[aria-current="step"] .tjy-dish-step-icon {
+	background: var(--dish-green);
+	color: var(--dish-card);
+}
+
+.tjy-dish-layout {
+	container-type: inline-size;
+	padding: clamp(12px, 2vw, 26px);
+}
+
+.tjy-dish-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 14px;
+}
+
+.tjy-dish-new .tjy-dish-grid {
+	grid-template-columns: minmax(0, 1.36fr) minmax(0, 1fr);
+}
+
+.tjy-dish-profile,
+.tjy-dish-layout .form-section.tjy-dish-recipe,
+.tjy-dish-layout .form-section.tjy-dish-advanced {
+	min-width: 0;
+	border: 1px solid var(--dish-border);
+	border-radius: 12px;
+	background: var(--dish-card);
+}
+
+.tjy-dish-layout .form-section:is(.tjy-dish-information, .tjy-dish-meals, .tjy-dish-recipe, .tjy-dish-advanced) {
+	padding: 0;
+}
+
+.tjy-dish-layout .tjy-dish-information {
+	border: 0;
+}
+
+.tjy-dish-layout .form-section:is(.tjy-dish-information, .tjy-dish-meals, .tjy-dish-recipe, .tjy-dish-advanced) > .section-head:not(:empty) {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	max-width: none;
+	padding: 16px 18px 12px;
+	background: transparent;
+	color: var(--heading-color);
+	font-size: 16px;
+	font-weight: 650;
+}
+
+.tjy-dish-layout .form-section:is(.tjy-dish-information, .tjy-dish-meals, .tjy-dish-recipe, .tjy-dish-advanced) > .section-head:not(:empty)::before {
+	content: "";
+	flex: 0 0 3px;
+	height: 1em;
+	margin: 0;
+	border-radius: 2px;
+	background: var(--dish-green);
+}
+
+.tjy-dish-layout .form-section:is(.tjy-dish-information, .tjy-dish-meals, .tjy-dish-recipe, .tjy-dish-advanced) > .section-head:not(:empty) + .section-body {
+	border: 0;
+}
+
+.tjy-dish-layout :is(.tjy-dish-information, .tjy-dish-meals, .tjy-dish-recipe) > .section-body {
+	max-width: none;
+	padding: 0 18px 12px;
+}
+
+.tjy-dish-information .section-body {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+}
+
+.tjy-dish-layout .form-section:is(.tjy-dish-information, .tjy-dish-meals, .tjy-dish-recipe) .form-column {
+	width: 100%;
+	min-width: 0;
+	max-width: none;
+	padding: 0;
+}
+
+.tjy-dish-layout .tjy-dish-information .form-control:not([readonly]):not([disabled]) {
+	min-height: 34px;
+	background: var(--dish-card);
+	border: 1px solid var(--dish-border);
+}
+
+.tjy-dish-layout .tjy-dish-information .has-error .form-control {
+	border-color: var(--red-500);
+}
+
+.tjy-dish-layout .form-section.tjy-dish-meals {
+	margin: 0 18px;
+	border-top: 1px solid var(--dish-border);
+	border-bottom: 0;
+}
+
+.tjy-dish-layout .form-section.tjy-dish-meals > .section-head:not(:empty) {
+	padding-inline: 0;
+}
+
+.tjy-dish-meals .form-section-description {
+	color: var(--text-muted);
+}
+
+.tjy-dish-layout .tjy-dish-meals > .section-body {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(55px, 1fr));
+	padding-inline: 0;
+}
+
+.tjy-dish-meals .checkbox {
+	white-space: nowrap;
+}
+
+.tjy-dish-meals input[type="checkbox"]:checked {
+	background-color: var(--dish-green);
+	border-color: var(--dish-green);
+}
+
+.tjy-dish-layout .form-section.tjy-dish-recipe {
+	display: flex;
+	flex-direction: column;
+	background: var(--dish-wash);
+}
+
+.tjy-dish-recipe-lock {
+	display: none;
+	color: var(--text-muted);
+}
+
+.tjy-dish-new .tjy-dish-recipe-lock {
+	display: inline-flex;
+}
+
+.tjy-dish-new :is(.tjy-dish-recipe > .section-body, .tjy-dish-recipe .form-column, .tjy-dish-recipe .form-column > form, .tjy-dish-recipe-content) {
+	display: flex;
+	flex: 1 0 auto;
+	flex-direction: column;
+	width: 100%;
+}
+
+.tjy-dish-recipe-empty {
+	display: grid;
+	flex: 1;
+	align-content: center;
+	justify-items: center;
+	gap: 13px;
+	min-height: 218px;
+	padding: 14px 0;
+	color: var(--text-muted);
+	text-align: center;
+}
+
+.tjy-dish-recipe-empty img {
+	width: min(100%, 204px);
+	height: 172px;
+	object-fit: contain;
+}
+
+.tjy-dish-recipe-empty p {
+	margin: 0;
+}
+
+.tjy-dish-ingredient-grid {
+	min-width: 540px;
+}
+
+.tjy-dish-recipe .tjy-dish-ingredient-grid {
+	min-width: 400px;
+}
+
+.tjy-dish-layout .form-section.tjy-dish-advanced {
+	margin-top: 14px;
+	background: var(--dish-wash);
+}
+
+.tjy-dish-layout .form-section.tjy-dish-advanced > .section-head:not(:empty) {
+	padding: 12px 18px;
+}
+
+.tjy-dish-layout .form-section.tjy-dish-advanced > .section-head:not(:empty)::before {
+	display: none;
+}
+
+.tjy-dish-layout .tjy-dish-advanced .collapse-indicator {
+	order: -1;
+}
+
+.tjy-dish-layout .tjy-dish-advanced > .section-body {
+	max-width: none;
+	padding-inline: 18px;
+}
+
+.tjy-dish-sidebar-pending > .sidebar-section:not(.form-assignments, .form-attachments, .form-tags, .form-shared),
+.tjy-dish-sidebar-pending .form-sidebar-items button {
+	display: none !important;
+}
+
+.tjy-dish-sidebar-pending > .form-assignments {
+	display: block !important;
+}
+
+.tjy-dish-sidebar-note {
+	margin: 14px 16px;
+	color: var(--text-muted);
+}
+
+@media (min-width: 992px) {
+	.layout-side-section.hide-sidebar:has(> .tjy-dish-sidebar-pending) {
+		display: block;
+	}
+
+	.layout-side-section > .form-sidebar.tjy-dish-sidebar-pending {
+		display: block !important;
+	}
+}
+
+@container (width < 750px) {
+	.tjy-dish-layout .tjy-dish-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+@container (width < 350px) {
+	.tjy-dish-information .section-body {
+		grid-template-columns: 1fr;
+		gap: 0;
+	}
+}

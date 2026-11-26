@@ -3,6 +3,7 @@
 	const recipeLayout = "标准菜品";
 	const reuseLabel = "使用同名菜品";
 	const previewField = "custom_tjy_dish_recipe_preview";
+	const assetPath = "/assets/tongjianyun";
 	const ingredientColumns = [
 		{ id: "item_code", name: "食材", width: 30, link: "Item" },
 		{ id: "gross", name: "每份采购毛用量", width: 22, align: "right" },
@@ -17,6 +18,60 @@
 	}
 
 	frappe.router?.on?.("change", closeRecipePanel);
+
+	function showNewDishSidebar(frm) {
+		// Frappe builds the sidebar for a new document but hides it until the first save.
+		const $sidebar = frm.sidebar?.sidebar;
+		if (!$sidebar?.length || $sidebar.hasClass("tjy-dish-sidebar-pending")) return;
+		$sidebar.addClass("tjy-dish-sidebar-pending");
+		$sidebar.children(".sidebar-section").prop("inert", true);
+		$("<p>", { class: "tjy-dish-sidebar-note" }).text("保存后可用").appendTo($sidebar);
+	}
+
+	function renderDishLayout(frm, $preview) {
+		const $details = frm.layout.tabs.find((tab) => tab.df.fieldname === "details")?.wrapper;
+		if (!$details?.length) return;
+		let $steps = $details.data("tjy-dish-steps");
+		if (!$steps) {
+			const sections = ["section_break_zlmj", "custom_meal_slot_section", "custom_tjy_dish_recipe_section", "section_break_11"]
+				.map((fieldname) => frm.layout.sections.find((section) => section.df.fieldname === fieldname));
+			if (sections.some((section) => !section?.wrapper?.length)) return;
+			const [information, meals, recipe, advanced] = sections;
+			const $grid = $("<div>", { class: "tjy-dish-grid" }).insertBefore(information.wrapper);
+			const $profile = $("<div>", { class: "tjy-dish-profile" }).appendTo($grid);
+			information.wrapper.addClass("tjy-dish-information").appendTo($profile);
+			meals.wrapper.addClass("tjy-dish-meals").appendTo($profile);
+			recipe.wrapper.addClass("tjy-dish-recipe").appendTo($grid);
+			advanced.wrapper.addClass("tjy-dish-advanced");
+			$preview.addClass("tjy-dish-recipe-content");
+			$("<span>", { class: "tjy-dish-recipe-lock", "aria-hidden": "true" })
+				.html(frappe.utils.icon("lock", "sm")).appendTo(recipe.head);
+
+			$steps = $("<ol>", { class: "tjy-dish-steps", "aria-label": "菜品维护步骤" })
+				.insertBefore(frm.layout.page.children(".form-tabs-list"));
+			$("<li>", { class: "tjy-dish-step tjy-dish-step-profile" })
+				.append($("<span>", { class: "tjy-dish-step-icon", "aria-hidden": "true" }).text("1"))
+				.append(document.createTextNode("菜品建档")).appendTo($steps);
+			$("<li>", { class: "tjy-dish-step tjy-dish-step-recipe" })
+				.append($("<span>", { class: "tjy-dish-step-icon", "aria-hidden": "true" }))
+				.append(document.createTextNode("配置配方")).appendTo($steps);
+			$details.addClass("tjy-dish-layout").data("tjy-dish-steps", $steps);
+		}
+		const isNew = Boolean(frm.is_new());
+		$details.toggleClass("tjy-dish-new", isNew);
+		$steps.toggleClass("tjy-dish-steps-new", isNew);
+		$steps.find(".tjy-dish-step-profile").attr("aria-current", isNew ? "step" : null);
+		$steps.find(".tjy-dish-step-recipe").attr("aria-current", isNew ? null : "step")
+			.find(".tjy-dish-step-icon").html(isNew ? frappe.utils.icon("lock", "xs") : "2");
+
+		if (isNew) {
+			showNewDishSidebar(frm);
+			const $empty = $("<div>", { class: "tjy-dish-recipe-empty" }).appendTo($preview.empty());
+			$("<img>", { src: `${assetPath}/images/dish-recipe-bowl.webp`, alt: "", width: 176, height: 150 })
+				.appendTo($empty);
+			$("<p>").text("保存菜品后即可添加配方和食材。").appendTo($empty);
+		}
+	}
 
 	function openRecipe(name) {
 		frappe.route_options = { layout: recipeLayout };
@@ -58,7 +113,7 @@
 	}
 
 	function mountIngredientTable($container, label, columns, data, options = {}) {
-		const $grid = $("<div>", { "aria-label": label, style: "min-width: 540px" })
+		const $grid = $("<div>", { "aria-label": label, class: "tjy-dish-ingredient-grid" })
 			.appendTo($("<div>", { class: "table-responsive mb-2" }).appendTo($container));
 		const table = new frappe.DataTable($grid[0], {
 			columns: columns.map((column) => ({ sortable: false, dropdown: false, ...column })),
@@ -444,12 +499,17 @@
 	}
 
 	frappe.ui.form.on("Item", {
-		refresh(frm) {
+		async refresh(frm) {
 			if (!frm.doc.custom_tjy_standard_dish) return;
 			frm.set_df_property("item_name", "description", "填写菜品本名，例如小米粥。供餐时段在「适用餐次」设置。");
 			const $preview = frm.fields_dict?.[previewField]?.$wrapper;
 			if (frm.doctype_layout?.name === dishLayout && $preview) {
-				if (frm.is_new()) return $preview.text("保存菜品档案后，即可添加配方和食材。");
+				const { doc, layout } = frm;
+				await frappe.require(`${assetPath}/css/standard_dish_profile.css?v=1.css`);
+				const [view, doctype] = frappe.get_route();
+				if (frm.doc !== doc || frm.layout !== layout || view !== "Form" || doctype !== "Item") return;
+				renderDishLayout(frm, $preview);
+				if (frm.is_new()) return;
 				if (frappe.model.can_read("BOM")) return loadPreview($preview, frm.doc);
 				$preview.text("当前账号无权查看配方。");
 				if (!frm.doc.disabled && !frm.doc.is_purchase_item && frappe.model.can_create("BOM")) {

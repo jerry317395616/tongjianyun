@@ -266,12 +266,15 @@ test("one native DataTable switches recipe versions and editing modes and saves 
 			},
 		} },
 		model: { can_read: () => true },
+		get_route: () => ["Form", "Item", "DISH-QA"],
 		router: { on(event, action) { assert.equal(event, "change"); leaveRecipe = action; } },
 		db: { get_value: () => new Promise((resolve) => { completeLookup = resolve; }) },
 		DataTable: class extends DataTable {
 			constructor(...args) { super(...args); instances.push(this); }
 		},
-		require: async (asset) => assert.equal(asset, "report.bundle.css"),
+		require: async (asset) => assert.ok(
+			asset === "report.bundle.css" || asset.startsWith("/assets/tongjianyun/css/standard_dish_profile.css"),
+		),
 		utils: { escape_html: (value) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") },
 		show_alert: ({ message }) => alerts.push(message),
 		call: async ({ method, type, args }) => {
@@ -314,6 +317,7 @@ test("one native DataTable switches recipe versions and editing modes and saves 
 	const form = {
 		doc: { name: "DISH-QA", custom_tjy_standard_dish: 1, custom_tjy_dish_category: "素菜" },
 		doctype_layout: { name: "标准菜品档案" },
+		layout: { tabs: [] },
 		fields_dict: { custom_tjy_dish_recipe_preview: { $wrapper: wrapper } },
 		is_new: () => false,
 		set_df_property() {},
