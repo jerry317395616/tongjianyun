@@ -37,8 +37,10 @@
                 : draft ? "待审核 · 当前显示草稿" + (approved ? "，食谱计算使用已审核版本。" : "。")
                 : approved && !revise ? "已审核 · " + approved.name
                 : editable ? "填写后可保存为营养档案草稿。" : "暂无营养档案。";
-            item.custom_tjy_nutrition_status = result.status || item.custom_tjy_nutrition_status;
-            frm.refresh_field("custom_tjy_nutrition_status");
+            if (result.status) {
+                await frm.set_value("custom_tjy_nutrition_status", result.status, false, true);
+                if (!active()) return;
+            }
             $content.empty();
             const $actions = $("<div>", {class: "d-flex align-items-center flex-wrap mb-2"})
                 .appendTo($content);
