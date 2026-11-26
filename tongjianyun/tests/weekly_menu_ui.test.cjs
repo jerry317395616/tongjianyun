@@ -71,6 +71,7 @@ test("native week shows the calendar and supports editing meals in order", async
 			this.options = options;
 			this.$wrapper = element("<div>");
 			this.header = element("<header>");
+			this.custom_actions = element("<footer>");
 			this.primary = element("<button>");
 			this.secondary = element("<button>");
 			this.values = Object.fromEntries(options.fields.map((field) => [field.fieldname, field.default]));
@@ -163,9 +164,11 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.deepEqual(icons(calendar).map((node) => node.attrs.class.split(" ").at(-1)),
 		["tgy-slot-sunrise", "tgy-slot-apple", "tgy-slot-sun", "tgy-slot-cup", "tgy-slot-moon"]);
 	await calendar.all("<button>").find((node) => node.attrs["aria-label"] === `${days[0]} 早餐 未编排`).events.click();
-	assert.equal(dialog.options.title, "2026年11月23日 · 周一 · 早餐");
+	assert.equal(dialog.options.title, "编排早餐");
+	assert.ok(dialog.header.all("<span>").some((node) => node.content === "2026年11月23日 · 周一"));
 	assert.equal(icons(dialog.fields_dict.day_meals.$wrapper).length, 5);
-	assert.equal(dialog.fields_dict.counts_summary.$wrapper.all("<strong>")[0].content, "首次保存时按教育名册核算人数");
+	const planned = () => dialog.header.all("<span>").find((node) => node.attrs.role === "status").content;
+	assert.equal(planned(), "首次保存时按教育名册核算人数");
 	assert.equal(calls.filter(([, type]) => type === "POST").length, 0);
 	await dialog.hide();
 	await page.all("<button>").find((node) => node.content === "复制上周").events.click();
@@ -173,7 +176,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
 	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
 	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
-	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-week-direct-edit.css"]);
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-picker-portion-editor.css"]);
 	assert.equal(page.all("<progress>")[0].attrs.value, 1);
 	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();
@@ -189,21 +192,18 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(adjustments.attrs.open, undefined);
 	dialog.values.excluded_count = 3;
 	dialog.options.fields.find((field) => field.fieldname === "excluded_count").onchange();
-	assert.equal(dialog.fields_dict.counts_summary.$wrapper.all("<strong>")[0].content, "计划供餐 37 人");
+	assert.equal(planned(), "计划供餐 37 人");
 	dialog.values.stopped = 1;
 	dialog.options.fields.find((field) => field.fieldname === "stopped").onchange();
-	assert.equal(dialog.fields_dict.counts_summary.$wrapper.all("<strong>")[0].content, "整餐停供");
+	assert.equal(planned(), "整餐停供");
 	dialog.values.stopped = 0;
 	const options = dialog.fields_dict.options.$wrapper;
-	const table = options.all("<table>")[0];
-	assert.deepEqual(table.all("<thead>")[0].all("<th>").map((node) => node.content), ["菜品名称", "适用餐次", "菜品分类", "操作"]);
-	assert.equal(table.all("<tbody>")[0].all("<tr>").length, 4);
-	assert.deepEqual(table.all("<strong>").map((node) => node.content), ["午餐", "午餐"]);
-	assert.ok(table.all("<div>").some((node) => node.content === "未限定"));
-	assert.ok(table.all("<td>").some((node) => node.content === "未分类"));
-	assert.deepEqual(table.all("<small>").map((node) => node.content), ["A", "D", "B", "C"]);
+	assert.equal(options.all("<li>").length, 3);
+	assert.deepEqual(options.all("<strong>").map((node) => node.attrs.title), ["D", "B", "C"]);
+	assert.deepEqual(options.all("<small>").map((node) => node.content),
+		["主食 · 午餐", "素菜 · 不限餐次", "未分类 · 不限餐次"]);
 	assert.ok(options.all("<span>").some((node) => node.content === "配方待审核"));
-	assert.ok(options.all("<button>").some((node) => node.content === "已选" && node.attrs.disabled));
+	assert.ok(!options.all("<button>").some((node) => node.attrs["aria-label"] === "添加原菜（A）"));
 
 	async function setFilter(name, value) {
 		dialog.values[name] = value;
@@ -212,11 +212,11 @@ test("native week shows the calendar and supports editing meals in order", async
 	}
 	const all = await setFilter("catalog_slot", "all");
 	assert.equal(all.all_slots, 1);
-	assert.ok(options.all("<span>").some((node) => node.content === "晚餐菜"));
+	assert.ok(options.all("<strong>").some((node) => node.content === "晚餐菜"));
 	assert.equal((await setFilter("catalog_slot", "晚餐")).meal_type, "晚餐");
 	assert.equal(calls.at(-1)[2].all_slots, 0);
 	await setFilter("category", "未分类");
-	assert.deepEqual(options.all("<small>").map((node) => node.content), ["C"]);
+	assert.deepEqual(options.all("<strong>").map((node) => node.attrs.title), ["C"]);
 	await setFilter("category", "");
 	await setFilter("catalog_slot", "午餐");
 	dialog.values.search = "D";
@@ -226,29 +226,28 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(options.all("<button>")[0].attrs["aria-label"], "添加原菜（D）");
 	options.all("<button>")[0].events.click();
 	const chosen = dialog.fields_dict.chosen.$wrapper;
-	assert.ok(chosen.all("<small>").some((node) => node.content === "主食 · D"));
+	assert.ok(chosen.all("<strong>").some((node) => node.content === "原菜（D）"));
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "移除原菜（D）").events.click();
 	dialog.values.search = "";
 	dialog.fields_dict.search.$input.events.input();
 	await new Promise(setImmediate);
 	options.all("<button>").find((node) => node.attrs["aria-label"] === "添加新菜（B）").events.click();
-	assert.ok(chosen.all("<small>").some((node) => node.content === "素菜"));
+	assert.ok(chosen.all("<strong>").some((node) => node.content === "新菜"));
 	const quantity = chosen.all("<button>").find((node) => node.attrs["aria-label"] === "查看新菜的食材用量");
-	assert.equal(quantity.content, "食材用量");
 	quantity.events.click();
 	await new Promise(setImmediate);
 	const portionTable = chosen.all("<table>").find((node) => node.attrs["aria-label"] === "本餐食材用量");
 	assert.deepEqual(portionTable.all("<thead>")[0].all("<th>").map((node) => node.content),
-		["食材 / 单位", "标准每人毛重", "本餐每人毛重", "每人可食净量", "本餐毛重合计"]);
+		["食材", "每人毛重（克）", "37 人合计"]);
 	assert.deepEqual(portionTable.all("<tbody>")[0].all("<th>").map((node) => node.content), ["小白菜", "胡萝卜"]);
-	assert.ok(chosen.all("<div>").some((node) => node.content === "待补可食净量"));
-	chosen.all("<button>").find((node) => node.content === "调整本餐食材用量").events.click();
 	const input = (name) => chosen.all("<input>").find((node) => node.attrs["aria-label"] === name);
 	input("小白菜 本餐每人毛重（克）").events.input.call({value: "35", validity: {badInput: false}});
+	assert.ok(!input("小白菜 每人可食净量（克）"));
+	chosen.all("<button>").find((node) => node.content === "标准用量与净量").events.click();
 	input("小白菜 每人可食净量（克）").events.input.call({value: "30", validity: {badInput: false}});
 	assert.ok(chosen.all("<td>").some((node) => node.content === "1.295 kg"));
 	assert.ok(chosen.all("<td>").some((node) => node.content === "370 克"));
-	assert.ok(!chosen.all("<div>").some((node) => node.content === "待补可食净量"));
+	dialog.fields_dict.counts_summary.$wrapper.all("<button>").find((node) => node.attrs["aria-label"] === "调整顺序").events.click();
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "上移新菜").events.click();
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "下移新菜").events.click();
 	chosen.all("<button>").find((node) => node.attrs["aria-label"] === "上移新菜").events.click();
@@ -274,11 +273,11 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.deepEqual(JSON.parse(saved.boms), ["BOM-B", "BOM-A-1"]);
 	assert.deepEqual(JSON.parse(saved.portions), {"BOM-B": [{ row: "ING-1", gross: "35", net: "30" }]});
 	assert.equal(lunch.hidden, true);
-	assert.match(dialog.options.title, /周二 · 午点/);
+	assert.equal(dialog.options.title, "编排午点");
 	const snack = dialog;
 	snack.values.excluded_count = 1;
 	snack.values.adjustment_reason = "请假";
-	snack.header.all("<button>")[0].events.click();
+	snack.custom_actions.all("<button>")[0].events.click();
 	assert.equal(snack.hidden, undefined);
 	assert.equal(typeof confirmLeave, "function");
 	await snack.options.primary_action(snack.values);
@@ -292,7 +291,8 @@ test("native week shows the calendar and supports editing meals in order", async
 	await cell(days[1], "晚餐").events.click();
 	await dialog.options.secondary_action();
 	await new Promise(setImmediate);
-	assert.match(dialog.options.title, /周三 · 早餐/);
+	assert.equal(dialog.options.title, "编排早餐");
+	assert.ok(dialog.header.all("<span>").some((node) => node.content === "2026年11月25日 · 周三"));
 	assert.equal(saved.meal_type, "晚餐");
 	await dialog.hide();
 	await cell(days[4], "晚餐").events.click();
@@ -312,7 +312,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.ok(review.all("<small>").some((node) => node.content === "园所活动"));
 	assert.equal(review.all("<progress>")[0].attrs.value, 1);
 	await review.all("<button>").find((node) => node.attrs["aria-label"] === "周三 · 午餐 去编排").events.click();
-	assert.match(dialog.options.title, /周三 · 午餐/);
+	assert.equal(dialog.options.title, "编排午餐");
 	await dialog.hide();
 	ready = true;
 	form.doc.stock_reviewed = 1;

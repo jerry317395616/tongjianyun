@@ -1,5 +1,5 @@
 (() => {
-	const stylesheet = "/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-week-direct-edit.css";
+	const stylesheet = "/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-picker-portion-editor.css";
 	const decimal = new Intl.NumberFormat("zh-CN", { useGrouping: false, maximumFractionDigits: 9 });
 	const amount = (value) => value == null || value === "" || !Number.isFinite(Number(value))
 		? "—" : decimal.format(Number(value));
@@ -23,9 +23,11 @@
 			net: pending === undefined ? row.net : row.standard_net,
 		}]));
 		for (const change of pending || []) values.set(change.row, { gross: change.gross, net: change.net });
-		let editing = false;
+		const units = new Set(rows.map((row) => row.uom === "g" ? "克" : row.uom));
+		const unit = units.size === 1 ? units.values().next().value : "";
+		let showDetails = false;
 		let totals = [];
-		let $netNotice;
+		let $totalHeading;
 
 		function changes() {
 			return rows.flatMap((row) => {
@@ -37,13 +39,13 @@
 
 		function updateTotals() {
 			const count = headcount();
+			$totalHeading.text(count == null ? "本餐合计" : `${count} 人合计`);
 			for (const { row, $cell } of totals) {
 				const gross = Number(values.get(row.row).gross);
 				const total = count == null || !Number.isFinite(gross) || gross <= 0 ? null : gross * count;
 				const kg = total >= 1000 && ["g", "克"].includes(row.uom);
 				$cell.text(total == null ? "—" : `${amount(kg ? total / 1000 : total)} ${kg ? "kg" : row.uom}`);
 			}
-			$netNotice?.text(rows.some((row) => !normalizedNet(values.get(row.row).net)) ? "待补可食净量" : "");
 		}
 
 		function addInput($cell, row, field, label) {
@@ -60,48 +62,50 @@
 		function draw() {
 			$host.empty();
 			const $view = $("<div>", { class: "tgy-meal-portions" }).appendTo($host);
-			$("<strong>").text("本餐食材用量").appendTo($view);
-			const $table = $("<table>", { "aria-label": "本餐食材用量" })
+			$("<h5>").text("本餐食材用量").appendTo($view);
+			const $table = $("<table>", { class: showDetails ? "tgy-portion-expanded" : "tgy-portion-compact", "aria-label": "本餐食材用量" })
 				.appendTo($("<div>", { class: "tgy-portion-scroll" }).appendTo($view));
 			const $heading = $("<tr>").appendTo($("<thead>").appendTo($table));
-			for (const label of ["食材 / 单位", "标准每人毛重", "本餐每人毛重", "每人可食净量", "本餐毛重合计"]) {
+			const columns = ["食材", unit ? `每人毛重（${unit}）` : "每人毛重"];
+			if (showDetails) columns.push("标准每人毛重", "每人可食净量");
+			for (const label of columns) {
 				$("<th>", { scope: "col" }).text(label).appendTo($heading);
 			}
+			$totalHeading = $("<th>", { scope: "col" }).appendTo($heading);
 			const $body = $("<tbody>").appendTo($table);
 			totals = rows.map((row) => {
 				const current = values.get(row.row);
 				const $line = $("<tr>").appendTo($body);
 				const $name = $("<th>", { scope: "row" }).text(row.name).appendTo($line);
-				$("<small>").text(row.uom).appendTo($name);
-				const $standard = $("<td>").text(amount(row.standard_gross)).appendTo($line);
-				if (row.standard_net) $("<small>").text(`净 ${amount(row.standard_net)}`).appendTo($standard);
+				if (!unit) $("<small>").text(row.uom).appendTo($name);
 				const $gross = $("<td>").appendTo($line);
-				const $net = $("<td>").appendTo($line);
-				if (editing) {
-					addInput($gross, row, "gross", "本餐每人毛重");
-					addInput($net, row, "net", "每人可食净量");
-				} else {
-					$gross.text(amount(current.gross));
-					$net.text(amount(current.net));
+				if (editable) addInput($gross, row, "gross", "本餐每人毛重");
+				else $gross.text(amount(current.gross));
+				if (showDetails) {
+					const $standard = $("<td>").text(amount(row.standard_gross)).appendTo($line);
+					if (row.standard_net) $("<small>").text(`净 ${amount(row.standard_net)}`).appendTo($standard);
+					const $net = $("<td>").appendTo($line);
+					if (editable) addInput($net, row, "net", "每人可食净量");
+					else $net.text(amount(current.net));
 				}
 				return { row, $cell: $("<td>").appendTo($line) };
 			});
-			$netNotice = $("<div>", { class: "tgy-portion-note", role: "status" }).appendTo($view);
 			updateTotals();
-			if (!editable) return;
 			const $actions = $("<div>", { class: "tgy-portion-actions" }).appendTo($view);
-			const $toggle = $("<button>", { type: "button", class: "btn btn-xs btn-default" })
-				.text(editing ? "完成编辑" : "调整本餐食材用量").on("click", () => {
-					editing = !editing;
-					const $nextToggle = draw();
-					(editing ? $host.find("input").first() : $nextToggle)?.trigger("focus");
+			let $restore;
+			if (editable) {
+				$restore = $("<button>", { type: "button", class: "tgy-portion-link" }).text("恢复标准用量").on("click", () => {
+					for (const row of rows) values.set(row.row, { gross: row.standard_gross, net: row.standard_net });
+					onChange([]);
+					draw().restore.trigger("focus");
 				}).appendTo($actions);
-			$("<button>", { type: "button", class: "btn btn-xs btn-default" }).text("恢复标准用量").on("click", () => {
-				for (const row of rows) values.set(row.row, { gross: row.standard_gross, net: row.standard_net });
-				onChange([]);
-				draw()?.trigger("focus");
-			}).appendTo($actions);
-			return $toggle;
+			}
+			const $more = $("<button>", { type: "button", class: "tgy-portion-link tgy-portion-more", "aria-expanded": String(showDetails) })
+				.text(showDetails ? "收起标准用量与净量" : "标准用量与净量").on("click", () => {
+					showDetails = !showDetails;
+					draw().more.trigger("focus");
+				}).appendTo($actions);
+			return { restore: $restore, more: $more };
 		}
 
 		draw();

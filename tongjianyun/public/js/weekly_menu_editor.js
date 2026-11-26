@@ -11,6 +11,18 @@
 		午点: ["cup", '<path d="M4 8h13v5a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6Zm13 1h2a2.5 2.5 0 1 1-2 4M3 21h16M8 3v2m4-2v2"/>'],
 		晚餐: ["moon", '<path d="M20.5 14a8.6 8.6 0 0 1-10.7-11A9.1 9.1 0 1 0 20.5 14Z"/>'],
 	};
+	const pickerIcons = {
+		calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
+		people: '<circle cx="9" cy="7" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m2-16a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 5v2"/>',
+		close: '<path d="m6 6 12 12M18 6 6 18"/>',
+		back: '<path d="M20 12H4m7-7-7 7 7 7"/>',
+		plus: '<path d="M12 5v14M5 12h14"/>',
+		order: '<path d="M8 20V4m-4 4 4-4 4 4m4-4v16m-4-4 4 4 4-4"/>',
+		search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>',
+		chevron: '<path d="m6 9 6 6 6-6"/>',
+		more: '<path d="M5 12h.01m6.99 0h.01m6.99 0h.01" stroke-width="3.5"/>',
+		grip: '<path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3"/>',
+	};
 	const editable = (frm) => frm.doc.docstatus === 0 && !!frm.perm?.[0]?.write;
 	let styles;
 	let openedWeek;
@@ -62,6 +74,35 @@
 				.appendTo($label);
 		}
 		$("<span>").text(prefix + slot).appendTo($label);
+	}
+
+	function pickerIcon($parent, name) {
+		$("<span>", { class: `tgy-picker-icon tgy-icon-${name}`, "aria-hidden": "true" })
+			.html(`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"
+				stroke-linecap="round" stroke-linejoin="round" focusable="false">${pickerIcons[name]}</svg>`).appendTo($parent);
+	}
+
+	function pickerButton($parent, icon, text, action) {
+		const $control = button($parent, "", action).attr("aria-label", text);
+		pickerIcon($control, icon);
+		return $control;
+	}
+
+	function dishArt($parent, dish) {
+		const $art = $("<span>", { class: "tgy-picker-art", "aria-hidden": "true" }).appendTo($parent);
+		const name = dish.name;
+		const symbols = [
+			[/粥|羹|汤/, "🥣"], [/面包|吐司/, "🍞"], [/馒头|包子|饺/, "🥟"], [/蛋/, "🥚"],
+			[/红薯|紫薯|地瓜/, "🍠"], [/奶/, "🥛"], [/苹果|水果|蔬果/, "🍎"], [/面|粉/, "🍜"],
+			[/米饭|炒饭|主食/, "🍚"], [/鱼/, "🐟"], [/肉|鸡/, "🍗"], [/菜|蔬/, "🥬"],
+		];
+		const fallback = symbols.find(([pattern]) => pattern.test(name) || pattern.test(dish.category))?.[1] || "🍲";
+		if (typeof dish.image === "string" && /^\/(?:files|private\/files)\/[^/]/.test(dish.image)) {
+			$("<img>", { src: dish.image, alt: "", loading: "lazy", class: "tgy-picker-thumb" })
+				.on("error", () => $art.text(fallback)).appendTo($art);
+		} else {
+			$art.text(fallback);
+		}
 	}
 
 	function canAct(frm) {
@@ -408,15 +449,17 @@
 		const base = meal.base_headcount == null ? null : Number(meal.base_headcount);
 		let offset = 0;
 		let request = 0;
-		let $options, $chosen, $counts, $validation, $adjustments;
+		let $options, $chosen, $validation, $adjustments;
 		let lastOptions = null;
-		let expandedBom;
+		let expandedBom = selected[0]?.bom;
+		let ordering = false;
+		let dragged;
 		let updatePortionTotals;
 		let portionView = 0;
 		let closed = false;
 		let destination;
 		const dialog = new frappe.ui.Dialog({
-			title: `${dateLabel(args.meal_date, true)} · ${weekday} · ${args.meal_type}`,
+			title: `编排${args.meal_type}`,
 			size: "large",
 			static: true,
 			animate: true,
@@ -424,16 +467,6 @@
 			fields: [
 				{ fieldname: "day_meals", fieldtype: "HTML" },
 				{ fieldname: "composer", fieldtype: "Section Break" },
-				{ fieldname: "catalog_column", fieldtype: "Column Break" },
-				{ fieldname: "catalog_heading", fieldtype: "HTML" },
-				{ fieldname: "search", fieldtype: "Data", label: "搜索菜品", placeholder: "菜名或编码" },
-				{ fieldname: "catalog_slot", fieldtype: "Select", label: "餐次", default: args.meal_type,
-					options: [{ label: `当前餐次 · ${args.meal_type}`, value: args.meal_type },
-						...slots.filter((slot) => slot !== args.meal_type), { label: "全部餐次", value: "all" }],
-					onchange: resetSearch },
-				{ fieldname: "category", fieldtype: "Select", label: "菜品分类",
-					options: [{ label: "全部分类", value: "" }, ...categories, "未分类"], onchange: resetSearch },
-				{ fieldname: "options", fieldtype: "HTML" },
 				{ fieldname: "menu_column", fieldtype: "Column Break" },
 				{ fieldname: "counts_summary", fieldtype: "HTML" },
 				{ fieldname: "chosen", fieldtype: "HTML" },
@@ -443,6 +476,16 @@
 				{ fieldname: "adjustment_reason", fieldtype: "Small Text", label: "停餐调整原因", default: meal.adjustment_reason },
 				{ fieldname: "stopped", fieldtype: "Check", label: "整餐停供", default: Number(meal.stopped), onchange: renderCounts },
 				{ fieldname: "reason", fieldtype: "Small Text", label: "整餐停供原因", default: meal.reason, depends_on: "eval:doc.stopped" },
+				{ fieldname: "catalog_column", fieldtype: "Column Break" },
+				{ fieldname: "catalog_heading", fieldtype: "HTML" },
+				{ fieldname: "search", fieldtype: "Data", label: "搜索菜品", placeholder: "搜索菜品" },
+				{ fieldname: "catalog_slot", fieldtype: "Select", label: "餐次", default: args.meal_type,
+					options: [{ label: `当前餐次 · ${args.meal_type}`, value: args.meal_type },
+						...slots.filter((slot) => slot !== args.meal_type), { label: "全部餐次", value: "all" }],
+					onchange: resetSearch },
+				{ fieldname: "category", fieldtype: "Select", label: "菜品分类",
+					options: [{ label: "全部分类", value: "" }, ...categories, "未分类"], onchange: resetSearch },
+				{ fieldname: "options", fieldtype: "HTML" },
 			],
 			onhide() { closed = true; },
 			primary_action_label: "保存本餐",
@@ -462,11 +505,18 @@
 				frm.__tgy_calendar?.data || schedule, destination, args.week_name);
 		});
 		activeDrawer = { dialog, name: args.week_name };
-		const $actions = dialog.header.find(".modal-actions");
-		const $previous = button($actions, "上一餐", () => leave(index - 1)).prop("disabled", index === 0);
-		const $return = button($actions, "返回周历", () => leave());
+		const $meta = $("<div>", { class: "tgy-picker-meta" }).appendTo(dialog.header.find(".title-section"));
+		const $date = $("<span>", { class: "tgy-picker-context" }).appendTo($meta);
+		pickerIcon($date, "calendar");
+		$("<span>").text(`${dateLabel(args.meal_date, true)} · ${weekday}`).appendTo($date);
+		const $servings = $("<span>", { class: "tgy-picker-context" }).appendTo($meta);
+		pickerIcon($servings, "people");
+		const $planned = $("<span>", { role: "status" }).appendTo($servings);
+		const $close = pickerButton(dialog.header.find(".modal-actions"), "close", "关闭选菜", () => leave());
+		const $return = pickerButton(dialog.custom_actions, "back", "返回周历", () => leave());
+		$("<span>").text("返回周历").appendTo($return);
 		dialog.$wrapper.on("keydown.tgyMeal", (event) => {
-			if (event.key === "Escape") {
+			if (event.key === "Escape" && (!window.cur_dialog || window.cur_dialog === dialog)) {
 				event.preventDefault();
 				leave();
 			}
@@ -481,7 +531,6 @@
 				.attr({ "aria-current": active ? "true" : undefined, "aria-label": `${entry.slot} ${status}` })
 				.prop("disabled", active);
 			slotLabel($slot, entry.slot);
-			$("<small>", { class: `tgy-${entry.state}` }).text(status).appendTo($slot);
 		}
 
 		function leave(nextIndex) {
@@ -495,9 +544,22 @@
 		}
 
 		$("<h4>", { class: "tgy-picker-title" }).text("标准菜品库").appendTo(fields.catalog_heading.$wrapper);
+		pickerIcon(fields.search.$wrapper, "search");
+		for (const [name, label] of Object.entries({ search: "搜索菜品", catalog_slot: "餐次", category: "菜品分类" })) {
+			fields[name].$input.attr("aria-label", label);
+		}
 		$options = fields.options.$wrapper;
 		$chosen = fields.chosen.$wrapper;
-		$counts = fields.counts_summary.$wrapper;
+		const $heading = $("<div>", { class: "tgy-picker-heading" }).appendTo(fields.counts_summary.$wrapper);
+		const $menuTitle = $("<h4>", { class: "tgy-picker-title" }).appendTo($heading);
+		const $menuActions = $("<div>", { class: "tgy-picker-heading-actions" }).appendTo($heading);
+		const $addDish = pickerButton($menuActions, "plus", "添加菜品", () => fields.search.$input.trigger("focus"));
+		$("<span>").text("添加菜品").appendTo($addDish);
+		const $order = pickerButton($menuActions, "order", "调整顺序", () => {
+			ordering = !ordering;
+			renderChosen();
+		});
+		const $orderLabel = $("<span>").appendTo($order);
 		$adjustments = $("<details>", { class: "tgy-picker-adjustments" }).appendTo(fields.adjustments.$wrapper);
 		$("<summary>").text("供餐调整").appendTo($adjustments);
 		const $adjustmentFields = $("<div>").appendTo($adjustments);
@@ -531,7 +593,7 @@
 
 			const primary = dialog.get_primary_btn().prop("disabled", true);
 			const secondary = dialog.get_secondary_btn().prop("disabled", true);
-			$previous.prop("disabled", true);
+			$close.prop("disabled", true);
 			$return.prop("disabled", true);
 			let saved = false;
 			try {
@@ -545,7 +607,7 @@
 			} finally {
 				primary.prop("disabled", false);
 				secondary.prop("disabled", false);
-				$previous.prop("disabled", index === 0);
+				$close.prop("disabled", false);
 				$return.prop("disabled", false);
 			}
 			if (saved && !closed) {
@@ -566,15 +628,13 @@
 		}
 
 		function renderCounts() {
-			if (!$counts) return;
-			const $summary = $("<div>", { class: "tgy-picker-heading tgy-picker-counts" }).appendTo($counts.empty());
-			$("<h4>", { class: "tgy-picker-title" }).text(`本餐菜单 · ${selected.length} 道`).appendTo($summary);
+			if (!$options) return;
 			const excluded = Number(dialog.get_value("excluded_count") || 0);
 			const stopped = Number(dialog.get_value("stopped"));
 			let planned = stopped ? "整餐停供" : "首次保存时按教育名册核算人数";
 			if (invalidExclusion(excluded, stopped)) planned = "请核对停餐调整人数";
 			else if (!stopped && base !== null) planned = `计划供餐 ${base - excluded} 人`;
-			$("<strong>", { role: "status" }).text(planned).appendTo($summary);
+			$planned.text(planned);
 			updatePortionTotals?.();
 		}
 
@@ -595,60 +655,95 @@
 			portionView += 1;
 			updatePortionTotals = undefined;
 			renderCounts();
+			$menuTitle.text(`本餐菜单 · ${selected.length} 道`);
+			$order.prop("disabled", selected.length < 2)
+				.attr({ "aria-pressed": String(ordering), "aria-label": ordering ? "完成排序" : "调整顺序" });
+			$orderLabel.text(ordering ? "完成排序" : "调整顺序");
 			const $list = $("<div>", { class: "tgy-picker-list" }).appendTo($chosen.empty());
-			if (!selected.length) message($list, "请从标准菜品库添加本餐菜品。");
+			if (!selected.length) {
+				const $empty = $("<div>", { class: "tgy-picker-empty" }).appendTo($list);
+				message($empty, "从标准菜品库添加本餐菜品。");
+			}
 			let $focus;
 			selected.forEach((dish, position) => {
-				const $entry = $("<div>").appendTo($list);
+				const expanded = expandedBom === dish.bom;
+				const $entry = $("<div>", { class: `tgy-picker-entry${expanded ? " is-expanded" : ""}` }).appendTo($list);
 				const $row = $("<div>", { class: "tgy-picker-row" }).appendTo($entry);
-				const $label = $("<div>", { class: "tgy-picker-name" }).appendTo($row);
 				const sameName = selected.some((other) => other !== dish && other.name === dish.name);
 				const label = sameName ? `${dish.name}（${dish.item}）` : dish.name;
-				$("<span>").text(dish.name).appendTo($label);
-				$("<small>").text(sameName ? `${dish.category || "未分类"} · ${dish.item}` : dish.category || "未分类").appendTo($label);
-				const $actions = $("<div>", { class: "tgy-picker-row-actions" }).appendTo($row);
-				button($actions, "配餐提示", async () => {
-					const {message: notes} = await frappe.call({method:"tongjianyun.canteen_ops.meal_operations.dish_notes",
-						type:"GET", args:{week_name:frm.doc.name, bom_name:dish.bom, service_date:args.meal_date}});
-					const d=new frappe.ui.Dialog({title:"配餐提示",fields:[{fieldname:"notes",fieldtype:"HTML"}]});
-					const panel=d.fields_dict.notes.$wrapper;
-					$("<p>").text("配方标注过敏原："+(notes.allergens||"未标注")).appendTo(panel);
-					$("<p>").text("特殊餐匹配："+(notes.conflicts?.join("、")||"请核对已确认的饮食安排")).appendTo(panel);
-					if (notes.latest) $("<p>").text("最近观察 · "+notes.latest.date+" · "+(notes.latest.reason||notes.latest.acceptance)).appendTo(panel);
-					for(const row of notes.feedback) $("<p>").text(row.acceptance+" · "+row.observations+" 次班级观察").appendTo(panel);
-					d.show();
+				const $grip = $("<span>", { class: "tgy-picker-grip", draggable: selected.length > 1, "aria-hidden": "true" })
+					.appendTo($row);
+				pickerIcon($grip, "grip");
+				$grip.on("dragstart", (event) => {
+					dragged = position;
+					event.originalEvent.dataTransfer.setData("text/plain", "meal-dish");
+					event.originalEvent.dataTransfer.effectAllowed = "move";
+				}).on("dragend", () => { dragged = undefined; });
+				$entry.on("dragover", (event) => {
+					if (dragged !== undefined) event.preventDefault();
+				}).on("drop", (event) => {
+					if (dragged === undefined) return;
+					event.preventDefault();
+					const source = dragged;
+					dragged = undefined;
+					moveDish(source, position);
 				});
-				const expanded = expandedBom === dish.bom;
-				const $quantity = button($actions, "食材用量", () => {
+				const $quantity = button($row, "", () => {
 					expandedBom = expanded ? undefined : dish.bom;
 					renderChosen(dish.bom, "quantity");
-				}).attr({ "aria-expanded": String(expanded), "aria-label": `查看${label}的食材用量` });
-				const $up = button($actions, "↑", () => move(-1, "up"))
-					.attr({ "aria-label": `上移${label}`, title: "上移" }).prop("disabled", position === 0);
-				const $down = button($actions, "↓", () => move(1, "down"))
-					.attr({ "aria-label": `下移${label}`, title: "下移" }).prop("disabled", position === selected.length - 1);
-				const $remove = button($actions, "×", () => {
+				}).addClass("tgy-picker-dish-toggle")
+					.attr({ "aria-expanded": String(expanded), "aria-label": `查看${label}的食材用量` });
+				dishArt($quantity, dish);
+				$("<strong>", { class: "tgy-picker-name" }).text(label).appendTo($quantity);
+				pickerIcon($quantity, "chevron");
+				const actions = { quantity: $quantity };
+				if (ordering) {
+					actions.up = button($row, "↑", () => moveDish(position, position - 1, "up"))
+						.attr("aria-label", `上移${label}`).prop("disabled", position === 0);
+					actions.down = button($row, "↓", () => moveDish(position, position + 1, "down"))
+						.attr("aria-label", `下移${label}`).prop("disabled", position === selected.length - 1);
+				}
+				const $menu = $("<details>", { class: "tgy-picker-dish-menu" }).appendTo($row);
+				const $more = $("<summary>", { "aria-label": `${label}的操作`, title: "菜品操作" }).appendTo($menu);
+				pickerIcon($more, "more");
+				const $popup = $("<div>", { class: "tgy-picker-dish-actions" }).appendTo($menu);
+				button($popup, "配餐提示", async () => {
+					$menu.prop("open", false);
+					const {message: notes} = await frappe.call({ method: "tongjianyun.canteen_ops.meal_operations.dish_notes",
+						type: "GET", args: { week_name: args.week_name, bom_name: dish.bom, service_date: args.meal_date } });
+					if (closed || !notes) return;
+					const details = new frappe.ui.Dialog({ title: "配餐提示", fields: [{ fieldname: "notes", fieldtype: "HTML" }] });
+					const panel = details.fields_dict.notes.$wrapper;
+					$("<p>").text("配方标注过敏原：" + (notes.allergens || "未标注")).appendTo(panel);
+					$("<p>").text("特殊餐匹配：" + (notes.conflicts?.join("、") || "请核对已确认的饮食安排")).appendTo(panel);
+					if (notes.latest) $("<p>").text("最近观察 · " + notes.latest.date + " · " + (notes.latest.reason || notes.latest.acceptance)).appendTo(panel);
+					for (const row of notes.feedback || []) $("<p>").text(row.acceptance + " · " + row.observations + " 次班级观察").appendTo(panel);
+					details.show();
+				});
+				button($popup, "移除菜品", () => {
 					selected.splice(position, 1);
 					portions.delete(dish.bom);
 					if (expanded) expandedBom = undefined;
-					renderChosen(selected[Math.min(position, selected.length - 1)]?.bom, "remove");
+					if (selected.length < 2) ordering = false;
+					renderChosen(selected[Math.min(position, selected.length - 1)]?.bom, "quantity");
 					renderOptions(lastOptions, $options.find(".tgy-picker-options").scrollTop());
 					if (!selected.length) fields.search.$input.trigger("focus");
-				}).attr({ "aria-label": `移除${label}`, title: "移除" });
+				}).attr("aria-label", `移除${label}`);
 				if (expanded) renderIngredients($entry, dish);
 				if (focusBom === dish.bom) {
-					const actions = { quantity: $quantity, up: position > 0 ? $up : $down,
-						down: position < selected.length - 1 ? $down : $up, remove: $remove };
-					$focus = actions[focusAction];
-				}
-
-				function move(by, action) {
-					const target = position + by;
-					[selected[position], selected[target]] = [selected[target], selected[position]];
-					renderChosen(dish.bom, action);
+					if (focusAction === "up" && position === 0) focusAction = "down";
+					else if (focusAction === "down" && position === selected.length - 1) focusAction = "up";
+					$focus = actions[focusAction] || $quantity;
 				}
 			});
 			$focus?.trigger("focus");
+		}
+
+		function moveDish(from, to, action = "quantity") {
+			if (from === to || to < 0 || to >= selected.length || closed || frm.__meal_action_running) return;
+			const [dish] = selected.splice(from, 1);
+			selected.splice(to, 0, dish);
+			renderChosen(dish.bom, action);
 		}
 
 		async function renderIngredients($entry, dish) {
@@ -694,48 +789,38 @@
 
 		function renderOptions(result, scrollTop = 0, afterItem) {
 			if (!result) return;
-			const $list = $("<div>", { class: "tgy-picker-options" }).appendTo($options.empty());
-			const $table = $("<table>", { class: "tgy-picker-table", "aria-label": "标准菜品列表" }).appendTo($list);
-			const $head = $("<tr>").appendTo($("<thead>").appendTo($table));
-			for (const label of ["菜品名称", "适用餐次", "菜品分类", "操作"]) {
-				$("<th>", { scope: "col" }).text(label).appendTo($head);
-			}
-			const $body = $("<tbody>").appendTo($table);
-			if (!result.rows.length) message($list, "暂无符合条件的标准菜品。");
+			const $list = $("<ul>", { class: "tgy-picker-options", "aria-label": "标准菜品列表" }).appendTo($options.empty());
+			const selectedItems = new Set(selected.map((dish) => dish.item));
 			let passedItem = false;
+			let hasRemaining = false;
 			let $nextOption;
 			for (const dish of result.rows) {
-				const $row = $("<tr>").appendTo($body);
-				const $label = $("<th>", { scope: "row", class: "tgy-picker-name" }).appendTo($row);
-				const $identity = $("<div>", { class: "tgy-picker-identity" }).appendTo($label);
-				if (typeof dish.image === "string" && /^\/(?:files|private\/files)\/[^/]/.test(dish.image)) {
-					$("<img>", { src: dish.image, alt: "", loading: "lazy", class: "tgy-picker-thumb" })
-						.on("error", function () { $(this).remove(); }).appendTo($identity);
-				}
-				const $names = $("<div>").appendTo($identity);
-				$("<span>").text(dish.name).appendTo($names);
-				$("<small>").text(dish.item).appendTo($names);
-				const $slots = $("<div>", { class: "tgy-picker-slots" }).appendTo($("<td>").appendTo($row));
-				for (const slot of dish.meal_slots || []) {
-					$(slot === args.meal_type ? "<strong>" : "<span>").text(slot).appendTo($slots);
-				}
-				if (!dish.meal_slots?.length) $slots.text("未限定");
-				$("<td>").text(dish.category || "未分类").appendTo($row);
-				const $actions = $("<td>", { class: "tgy-picker-option-action" }).appendTo($row);
-				if (!dish.bom) {
-					$("<span>", { class: "text-muted" }).text(dish.status).appendTo($actions);
+				if (selectedItems.has(dish.item)) {
+					if (afterItem === dish.item) passedItem = true;
 					continue;
 				}
-				const picked = selected.some((item) => item.item === dish.item);
-				const $add = button($actions, picked ? "已选" : "添加", () => {
+				hasRemaining = true;
+				const $row = $("<li>", { class: `tgy-picker-option${dish.bom ? "" : " is-unavailable"}` }).appendTo($list);
+				dishArt($row, dish);
+				const $names = $("<div>", { class: "tgy-picker-name" }).appendTo($row);
+				$("<strong>", { title: dish.item }).text(dish.name).appendTo($names);
+				$("<small>").text(`${dish.category || "未分类"} · ${dish.meal_slots?.join("、") || "不限餐次"}`).appendTo($names);
+				if (!dish.bom) {
+					$("<span>", { class: "tgy-picker-status" }).text(dish.status).appendTo($row);
+					continue;
+				}
+				const $add = pickerButton($row, "plus", `添加${dish.name}（${dish.item}）`, () => {
 					if (closed || frm.__meal_action_running) return;
 					if (selected.length >= 20) return frappe.msgprint("每餐最多选择 20 道菜。");
 					selected.push(dish);
+					if (selected.length === 1) expandedBom = dish.bom;
 					renderChosen();
 					renderOptions(result, $list.scrollTop(), dish.item);
-				}).attr("aria-label", `${picked ? "已选" : "添加"}${dish.name}（${dish.item}）`).prop("disabled", picked);
-				if (passedItem && !picked && !$nextOption) $nextOption = $add;
-				if (afterItem === dish.item) passedItem = true;
+				}).addClass("tgy-picker-add");
+				if (passedItem && !$nextOption) $nextOption = $add;
+			}
+			if (!hasRemaining) {
+				message($("<li>").appendTo($list), result.rows.length ? "本页菜品已全部添加。" : "暂无符合条件的标准菜品。");
 			}
 			if (offset || result.has_more) {
 				const $pages = $("<div>", { class: "tgy-picker-pages" }).appendTo($options);
