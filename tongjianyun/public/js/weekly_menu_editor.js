@@ -7,9 +7,13 @@
 	const editable = (frm) => frm.doc.docstatus === 0 && !!frm.perm?.[0]?.write;
 	let styles;
 	let openedWeek;
+	let activeDrawer;
 	let requestedTab = window.location.hash.slice(1);
 	frappe.router?.on?.("change", () => {
 		const [view, type, name] = frappe.get_route();
+		if (activeDrawer && (view !== "Form" || type !== doctype || name !== activeDrawer.name)) {
+			activeDrawer.dialog.hide();
+		}
 		if (view !== "Form" || type !== doctype || name !== openedWeek) {
 			openedWeek = undefined;
 			requestedTab = window.location.hash.slice(1);
@@ -67,24 +71,47 @@
 		}).catch(() => {});
 	}
 
-	function renderCalendar(frm, $panel, data, tabbed) {
-		const { days, slots, meals, initialized, categories } = data;
+	function weekEntries(data) {
+		const meals = new Map(data.meals.map((meal) => [`${meal.date}:${meal.slot}`, meal]));
+		return data.days.flatMap((day, dayIndex) => data.slots.map((slot) => {
+			const meal = meals.get(`${day}:${slot}`);
+			const state = meal?.stopped ? "stopped" : meal?.menu ? "scheduled" : "pending";
+			return { day, dayIndex, slot, meal, state };
+		}));
+	}
+
+	function focusMeal(frm, name, index) {
+		if (!isCurrentWeek(frm, name)) return;
+		const calendar = frm.__tgy_calendar;
+		if (calendar?.name !== name || !calendar.cells[index]) {
+			frm.__tgy_meal_focus = { name, index };
+			return;
+		}
+		const cell = calendar.cells[index][0];
+		cell?.focus({ preventScroll: true });
+		cell?.scrollIntoView({ block: "nearest", inline: "nearest" });
+	}
+
+	function renderCalendar(frm, $panel, data, previousCalendar) {
+		const { days, slots, initialized } = data;
 		const canEdit = editable(frm);
-		const schedule = { days, slots, categories };
-		const byMeal = new Map(meals.map((meal) => [`${meal.date}:${meal.slot}`, meal]));
-		const total = days.length * slots.length;
-		const stopped = meals.filter((meal) => meal.stopped).length;
-		const scheduled = meals.filter((meal) => !meal.stopped && meal.menu).length;
+		const entries = weekEntries(data);
+		const total = entries.length;
+		const stopped = entries.filter(({state}) => state === "stopped").length;
+		const scheduled = entries.filter(({state}) => state === "scheduled").length;
 		const pending = total - scheduled - stopped;
 		const today = frappe.datetime?.get_today?.();
+		const name = frm.doc.name;
+		const cells = [];
+		const scrollLeft = previousCalendar?.name === name ? previousCalendar.scroll.scrollLeft() : 0;
 		$panel.empty();
 		const $headBand = $("<div>", { class: "tgy-week-overview" }).appendTo($panel);
 		const $heading = $("<div>").appendTo($headBand);
 		const start = days[0];
 		const end = days.at(-1);
 		const period = `${dateLabel(start, true)} – ${dateLabel(end, start.slice(0, 4) !== end.slice(0, 4))}`;
-		$("<h3>", { class: "tgy-week-title" }).text(tabbed ? period : "供餐周历").appendTo($heading);
-		if (!tabbed) $("<div>", { class: "tgy-week-period" }).text(period).appendTo($heading);
+		$("<div>", { class: "tgy-week-period" }).text(frm.doc.company || "供餐周历").appendTo($heading);
+		$("<h3>", { class: "tgy-week-title" }).text(period).appendTo($heading);
 		if (canEdit && !initialized) {
 			const $actions = $("<div>", { class: "tgy-week-actions" }).appendTo($headBand);
 			button($actions, "空白编排", () => startWeek(frm, false), true);
@@ -93,8 +120,10 @@
 		if (initialized) {
 			const $progress = $("<div>", { class: "tgy-week-progress" }).appendTo($headBand);
 			const $summary = $("<div>", { class: "tgy-week-summary", role: "status" }).appendTo($progress);
-			for (const [label, count, state] of [["已选菜", scheduled, "scheduled"], ["停供", stopped, "stopped"], ["待编排", pending, "pending"]]) {
-				$("<span>", { class: `tgy-week-stat tgy-${state}` }).text(`${label} ${count} 餐`).appendTo($summary);
+			for (const [label, count, state] of [["已编排", scheduled, "scheduled"], ["停餐", stopped, "stopped"], ["待编排", pending, "pending"]]) {
+				const $stat = $("<span>", { class: `tgy-week-stat tgy-${state}` }).appendTo($summary);
+				$("<strong>").text(count).appendTo($stat);
+				$("<span>").text(label).appendTo($stat);
 			}
 			$("<progress>", { value: total - pending, max: total, "aria-label": "餐次编排进度" }).appendTo($progress);
 		}
@@ -110,32 +139,151 @@
 		const $body = $("<tbody>").appendTo($table);
 		for (const [slotIndex, slot] of slots.entries()) {
 			const $row = $("<tr>").appendTo($body);
-			$("<th>", { scope: "row" }).text(slot).appendTo($row);
+			const $slot = $("<th>", { scope: "row" }).appendTo($row);
+			$("<span>", { class: `tgy-week-slot tgy-slot-${slotIndex}` }).text(slot).appendTo($slot);
 			for (const [dayIndex, day] of days.entries()) {
-				const meal = byMeal.get(`${day}:${slot}`);
+				const index = dayIndex * slots.length + slotIndex;
+				const { meal, state } = entries[index];
 				const label = meal?.stopped ? "整餐停供" : meal?.menu || "未编排";
-				const state = meal?.stopped ? "stopped" : meal?.menu ? "scheduled" : "pending";
 				const $cell = $("<td>").appendTo($row);
 				const cellClass = `tgy-meal-cell tgy-${state}`;
 				let $card;
 				if (canEdit && initialized) {
-					$card = $("<button>", { type: "button", class: cellClass, "aria-label": `${day} ${slot} ${label}` })
-						.on("click", () => openMeal(frm, schedule, dayIndex * slots.length + slotIndex)).appendTo($cell);
+					$card = $("<button>", { type: "button", class: cellClass, "aria-label": `${day} ${slot} ${label}`,
+						"aria-haspopup": "dialog" }).on("click", () => openMeal(frm, data, index)).appendTo($cell);
 				} else {
 					$card = $("<div>", { class: cellClass }).appendTo($cell);
 				}
-				$("<span>", { class: "tgy-meal-name" }).text(label).appendTo($card);
-				if (meal?.stopped) $("<span>", { class: "tgy-meal-note" }).text(meal.reason).appendTo($card);
-				else if (meal?.menu) $("<span>", { class: "tgy-meal-note" }).text(`计划 ${meal.headcount} 人`).appendTo($card);
+				cells[index] = $card;
+				if (state === "scheduled") {
+					const names = meal.menu.split("、");
+					if (names.length > 3) $card.attr("title", meal.menu);
+					for (const dish of names.slice(0, 3)) {
+						$("<span>", { class: "tgy-meal-name" }).text(dish).appendTo($card);
+					}
+					const rest = names.length > 3 ? `另有 ${names.length - 3} 道 · ` : "";
+					$("<span>", { class: "tgy-meal-note" }).text(`${rest}${meal.headcount} 人`).appendTo($card);
+				} else {
+					const text = state === "pending" && canEdit && initialized ? "+ 添加菜品" : label;
+					$("<span>", { class: "tgy-meal-name" }).text(text).appendTo($card);
+					if (meal?.stopped && meal.reason) $("<span>", { class: "tgy-meal-note" }).text(meal.reason).appendTo($card);
+				}
 			}
+		}
+		frm.__tgy_calendar = { name, data, cells, scroll: $scroll };
+		$scroll.scrollLeft(scrollLeft);
+		if (frm.__tgy_meal_focus?.name === name) {
+			focusMeal(frm, name, frm.__tgy_meal_focus.index);
+			delete frm.__tgy_meal_focus;
 		}
 		if (canEdit && pending) {
 			frm.remove_custom_button("采购需求预览");
 			frm.remove_custom_button("核对账面库存");
 			frm.remove_custom_button("确认采购毛重口径", "采购操作");
-		} else if (canEdit) {
-			message($panel, "编排完成后，核对采购毛重口径和账面库存，再由授权审核员提交发布。");
 		}
+	}
+
+	function openReview(frm) {
+		if (!canSubmit(frm) || !canAct(frm) || activeDrawer || frm.__meal_opening) return;
+		const name = frm.doc.name;
+		const dialog = new frappe.ui.Dialog({
+			title: "提交前核对",
+			animate: true,
+			no_submit_on_enter: true,
+			fields: [{ fieldtype: "HTML", fieldname: "review" }],
+			primary_action_label: "确认提交",
+			primary_action() {
+				if (!ready || !canSubmit(frm) || !isCurrentWeek(frm, name) || !canAct(frm)) return;
+				close(() => frm.savesubmit());
+			},
+		});
+		let ready = false;
+		let afterClose;
+		activeDrawer = { dialog, name };
+		dialog.$wrapper.addClass("tgy-week-drawer tgy-week-review").one("hidden.bs.modal", () => {
+			activeDrawer = undefined;
+			dialog.$wrapper.remove();
+			if (isCurrentWeek(frm, name)) return afterClose?.();
+		});
+		const $body = dialog.fields_dict.review.$wrapper;
+		dialog.get_primary_btn().prop("disabled", true);
+		dialog.show();
+		load();
+
+		function close(action) {
+			afterClose = action;
+			return dialog.hide();
+		}
+
+		async function load() {
+			message($body.empty(), "正在核对本周餐次…");
+			try {
+				const data = await call("calendar", { week_name: name });
+				if (activeDrawer?.dialog !== dialog || !isCurrentWeek(frm, name)) return;
+				render(data);
+			} catch {
+				message($body.empty(), "核对清单读取失败。");
+				button($body, "重试", load);
+			}
+		}
+
+		function render(data) {
+			$body.empty();
+			const entries = weekEntries(data);
+			const pending = entries.filter(({state}) => state === "pending").length;
+			const $progress = $("<div>", { class: "tgy-review-progress" }).appendTo($body);
+			$("<span>").text("已处理餐次（含停餐）").appendTo($progress);
+			$("<strong>").text(`${entries.length - pending} / ${entries.length}`).appendTo($progress);
+			$("<progress>", { value: entries.length - pending, max: entries.length,
+				"aria-label": "已处理餐次" }).appendTo($progress);
+
+			for (const [state, title] of [["pending", "待编排"], ["stopped", "已停餐"]]) {
+				const list = entries.filter((entry) => entry.state === state);
+				const $group = $("<section>", { class: `tgy-review-group tgy-${state}` }).appendTo($body);
+				$("<h4>").text(`${title} · ${list.length} 餐`).appendTo($group);
+				if (!data.initialized && state === "pending") {
+					button($group, "返回周历开始编排", () => close(() => frm.layout.select_tab(calendarTab)));
+					continue;
+				}
+				const $list = $("<div>", { class: "tgy-review-list" }).appendTo($group);
+				for (const entry of list) {
+					const index = entry.dayIndex * data.slots.length + data.slots.indexOf(entry.slot);
+					const label = `${weekdays[entry.dayIndex]} · ${entry.slot}`;
+					const $row = $("<div>", { class: "tgy-review-row" }).appendTo($list);
+					const $label = $("<div>").appendTo($row);
+					$("<strong>").text(label).appendTo($label);
+					const detail = state === "stopped" ? entry.meal.reason : dateLabel(entry.day);
+					if (detail) $("<small>").text(detail).appendTo($label);
+					if (editable(frm)) button($row, state === "pending" ? "去编排" : "查看", () => close(() => {
+						frm.layout.select_tab(calendarTab);
+						focusMeal(frm, name, index);
+						return openMeal(frm, data, index);
+					})).attr("aria-label", `${label} ${state === "pending" ? "去编排" : "查看停餐"}`);
+				}
+			}
+			const stockReviewed = Boolean(Number(frm.doc.stock_reviewed));
+			const weightConfirmed = frm.doc.requirement_weight_basis === "采购毛重";
+			const sameReviewer = frm.doc.owner && frm.doc.owner === frappe.session?.user;
+			const stale = data.modified && frm.doc.modified && data.modified !== frm.doc.modified;
+			const $checks = $("<section>", { class: "tgy-review-group" }).appendTo($body);
+			$("<h4>").text("采购与审核").appendTo($checks);
+			$("<p>").text(weightConfirmed ? "采购毛重口径已确认" : "待确认采购毛重口径").appendTo($checks);
+			$("<p>").text(stockReviewed ? "账面库存已核对" : "待核对采购需求与账面库存").appendTo($checks);
+			const preview = frm.custom_buttons?.["采购需求预览"];
+			if (!pending && preview) button($checks, "采购需求预览", () => close(() => {
+				frm.layout.select_tab(basicTab);
+				preview.trigger("click");
+			}));
+			if (sameReviewer) $("<p>").text("请由另一位有权限的审核人提交。").appendTo($checks);
+			if (stale) button($checks, "食谱已有更新，刷新后核对", () => close(() => frm.reload_doc()));
+			ready = data.initialized && !pending && stockReviewed && weightConfirmed && !sameReviewer && !stale;
+			dialog.get_primary_btn().prop("disabled", !ready);
+		}
+	}
+
+	function canSubmit(frm) {
+		return frm.doc.docstatus === 0 && !frm.is_new() && frm.perm?.[0]?.submit
+			&& !frappe.model?.has_workflow(doctype) && frm.toolbar?.get_action_status() === "Submit";
 	}
 
 	function openTaskDestination(frm) {
@@ -165,6 +313,7 @@
 		const tab = frm.layout.tabs.find((entry) => entry.df.fieldname === calendarTab);
 		const tabbed = Boolean($calendar?.length && tab);
 		const $mealSection = tabbed ? $grid.closest(".form-section") : null;
+		if (tabbed) $calendar.closest(".form-section").addClass("tgy-week-calendar-section");
 		let $panel = tabbed ? $calendar.addClass("tgy-week-menu") : $grid.prev(".tgy-week-menu");
 		$mealSection?.hide();
 		if (creating) {
@@ -175,14 +324,17 @@
 		}
 		if (!$panel.length) $panel = $("<div>", { class: "tgy-week-menu mb-3" }).insertBefore($grid);
 		const $content = $("<div>").appendTo($panel.empty());
+		const previousCalendar = frm.__tgy_calendar;
+		delete frm.__tgy_calendar;
 		if (unsaved) {
 			$grid.show();
 			message($content, "请先保存园所、供餐周、学期和原料仓库，再开始编排。");
 			return;
 		}
+		if (canSubmit(frm)) frm.page.set_primary_action(__("Submit"), () => openReview(frm), "check");
 		if (tabbed) {
 			const explicitTab = frm.layout.tabs.some((tab) => tab.df.fieldname === requestedTab && !tab.is_hidden());
-			if (!tab.is_hidden() && (frm.__tgy_week_open_calendar || (opening && frm.doc.meals?.length && !explicitTab))) {
+			if (!tab.is_hidden() && (frm.__tgy_week_open_calendar || (opening && !explicitTab))) {
 				frm.layout.select_tab(calendarTab);
 			}
 			frm.__tgy_week_open_calendar = false;
@@ -193,7 +345,7 @@
 		try {
 			const data = await call("calendar", { week_name: name });
 			if (frm.doc.name !== name || !$content.parent().length) return;
-			renderCalendar(frm, $content, data, tabbed);
+			renderCalendar(frm, $content, data, previousCalendar);
 			frm.remove_custom_button("调整本餐菜品");
 			frm.custom_buttons?.["从上一周编排"]?.text("从参考周编排");
 			$grid.hide();
@@ -213,7 +365,7 @@
 	}
 
 	async function openMeal(frm, schedule, index, name = frm.doc.name) {
-		if (!isCurrentWeek(frm, name) || !editable(frm) || frm.__meal_opening || !canAct(frm)) return;
+		if (!isCurrentWeek(frm, name) || !editable(frm) || frm.__meal_opening || activeDrawer || !canAct(frm)) return;
 		const { days, slots } = schedule;
 		const dayIndex = Math.floor(index / slots.length);
 		const args = { week_name: name, meal_date: days[dayIndex], meal_type: slots[index % slots.length] };
@@ -232,6 +384,8 @@
 
 	function mealDialog(frm, schedule, index, args, weekday, meal) {
 		const { days, slots, categories } = schedule;
+		const dayStart = index - (index % slots.length);
+		const dayEntries = weekEntries(schedule).slice(dayStart, dayStart + slots.length);
 		const hasNext = index < days.length * slots.length - 1;
 		const selected = [...meal.dishes];
 		const portions = new Map();
@@ -249,8 +403,11 @@
 		const dialog = new frappe.ui.Dialog({
 			title: `${dateLabel(args.meal_date, true)} · ${weekday} · ${args.meal_type}`,
 			size: "large",
+			static: true,
+			animate: true,
 			no_submit_on_enter: true,
 			fields: [
+				{ fieldname: "day_meals", fieldtype: "HTML" },
 				{ fieldname: "composer", fieldtype: "Section Break" },
 				{ fieldname: "catalog_column", fieldtype: "Column Break" },
 				{ fieldname: "catalog_heading", fieldtype: "HTML" },
@@ -273,29 +430,53 @@
 				{ fieldname: "reason", fieldtype: "Small Text", label: "整餐停供原因", default: meal.reason, depends_on: "eval:doc.stopped" },
 			],
 			onhide() { closed = true; },
-			primary_action_label: hasNext ? "保存并编排下一餐" : "保存本餐",
-			primary_action: (values) => save(values, hasNext),
-			secondary_action_label: hasNext ? "保存本餐" : undefined,
+			primary_action_label: "保存本餐",
+			primary_action: (values) => save(values, false),
+			secondary_action_label: hasNext ? "保存并编排下一餐" : undefined,
 			secondary_action: hasNext ? () => {
 				const values = dialog.get_values();
-				if (values) return save(values, false);
+				if (values) return save(values, true);
 			} : undefined,
 		});
 		const fields = dialog.fields_dict;
-		dialog.$wrapper.addClass("tgy-week-picker").one("hidden.bs.modal", () => {
+		dialog.$wrapper.addClass("tgy-week-drawer tgy-week-picker").one("hidden.bs.modal", () => {
+			activeDrawer = undefined;
 			dialog.$wrapper.remove();
-			if (destination !== undefined) return openMeal(frm, schedule, destination, args.week_name);
+			focusMeal(frm, args.week_name, destination ?? index);
+			if (destination !== undefined) return openMeal(frm,
+				frm.__tgy_calendar?.data || schedule, destination, args.week_name);
 		});
-		const $previous = button(dialog.header.find(".modal-actions"), "上一餐", () => {
+		activeDrawer = { dialog, name: args.week_name };
+		const $actions = dialog.header.find(".modal-actions");
+		const $previous = button($actions, "上一餐", () => leave(index - 1)).prop("disabled", index === 0);
+		const $return = button($actions, "返回周历", () => leave());
+		dialog.$wrapper.on("keydown.tgyMeal", (event) => {
+			if (event.key === "Escape") {
+				event.preventDefault();
+				leave();
+			}
+		});
+		const $day = $("<div>", { class: "tgy-picker-day", role: "group", "aria-label": "当天餐次" })
+			.appendTo(fields.day_meals.$wrapper);
+		for (const [offset, entry] of dayEntries.entries()) {
+			const target = dayStart + offset;
+			const active = target === index;
+			const status = {scheduled: "已编排", stopped: "停餐", pending: "待编排"}[entry.state];
+			const $slot = button($day, entry.slot, () => leave(target))
+				.attr({ "aria-current": active ? "true" : undefined, "aria-label": `${entry.slot} ${status}` })
+				.prop("disabled", active);
+			$("<small>", { class: `tgy-${entry.state}` }).text(status).appendTo($slot);
+		}
+
+		function leave(nextIndex) {
 			if (closed || !canAct(frm)) return;
-			const leave = () => close(index - 1);
 			const changed = portions.size || selected.length !== meal.dishes.length
 				|| selected.some((dish, position) => dish.bom !== meal.dishes[position]?.bom)
 				|| ["excluded_count", "stopped"].some((key) => Number(dialog.get_value(key) || 0) !== Number(meal[key] || 0))
 				|| ["adjustment_reason", "reason"].some((key) => (dialog.get_value(key) || "") !== (meal[key] || ""));
-			if (changed) frappe.confirm("本餐有未保存的修改，是否返回上一餐？", leave);
-			else leave();
-		}).prop("disabled", index === 0);
+			if (changed) frappe.confirm("本餐有未保存的修改，是否离开本餐？", () => close(nextIndex));
+			else close(nextIndex);
+		}
 
 		$("<h4>", { class: "tgy-picker-title" }).text("标准菜品库").appendTo(fields.catalog_heading.$wrapper);
 		$options = fields.options.$wrapper;
@@ -326,7 +507,7 @@
 			const adjustment = values.adjustment_reason?.trim() || "";
 			const reason = values.reason?.trim() || "";
 			const stopped = Number(values.stopped || 0);
-			if (!Number.isInteger(excluded) || excluded < 0 || excluded >= base) {
+			if (!Number.isInteger(excluded) || excluded < 0 || (excluded >= base && (!stopped || excluded))) {
 				return adjustmentError("停餐调整人数须小于在园人数。", "excluded_count");
 			}
 			if (excluded && !adjustment) return adjustmentError("请填写停餐调整原因。", "adjustment_reason");
@@ -335,6 +516,7 @@
 			const primary = dialog.get_primary_btn().prop("disabled", true);
 			const secondary = dialog.get_secondary_btn().prop("disabled", true);
 			$previous.prop("disabled", true);
+			$return.prop("disabled", true);
 			let saved = false;
 			try {
 				await mutate(frm, "save_meal", {
@@ -348,6 +530,7 @@
 				primary.prop("disabled", false);
 				secondary.prop("disabled", false);
 				$previous.prop("disabled", index === 0);
+				$return.prop("disabled", false);
 			}
 			if (saved && !closed) {
 				frappe.show_alert({ message: "本餐草稿已保存", indicator: "green" });
@@ -367,7 +550,7 @@
 			$("<h4>", { class: "tgy-picker-title" }).text(`本餐菜单 · ${selected.length} 道`).appendTo($summary);
 			const excluded = Number(dialog.get_value("excluded_count") || 0);
 			const stopped = Number(dialog.get_value("stopped"));
-			const planned = !Number.isInteger(excluded) || excluded < 0 || excluded >= base
+			const planned = !Number.isInteger(excluded) || excluded < 0 || (excluded >= base && (!stopped || excluded))
 				? "请核对停餐调整人数" : stopped ? "整餐停供" : `计划供餐 ${base - excluded} 人`;
 			$("<strong>", { role: "status" }).text(planned).appendTo($summary);
 			updatePortionTotals?.();
@@ -501,8 +684,14 @@
 			for (const dish of result.rows) {
 				const $row = $("<tr>").appendTo($body);
 				const $label = $("<th>", { scope: "row", class: "tgy-picker-name" }).appendTo($row);
-				$("<span>").text(dish.name).appendTo($label);
-				$("<small>").text(dish.item).appendTo($label);
+				const $identity = $("<div>", { class: "tgy-picker-identity" }).appendTo($label);
+				if (typeof dish.image === "string" && /^\/(?:files|private\/files)\/[^/]/.test(dish.image)) {
+					$("<img>", { src: dish.image, alt: "", loading: "lazy", class: "tgy-picker-thumb" })
+						.on("error", function () { $(this).remove(); }).appendTo($identity);
+				}
+				const $names = $("<div>").appendTo($identity);
+				$("<span>").text(dish.name).appendTo($names);
+				$("<small>").text(dish.item).appendTo($names);
 				const $slots = $("<div>", { class: "tgy-picker-slots" }).appendTo($("<td>").appendTo($row));
 				for (const slot of dish.meal_slots || []) {
 					$(slot === args.meal_type ? "<strong>" : "<span>").text(slot).appendTo($slots);

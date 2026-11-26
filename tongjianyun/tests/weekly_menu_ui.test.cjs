@@ -30,6 +30,7 @@ function element(tag, attrs = {}) {
 		one(type, action) { return this.on(type, action); },
 		trigger(type) { this.events[type]?.(); return this; },
 		scrollTop(value) { if (value === undefined) return this.scroll || 0; this.scroll = value; return this; },
+		scrollLeft(value) { return this.scrollTop(value); },
 		closest() { return this.host; },
 		appendTo(host) { this.host = host; host.children.push(this); return this; },
 		remove() {
@@ -48,7 +49,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	const page = element("<div>");
 	const section = element("<div>").appendTo(page);
 	const grid = element("<div>").appendTo(section);
-	const calendar = element("<div>").appendTo(page);
+	const calendar = element("<div>").appendTo(element("<section>").appendTo(page));
 	const days = ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27"];
 	const slots = ["早餐", "早点", "午餐", "午点", "晚餐"];
 	const dishes = [
@@ -63,6 +64,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	const tabsOpened = [];
 	const alerts = [];
 	let confirmLeave;
+	let primaryFormAction, submitted = 0, ready = false;
 	class Dialog {
 		constructor(options) {
 			this.options = options;
@@ -73,13 +75,13 @@ test("native week shows the calendar and supports editing meals in order", async
 			this.values = Object.fromEntries(options.fields.map((field) => [field.fieldname, field.default]));
 			this.fields_dict = Object.fromEntries(options.fields.map((field) => [field.fieldname,
 				{ $wrapper: element("<div>"), $input: element("<input>") }]));
-			options.fields.find((field) => field.fieldname === "category").onchange();
+			options.fields.find((field) => field.fieldname === "category")?.onchange();
 			dialog = this;
 		}
 		show() {}
 		hide() {
 			this.hidden = true;
-			this.options.onhide();
+			this.options.onhide?.();
 			return this.$wrapper.events["hidden.bs.modal"]();
 		}
 		get_value(name) { return this.values[name]; }
@@ -99,7 +101,10 @@ test("native week shows the calendar and supports editing meals in order", async
 			const operation = method.split(".").at(-1);
 			calls.push([operation, type, args]);
 			if (operation === "calendar") return { message: { days, slots, categories: ["素菜"], initialized, meals: initialized ?
-				[{ date: days[1], slot: "早餐", menu: "", stopped: true, reason: "园所活动", headcount: 0 }] : [] } };
+					days.flatMap((date) => slots.flatMap((slot) => {
+						if (date === days[1] && slot === "早餐") return [{ date, slot, stopped: true, reason: "园所活动" }];
+						return ready ? [{ date, slot, menu: "米饭、青菜", headcount: 40 }] : [];
+					})) : [] } };
 			if (operation === "initialize") { initialized = true; return { message: { skipped_recipes: 0 } }; }
 			if (operation === "get_meal") return { message: { modified: `revision-${revision}`, base_headcount: 40, dishes: [
 				{ item: "A", bom: "BOM-A-1", name: "原菜", category: "素菜" },
@@ -123,7 +128,10 @@ test("native week shows the calendar and supports editing meals in order", async
 		},
 	};
 	const form = {
-		doc: { name: "MEAL-WEEK-QA", docstatus: 0 }, perm: [{ write: 1 }],
+		doc: { name: "MEAL-WEEK-QA", docstatus: 0 }, perm: [{ write: 1, submit: 1 }],
+		toolbar: { get_action_status: () => "Submit" },
+		page: { set_primary_action(label, action) { assert.equal(label, "Submit"); primaryFormAction = action; } },
+		savesubmit() { submitted += 1; },
 		layout: { wrapper: page, tabs: [{ df: { fieldname: "custom_tjy_week_calendar_tab" }, is_hidden: () => creating }],
 			select_tab(name) { tabsOpened.push(name); } },
 		fields_dict: { meals: { $wrapper: grid }, custom_tjy_week_calendar: { $wrapper: calendar } },
@@ -131,7 +139,7 @@ test("native week shows the calendar and supports editing meals in order", async
 		set_intro(text) { intro = text; },
 		remove_custom_button() {}, reload_doc: async () => hooks.refresh(form),
 	};
-	const context = { frappe, $: element, window: { location: { hash: "" } } };
+	const context = { frappe, $: element, __: (label) => label, window: { location: { hash: "" } } };
 	for (const file of ["meal_portions.js", "weekly_menu_editor.js"]) {
 		runInNewContext(readFileSync(resolve(__dirname, "../public/js", file), "utf8"), context);
 	}
@@ -153,15 +161,15 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
 	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
 	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
-	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-ingredient-quantities.css"]);
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-week-drawers.css"]);
 	assert.equal(page.all("<progress>")[0].attrs.value, 1);
 	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();
 	await new Promise(setImmediate);
-	assert.equal(dialog.$wrapper.attrs.class, "tgy-week-picker");
+	assert.equal(dialog.$wrapper.attrs.class, "tgy-week-drawer tgy-week-picker");
 	assert.equal(dialog.options.no_submit_on_enter, true);
-	assert.equal(dialog.options.primary_action_label, "保存并编排下一餐");
-	assert.equal(dialog.options.secondary_action_label, "保存本餐");
+	assert.equal(dialog.options.primary_action_label, "保存本餐");
+	assert.equal(dialog.options.secondary_action_label, "保存并编排下一餐");
 	const field = (name) => dialog.options.fields.find((item) => item.fieldname === name);
 	assert.equal(field("catalog_slot").default, "午餐");
 	assert.equal(field("catalog_slot").options.at(-1).label, "全部餐次");
@@ -244,7 +252,8 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(lunch.hidden, undefined);
 	assert.equal(lunch.primary.attrs.disabled, false);
 	rejectSave = false;
-	await lunch.options.primary_action({ excluded_count: 3, adjustment_reason: "请假" });
+	lunch.values.adjustment_reason = "请假";
+	await lunch.options.secondary_action();
 	await new Promise(setImmediate);
 	assert.equal(saved.meal_date, days[1]);
 	assert.equal(saved.meal_type, "午餐");
@@ -260,7 +269,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	snack.header.all("<button>")[0].events.click();
 	assert.equal(snack.hidden, undefined);
 	assert.equal(typeof confirmLeave, "function");
-	await snack.options.secondary_action();
+	await snack.options.primary_action(snack.values);
 	assert.equal(saved.meal_type, "午点");
 	assert.equal(saved.modified, "revision-1");
 	assert.equal(snack.hidden, true);
@@ -269,7 +278,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	const cell = (date, meal) => page.all("<button>")
 		.find((node) => node.attrs["aria-label"]?.startsWith(`${date} ${meal} `));
 	await cell(days[1], "晚餐").events.click();
-	await dialog.options.primary_action({});
+	await dialog.options.secondary_action();
 	await new Promise(setImmediate);
 	assert.match(dialog.options.title, /周三 · 早餐/);
 	assert.equal(saved.meal_type, "晚餐");
@@ -281,4 +290,24 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.equal(dialog.hidden, true);
 	assert.equal(saved.meal_date, days[4]);
 	assert.equal(alerts.length, 4);
+
+	primaryFormAction();
+	await new Promise(setImmediate);
+	assert.equal(dialog.options.title, "提交前核对");
+	assert.equal(dialog.primary.attrs.disabled, true);
+	const review = dialog.fields_dict.review.$wrapper;
+	assert.deepEqual(review.all("<h4>").map((node) => node.content), ["待编排 · 24 餐", "已停餐 · 1 餐", "采购与审核"]);
+	assert.ok(review.all("<small>").some((node) => node.content === "园所活动"));
+	assert.equal(review.all("<progress>")[0].attrs.value, 1);
+	await review.all("<button>").find((node) => node.attrs["aria-label"] === "周三 · 午餐 去编排").events.click();
+	assert.match(dialog.options.title, /周三 · 午餐/);
+	await dialog.hide();
+	ready = true;
+	form.doc.stock_reviewed = 1;
+	form.doc.requirement_weight_basis = "采购毛重";
+	primaryFormAction();
+	await new Promise(setImmediate);
+	assert.equal(dialog.primary.attrs.disabled, false);
+	await dialog.options.primary_action();
+	assert.equal(submitted, 1);
 });

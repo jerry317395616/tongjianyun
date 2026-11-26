@@ -1,5 +1,5 @@
 (() => {
-	const stylesheet = "/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-ingredient-quantities.css";
+	const stylesheet = "/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-week-drawers.css";
 	const decimal = new Intl.NumberFormat("zh-CN", { useGrouping: false, maximumFractionDigits: 9 });
 	const amount = (value) => value == null || value === "" || !Number.isFinite(Number(value))
 		? "—" : decimal.format(Number(value));

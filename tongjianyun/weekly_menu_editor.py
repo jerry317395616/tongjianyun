@@ -237,7 +237,7 @@ def dishes(week_name: str, meal_type: str, search: str = "", category: str = "",
     if category in CATEGORIES:
         filters[DISH_CATEGORY] = category
     query = Engine().get_query(
-        item, fields=["name", "item_name", DISH_CATEGORY, *planning.SLOT_FIELDS.values()], filters=filters,
+        item, fields=["name", "item_name", "image", DISH_CATEGORY, *planning.SLOT_FIELDS.values()], filters=filters,
         ignore_permissions=False, order_by="item_name asc, name asc",
     )
     if category == UNCLASSIFIED:
@@ -268,7 +268,7 @@ def dishes(week_name: str, meal_type: str, search: str = "", category: str = "",
         active = next((bom for bom in recipes if bom.docstatus == 1 and bom.is_active and bom.quantity == 1), None)
         status = "可选" if active else _unavailable_status(recipes)
         result.append(dict(
-            item=row.name, name=row.item_name, category=row.get(DISH_CATEGORY),
+            item=row.name, name=row.item_name, image=row.get("image"), category=row.get(DISH_CATEGORY),
             meal_slots=[slot for slot, field in planning.SLOT_FIELDS.items() if cint(row.get(field)) == 1],
             bom=active.name if active else None, status=status,
         ))
