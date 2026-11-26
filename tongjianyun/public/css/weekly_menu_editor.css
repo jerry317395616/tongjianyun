@@ -413,6 +413,7 @@ body:has(.tgy-week-picker.show) .modal-backdrop.show { opacity: .44; }
 	color: var(--tgy-text);
 	font-size: clamp(23px, 2.25vw, 36px) !important;
 	font-weight: 750 !important;
+	line-height: 1.22 !important;
 	white-space: nowrap;
 }
 
@@ -604,7 +605,7 @@ body:has(.tgy-week-picker.show) .modal-backdrop.show { opacity: .44; }
 	width: auto;
 	min-width: 0;
 	max-width: none;
-	padding: 20px 23px 24px;
+	padding: 22px 23px 24px;
 }
 
 .tgy-week-picker .form-column[data-fieldname="catalog_column"] {
@@ -614,7 +615,7 @@ body:has(.tgy-week-picker.show) .modal-backdrop.show { opacity: .44; }
 .tgy-week-picker .form-column[data-fieldname="catalog_column"] > form {
 	display: grid;
 	grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-	gap: 12px 9px;
+	gap: 15px 9px;
 	align-items: start;
 }
 
@@ -705,8 +706,10 @@ body:has(.tgy-week-picker.show) .modal-backdrop.show { opacity: .44; }
 
 .tgy-picker-heading {
 	justify-content: space-between;
-	margin-bottom: 15px;
+	margin-bottom: 25px;
 }
+
+.tgy-week-picker .tgy-picker-heading .btn { min-height: 42px; }
 
 .tgy-picker-title {
 	margin: 0;
@@ -822,7 +825,7 @@ body:has(.tgy-week-picker.show) .modal-backdrop.show { opacity: .44; }
 
 .tgy-picker-row {
 	display: flex;
-	min-height: 64px;
+	min-height: 71px;
 	align-items: center;
 	gap: 6px;
 	padding: 5px 11px;
@@ -1017,6 +1020,7 @@ body:has(.tgy-week-picker.show) .modal-backdrop.show { opacity: .44; }
 
 	.tgy-picker-day .tgy-week-slot { gap: 3px; }
 	.tgy-picker-day .tgy-slot-icon { width: 15px; height: 15px; }
+	.tgy-picker-heading { margin-bottom: 15px; }
 
 	.tgy-week-picker .form-section[data-fieldname="composer"] > .section-body {
 		grid-template-columns: minmax(0, 1fr);
