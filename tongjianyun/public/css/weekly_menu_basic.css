@@ -81,7 +81,7 @@
 .tgy-basic-action:hover { text-decoration: underline; text-underline-offset: 3px; }
 .tgy-basic :is(button, summary):focus-visible { outline: 2px solid var(--week-green); outline-offset: -2px; }
 
-.tgy-basic .form-section > .section-body {
+.std-form-layout .tgy-basic .form-section > .section-body {
 	width: 100%;
 	max-width: none;
 	margin: 0;

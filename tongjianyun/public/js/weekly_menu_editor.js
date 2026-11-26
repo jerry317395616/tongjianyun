@@ -49,7 +49,7 @@
 		if (!frm.layout.tabs.some((tab) => tab.df.fieldname === basicTab && tab.wrapper?.length)) return;
 		const name = frm.doc.name;
 		basicAssets ??= Promise.resolve(frappe.require([
-			"/assets/tongjianyun/css/weekly_menu_basic.css?v=20261126.1.css",
+			"/assets/tongjianyun/css/weekly_menu_basic.css?v=20261126.2.css",
 			"/assets/tongjianyun/js/weekly_menu_basic.js?v=20261126.1.js",
 		])).catch(() => { basicAssets = undefined; });
 		basicAssets.then(() => {
