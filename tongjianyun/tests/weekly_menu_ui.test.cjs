@@ -8,6 +8,7 @@ function element(tag, attrs = {}) {
 	return {
 		tag, attrs, length: 1, children: [], events: {}, content: "",
 		text(text) { this.content = text; return this; },
+		html(markup) { this.content = markup; return this; },
 		empty() { for (const child of this.children) child.host = null; this.children = []; this.content = ""; return this; },
 		css() { return this; }, hide() { this.hidden = true; return this; }, show() { this.hidden = false; return this; },
 		addClass(name) { this.attrs.class = `${this.attrs.class || ""} ${name}`.trim(); return this; },
@@ -106,9 +107,9 @@ test("native week shows the calendar and supports editing meals in order", async
 						return ready ? [{ date, slot, menu: "米饭、青菜", headcount: 40 }] : [];
 					})) : [] } };
 			if (operation === "initialize") { initialized = true; return { message: { skipped_recipes: 0 } }; }
-			if (operation === "get_meal") return { message: { modified: `revision-${revision}`, base_headcount: 40, dishes: [
+			if (operation === "get_meal") return { message: { modified: `revision-${revision}`, base_headcount: initialized ? 40 : null, dishes: initialized ? [
 				{ item: "A", bom: "BOM-A-1", name: "原菜", category: "素菜" },
-			] } };
+			] : [] } };
 			if (operation === "dishes") return { message: { page_size: 15, has_more: false, rows: dishes.filter((dish) =>
 				(args.all_slots || !dish.meal_slots.length || dish.meal_slots.includes(args.meal_type))
 				&& (!args.category || args.category === (dish.category || "未分类"))
@@ -145,7 +146,7 @@ test("native week shows the calendar and supports editing meals in order", async
 	}
 	await hooks.refresh(form);
 	assert.equal(page.attrs.class, "tgy-week-create");
-	assert.equal(intro, "保存后，在「供餐周历」选择空白编排或复制上周。");
+	assert.equal(intro, "保存后，点击「供餐周历」中的餐次开始编排。");
 	assert.equal(calls.length, 0);
 	hooks.before_save(form);
 	creating = false;
@@ -156,12 +157,23 @@ test("native week shows the calendar and supports editing meals in order", async
 	assert.deepEqual(tabsOpened, ["custom_tjy_week_calendar_tab"]);
 	assert.equal(calendar.all("<td>").length, 25);
 	assert.equal(section.hidden, true);
+	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-haspopup"] === "dialog").length, 25);
+	assert.ok(!page.all("<button>").some((node) => node.content === "空白编排"));
+	const icons = (wrapper) => wrapper.all("<span>").filter((node) => node.attrs["aria-hidden"] === "true");
+	assert.deepEqual(icons(calendar).map((node) => node.attrs.class.split(" ").at(-1)),
+		["tgy-slot-sunrise", "tgy-slot-apple", "tgy-slot-sun", "tgy-slot-cup", "tgy-slot-moon"]);
+	await calendar.all("<button>").find((node) => node.attrs["aria-label"] === `${days[0]} 早餐 未编排`).events.click();
+	assert.equal(dialog.options.title, "2026年11月23日 · 周一 · 早餐");
+	assert.equal(icons(dialog.fields_dict.day_meals.$wrapper).length, 5);
+	assert.equal(dialog.fields_dict.counts_summary.$wrapper.all("<strong>")[0].content, "首次保存时按教育名册核算人数");
+	assert.equal(calls.filter(([, type]) => type === "POST").length, 0);
+	await dialog.hide();
 	await page.all("<button>").find((node) => node.content === "复制上周").events.click();
 	assert.equal(calls.find(([operation]) => operation === "initialize")[2].copy_previous, 1);
 	assert.equal(page.all("<button>").filter((node) => node.attrs["aria-label"]).length, 25);
 	assert.ok(page.all("<span>").some((node) => node.content === "园所活动"));
 	assert.ok(page.all("<th>").some((node) => node.attrs["aria-current"] === "date"));
-	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-week-drawers.css"]);
+	assert.deepEqual(assets, ["/assets/tongjianyun/css/weekly_menu_editor.css?v=meal-week-direct-edit.css"]);
 	assert.equal(page.all("<progress>")[0].attrs.value, 1);
 	assert.equal(page.all("<progress>")[0].attrs.max, 25);
 	await page.all("<button>").find((node) => node.attrs["aria-label"] === `${days[1]} 午餐 未编排`).events.click();

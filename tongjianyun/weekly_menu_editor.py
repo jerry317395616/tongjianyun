@@ -13,6 +13,7 @@ from frappe.model.delete_doc import (
 from frappe.query_builder.functions import Coalesce
 from frappe.utils import cint, getdate, now_datetime
 from tongjianyun import meal_planning as planning
+from tongjianyun.canteen_ops.service_calendar import scheduled_dates
 from tongjianyun.meal_adjustments import get_effective_meals
 
 from tongjianyun.dish_library import _preview_ingredients, _require, _visible
@@ -21,6 +22,7 @@ from tongjianyun.standard_recipes import CATEGORIES, DISH, DISH_CATEGORY, MARKER
 
 PAGE_SIZE = 15
 UNCLASSIFIED = "未分类"
+CALENDAR_STOP_REASON = "学期供餐日历停供"
 
 
 class MealMenuDraftPlan:
@@ -47,6 +49,13 @@ def _meal(week, meal_date, meal_type):
     if not row:
         frappe.throw("未找到对应餐次，请刷新周计划。")
     return row
+
+
+def _check_meal_slot(week, meal_date, meal_type):
+    day = getdate(meal_date)
+    if not meal_date or day not in planning._dates(week) or meal_type not in planning.SLOTS:
+        frappe.throw("请选择本周的有效餐次。")
+    return day
 
 
 def _usable_recipe(bom, company):
@@ -118,14 +127,22 @@ def delete_draft_meal_plans(week, method=None):
 @frappe.whitelist(methods=["GET"])
 def calendar(week_name: str):
     week = _visible("Meal Planning Week", week_name)
+    days = planning._dates(week)
     rows = get_effective_meals(week) if week.docstatus == 1 else week.meals
+    meals = [dict(
+        date=str(row.meal_date), slot=row.meal_type, menu=row.menu, headcount=row.planned_headcount,
+        stopped=bool(row.get("service_suspended")), reason=row.get("suspension_reason"),
+    ) for row in rows]
+    if week.docstatus == 0 and not week.meals:
+        serving = scheduled_dates(week)
+        meals = [
+            dict(date=str(day), slot=slot, menu="", headcount=0, stopped=True, reason=CALENDAR_STOP_REASON)
+            for day in days if day not in serving for slot in planning.SLOTS
+        ]
     return {
-        "days": [str(day) for day in planning._dates(week)], "slots": list(planning.SLOTS), "categories": list(CATEGORIES),
+        "days": [str(day) for day in days], "slots": list(planning.SLOTS), "categories": list(CATEGORIES),
         "initialized": bool(week.meals), "modified": str(week.modified),
-        "meals": [dict(
-            date=str(row.meal_date), slot=row.meal_type, menu=row.menu, headcount=row.planned_headcount,
-            stopped=bool(row.get("service_suspended")), reason=row.get("suspension_reason"),
-        ) for row in rows],
+        "meals": meals,
     }
 
 
@@ -168,43 +185,54 @@ def initialize(week_name: str, copy_previous: int = 0):
         week = _editable_week(week_name, lock=True)
         if week.meals:
             return {"name": week.name, "skipped_recipes": 0}
-        population = planning._population(week)
-        days = planning._dates(week)
-        from tongjianyun.canteen_ops.service_calendar import scheduled_dates
-        serving = scheduled_dates(week)
-        if any(not cint(population[str(day)]["total"]) for day in serving):
-            frappe.throw("有供餐日的有效在园人数为 0，请先核对学期和教育名册。")
-        sources = _copy_sources(week) if copy_previous else {}
-        snapshot = {"dates": population, "recipe_hashes": {}}
-        skipped = 0
-        with planning._managed():
-            for index, day in enumerate(days):
-                count = cint(population[str(day)]["total"])
-                for slot in planning.SLOTS:
-                    previous = sources.get((timedelta(days=index), slot)) if day in serving else None
-                    source, omitted = _copy_menu(previous, week.company)
-                    plan = frappe.get_doc(planning._plan_values(week, source, day, slot, count))
-                    suffix = planning._digest([week.name, str(day), slot])[:8].upper()
-                    plan.insert(ignore_permissions=True, set_name=f"MEAL-{day:%Y%m%d}-{planning.SLOTS.index(slot) + 1:02}-{suffix}")
-                    snapshot["recipe_hashes"][plan.name] = planning._recipe_signature(plan)
-                    week.append("meals", dict(
-                        meal_date=day, meal_type=slot, source_plan=source.name, production_plan=plan.name,
-                        base_student_count=count, planned_headcount=count if day in serving else 0, menu=plan.custom_meal_menu,
-                        service_suspended=int(day not in serving), suspension_reason="学期供餐日历停供" if day not in serving else None,
-                    ))
-                    skipped += omitted
-            week.population_snapshot = frappe.as_json(snapshot)
-            week.population_as_of = now_datetime()
-            week.population_basis = "教育有效在册名册；计划供餐人数，非当天实到"
-            week.stock_reviewed = 0
-            week.save()
-        planning.share_linked_plans(week)
+        skipped = _initialize_week(week, scheduled_dates(week), copy_previous)
         return {"name": week.name, "skipped_recipes": skipped}
+
+
+def _initialize_week(week, serving, copy_previous=False):
+    """Create the linked drafts in the caller's locked transaction."""
+    population = planning._population(week)
+    if any(not cint(population[str(day)]["total"]) for day in serving):
+        frappe.throw("有供餐日的有效在园人数为 0，请先核对学期和教育名册。")
+    sources = _copy_sources(week) if copy_previous else {}
+    snapshot = {"dates": population, "recipe_hashes": {}}
+    skipped = 0
+    with planning._managed():
+        for index, day in enumerate(planning._dates(week)):
+            count = cint(population[str(day)]["total"])
+            stopped = day not in serving
+            for slot_index, slot in enumerate(planning.SLOTS, 1):
+                previous = None if stopped else sources.get((timedelta(days=index), slot))
+                source, omitted = _copy_menu(previous, week.company)
+                plan = frappe.get_doc(planning._plan_values(week, source, day, slot, count))
+                suffix = planning._digest([week.name, str(day), slot])[:8].upper()
+                plan.insert(ignore_permissions=True, set_name=f"MEAL-{day:%Y%m%d}-{slot_index:02}-{suffix}")
+                snapshot["recipe_hashes"][plan.name] = planning._recipe_signature(plan)
+                week.append("meals", dict(
+                    meal_date=day, meal_type=slot, source_plan=source.name, production_plan=plan.name,
+                    base_student_count=count, planned_headcount=0 if stopped else count, menu=plan.custom_meal_menu,
+                    service_suspended=int(stopped), suspension_reason=CALENDAR_STOP_REASON if stopped else None,
+                ))
+                skipped += omitted
+        week.population_snapshot = frappe.as_json(snapshot)
+        week.population_as_of = now_datetime()
+        week.population_basis = "教育有效在册名册；计划供餐人数，非当天实到"
+        week.stock_reviewed = 0
+        week.save()
+    planning.share_linked_plans(week)
+    return skipped
 
 
 @frappe.whitelist(methods=["GET"])
 def get_meal(week_name: str, meal_date: str, meal_type: str):
     week = _editable_week(week_name)
+    if not week.meals:
+        day = _check_meal_slot(week, meal_date, meal_type)
+        stopped = day not in scheduled_dates(week)
+        return {
+            "modified": str(week.modified), "base_headcount": 0 if stopped else None,
+            "stopped": stopped, "reason": CALENDAR_STOP_REASON if stopped else None, "dishes": [],
+        }
     row = _meal(week, meal_date, meal_type)
     plan = planning._bound_plan(week, row)
     plan.check_permission("read")
@@ -311,16 +339,20 @@ def save_meal(week_name: str, meal_date: str, meal_type: str, modified: str, bom
         week = _editable_week(week_name, lock=True)
         if str(week.modified) != modified:
             frappe.throw("本周计划已由其他操作更新，请刷新后继续。")
+        day = _check_meal_slot(week, meal_date, meal_type)
+        serving = scheduled_dates(week)
+        if day not in serving and not stopped:
+            frappe.throw("该日已按学期供餐日历停供。")
+        if not week.meals:
+            _initialize_week(week, serving)
         row = _meal(week, meal_date, meal_type)
         plan = planning._bound_plan(week, row)
         plan.check_permission("read")
         if plan.docstatus:
             frappe.throw("只能调整尚未提交的餐次。")
-        from tongjianyun.canteen_ops.service_calendar import scheduled_dates
-        if getdate(meal_date) not in scheduled_dates(week) and not stopped:
-            frappe.throw("该日已按学期供餐日历停供。")
         count = cint(row.base_student_count) - excluded_count
-        if excluded_count < 0 or (count <= 0 and not stopped) or (excluded_count and not adjustment_reason.strip()):
+        if (excluded_count < 0 or (count <= 0 and (not stopped or excluded_count))
+                or (excluded_count and not adjustment_reason.strip())):
             frappe.throw("停餐调整人数须小于在园人数，并填写调整原因。")
         if stopped and not reason.strip():
             frappe.throw("请填写整餐停供原因。")
@@ -329,7 +361,7 @@ def save_meal(week_name: str, meal_date: str, meal_type: str, modified: str, bom
             if dish.bom_no in changes:
                 dish.bom_no = resolve(week, meal_date, meal_type, dish.bom_no, changes[dish.bom_no])
         values = planning._plan_values(week, frappe._dict(name=plan.custom_meal_source, po_items=rows),
-                                       getdate(meal_date), meal_type, count)
+                                         day, meal_type, count)
         with planning._managed():
             plan.set("po_items", values["po_items"])
             plan.set("mr_items", [])
