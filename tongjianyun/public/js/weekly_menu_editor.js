@@ -25,6 +25,7 @@
 	};
 	const editable = (frm) => frm.doc.docstatus === 0 && !!frm.perm?.[0]?.write;
 	let styles;
+	let basicAssets;
 	let openedWeek;
 	let activeDrawer;
 	let requestedTab = window.location.hash.slice(1);
@@ -42,6 +43,18 @@
 		// The Frappe asset loader looks for the file extension after the version query.
 		styles ??= Promise.resolve(frappe.require(window.tjyMealPortions.stylesheet))
 			.catch(() => { styles = undefined; });
+	}
+
+	function renderBasic(frm) {
+		if (!frm.layout.tabs.some((tab) => tab.df.fieldname === basicTab && tab.wrapper?.length)) return;
+		const name = frm.doc.name;
+		basicAssets ??= Promise.resolve(frappe.require([
+			"/assets/tongjianyun/css/weekly_menu_basic.css?v=20261126.1.css",
+			"/assets/tongjianyun/js/weekly_menu_basic.js?v=20261126.1.js",
+		])).catch(() => { basicAssets = undefined; });
+		basicAssets.then(() => {
+			if (frm.doc.name === name) window.tjyWeeklyMenuBasic?.render(frm);
+		});
 	}
 	function dateLabel(value, year = false) {
 		const [y, m, d] = value.split("-").map(Number);
@@ -364,7 +377,9 @@
 		openedWeek = name;
 		loadStyles();
 		frm.layout.wrapper.toggleClass("tgy-week-create", creating);
-		frm.fields_dict.company?.$wrapper?.closest(".form-section").toggleClass("tgy-week-settings", !creating);
+		const settings = frm.fields_dict.company?.$wrapper?.closest(".form-section");
+		settings?.toggleClass("tgy-week-settings", !creating && !settings.hasClass?.("tgy-basic-planning"));
+		renderBasic(frm);
 		const $calendar = frm.fields_dict.custom_tjy_week_calendar?.$wrapper;
 		const tab = frm.layout.tabs.find((entry) => entry.df.fieldname === calendarTab);
 		const tabbed = Boolean($calendar?.length && tab);
@@ -411,6 +426,7 @@
 			$grid.show();
 		}
 		openTaskDestination(frm);
+		renderBasic(frm);
 	}
 
 	function isCurrentWeek(frm, name) {
@@ -835,6 +851,9 @@
 			frm.set_query("custom_tjy_canteen", () => ({ filters: { company: frm.doc.company, disabled: 0 } }));
 		},
 		refresh,
+		company: renderBasic,
+		week_start: renderBasic,
+		week_end: renderBasic,
 		before_save(frm) {
 			frm.__tgy_week_first_save = Boolean(frm.is_new());
 		},

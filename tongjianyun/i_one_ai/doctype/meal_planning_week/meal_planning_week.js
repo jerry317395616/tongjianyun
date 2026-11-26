@@ -71,7 +71,8 @@
 		}
 		const canReview = canReviewStock() && frm.doc.docstatus === 0 && frm.doc.meals?.length;
 		window.tjyProcurementPreview.render(wrapper, preview, canReview ? (button) => reviewStock(frm, button) : null);
-		wrapper.find(".tjy-proc-shell")[0]?.scrollIntoView({ block: "start" });
+		const card = wrapper.closest(".tgy-basic-procurement")[0] || wrapper.find(".tjy-proc-shell")[0];
+		card?.scrollIntoView({ block: "start" });
 	}
 
 	function reviewStock(frm, button) {
@@ -97,7 +98,10 @@
 
 	function resetPreview(frm, message) {
 		frm.fields_dict.procurement_html?.$wrapper.html(
-			`<p class="text-muted">${escape(message || "点击“采购需求预览”核对食材、库存、到货和采购分类。")}</p>`
+			message ? `<p class="text-muted">${escape(message)}</p>` : `
+				<p class="text-muted tgy-basic-preview-prompt">点击「采购需求预览」核对食材、库存、到货和采购分类。</p>
+				<p class="text-muted tgy-basic-preview-wait" hidden>完成本周餐次编排后可预览采购需求。</p>
+				<p class="text-muted tgy-basic-preview-cancelled" hidden>本周食谱已取消。</p>`
 		);
 	}
 
@@ -276,6 +280,7 @@
 			}
 			resetPreview(frm);
 			frm.set_intro(__("供餐人数来自教育管理的在园学生名册，属于计划人数。请核对各餐停餐调整，再预览采购需求并核对账面库存。"), "blue");
+			frm.$intro_message?.addClass("tgy-basic-intro");
 			if (frm.is_new()) return;
 			if (editable(frm) && !(frm.doc.meals || []).length) {
 				actionButton(frm, "从上一周编排", "tongjianyun.meal_planning.initialize_week",
