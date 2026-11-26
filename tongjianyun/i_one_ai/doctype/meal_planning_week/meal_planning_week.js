@@ -7,6 +7,7 @@
 	const canUseKitchen = () => hasRole("System Manager", "Stock Manager", "Stock User", "膳食业务经办员");
 	const editable = (frm) => frm.doc.docstatus === 0 && !!frm.perm?.[0]?.write;
 	const reportName = "Tongjianyun Weekly Menu";
+	const previewMethod = "tongjianyun.meal_procurement.get_procurement_preview";
 	let previewAssets;
 
 	function ensureSaved(frm) {
@@ -53,30 +54,45 @@
 
 	async function openProcurementPreview(frm, preview) {
 		if (!preview || preview.week_name !== frm.doc.name) return;
+		const wrapper = frm.fields_dict.procurement_html?.$wrapper;
+		if (!wrapper?.length) return;
 		const assets = "/assets/tongjianyun";
 		previewAssets ??= Promise.resolve(frappe.require([
-			`${assets}/css/meal_procurement_preview.css?v=procurement-preview-1.css`,
-			`${assets}/js/meal_procurement_preview.js?v=procurement-preview-1.js`,
+			`${assets}/css/meal_procurement_preview.css?v=procurement-inline-2.css`,
+			`${assets}/js/meal_procurement_preview.js?v=procurement-inline-2.js`,
 		])).catch((error) => {
 			previewAssets = undefined;
 			throw error;
 		});
 		await previewAssets;
-		if (cur_frm !== frm || frm.doc.name !== preview.week_name || frm.is_dirty()) return;
-		const canReview = canReviewStock() && frm.doc.docstatus === 0 && Boolean(frm.doc.meals?.length);
-		window.tjyProcurementPreview.open(frm, preview, canReview ? (button, afterReview) => {
-			frappe.confirm(
-				__("请确认已核对采购预览中的账面库存、待到货及采购分类。此操作只记录账面核对，不表示完成实物盘点。"),
-				() => runAction(frm, button, "tongjianyun.meal_planning.confirm_stock_review",
-					{ name: preview.week_name }, async () => {
-						afterReview();
-						await frm.reload_doc();
-					}),
-				null,
-				__("确认核对"),
-				__("返回检查")
-			);
-		} : null);
+		if (window.cur_frm !== frm || frm.doc.name !== preview.week_name || frm.is_dirty()) return;
+		if (frm.layout.tabs?.some(({ df }) => df.fieldname === "custom_tjy_week_basic_tab")) {
+			frm.layout.select_tab("custom_tjy_week_basic_tab");
+		}
+		const canReview = canReviewStock() && frm.doc.docstatus === 0 && frm.doc.meals?.length;
+		window.tjyProcurementPreview.render(wrapper, preview, canReview ? (button) => reviewStock(frm, button) : null);
+		wrapper.find(".tjy-proc-shell")[0]?.scrollIntoView({ block: "start" });
+	}
+
+	function reviewStock(frm, button) {
+		if (frm.__meal_action_running) return;
+		const name = frm.doc.name;
+		const previewVisible = frm.fields_dict.procurement_html?.$wrapper.find(".tjy-proc-shell").is(":visible");
+		frappe.confirm(
+			__("请确认已核对采购预览中的账面库存、待到货及采购分类。此操作只记录账面核对，不表示完成实物盘点。"),
+			() => {
+				if (window.cur_frm !== frm || frm.doc.name !== name) return;
+				return runAction(frm, button, "tongjianyun.meal_planning.confirm_stock_review", { name }, async () => {
+					await frm.reload_doc();
+					if (!previewVisible || window.cur_frm !== frm || frm.doc.name !== name) return;
+					const response = await frappe.call({ method: previewMethod, args: { week_name: name } });
+					if (!response.exc) await openProcurementPreview(frm, response.message);
+				});
+			},
+			null,
+			__("确认核对"),
+			__("返回检查")
+		);
 	}
 
 	function resetPreview(frm, message) {
@@ -283,8 +299,11 @@
 						"tongjianyun.meal_weights.confirm_requirement_weight_basis", { week_name: frm.doc.name, basis: "采购毛重" }, async () => { await frm.reload_doc(); }));
 				}, __("采购操作"));
 			}
-			actionButton(frm, "采购需求预览", "tongjianyun.meal_procurement.get_procurement_preview",
+			actionButton(frm, "采购需求预览", previewMethod,
 				() => ({ week_name: frm.doc.name }), (preview) => openProcurementPreview(frm, preview));
+			if (canReviewStock() && frm.doc.docstatus === 0 && frm.doc.meals?.length) {
+				const button = frm.add_custom_button(__("核对账面库存"), () => reviewStock(frm, button));
+			}
 			if (frm.doc.docstatus === 1) {
 				if (canUseKitchen()) {
 					const dayButton = frm.add_custom_button(__("打开每日执行"), () => openKitchenDay(frm, dayButton), __("厨房执行"));

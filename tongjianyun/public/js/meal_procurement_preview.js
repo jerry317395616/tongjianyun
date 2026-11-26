@@ -1,10 +1,7 @@
 (() => {
 	const escape = (value) => frappe.utils.escape_html(String(value ?? ""));
 	const icons = {
-		home: '<path d="m3 10 9-7 9 7v10H3Zm6 10v-7h6v7"/>',
 		buying: '<path d="M3 9h18l-2.5 9.5a2 2 0 0 1-2 1.5h-9a2 2 0 0 1-2-1.5ZM7 9l3-5a2.3 2.3 0 0 1 4 0l3 5"/>',
-		calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
-		list: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1m-6 8 2 2 4-4"/>',
 		stock: '<path d="m3 7 9-4 9 4v10l-9 4-9-4Zm0 0 9 4 9-4m-9 4v10"/>',
 		info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>',
 	};
@@ -26,14 +23,6 @@
 		[/^(鸡蛋|鲜鸡蛋)(?:$|[（( ])/u, "egg"],
 		[/^(鲜南瓜|南瓜|贝贝南瓜)(?:$|[（( ])/u, "pumpkin"],
 	];
-	let activeDialog;
-	frappe.router?.on?.("change", () => {
-		const [view, type, name] = frappe.get_route();
-		if (activeDialog && (view !== "Form" || type !== "Meal Planning Week" || name !== activeDialog.week)) {
-			activeDialog.dialog.hide();
-		}
-	});
-
 	const isNumber = (value) => value != null && value !== "" && Number.isFinite(Number(value));
 	const quantity = (value, unit) => isNumber(value)
 		? `${number.format(Number(value))}${unit ? ` ${unit}` : ""}` : "—";
@@ -94,24 +83,6 @@
 		</details>`;
 	}
 
-	function sidebar() {
-		return `<nav class="tjy-proc-nav" aria-label="膳食与食堂导航">
-			<div class="tjy-proc-rail">
-				<button type="button" data-action="home" aria-label="膳食与食堂主页">${icon("home")}</button>
-				<button type="button" data-action="back" aria-label="返回周食谱" class="is-current">${icon("buying")}</button>
-				<button type="button" data-action="weeks" aria-label="周食谱编排">${icon("calendar")}</button>
-				<button type="button" data-action="purchases" aria-label="采购验收">${icon("list")}</button>
-			</div>
-			<div class="tjy-proc-nav-menu">
-				<strong class="tjy-proc-brand">童健云</strong>
-				<button type="button" data-action="home" class="tjy-proc-nav-group">${icon("buying")} 膳食与食堂</button>
-				<button type="button" data-action="weeks">${icon("calendar")} 周食谱编排</button>
-				<button type="button" data-action="purchases">${icon("list")} 采购验收</button>
-				<button type="button" data-action="back" class="is-current">${icon("buying")} 周食谱</button>
-			</div>
-		</nav>`;
-	}
-
 	function detailLine(label, value, emphasis = false) {
 		return `<div${emphasis ? ' class="is-total"' : ""}><dt>${label}</dt><dd>${escape(value)}</dd></div>`;
 	}
@@ -153,7 +124,7 @@
 			&& Number(row.conversion_factor) > 0;
 		const converted = quantity(row.purchase_stock_qty, row.stock_uom);
 
-		return `<div class="tjy-proc-inspector-head"><h2 id="tjy-proc-detail">食材核对明细</h2>
+		return `<div class="tjy-proc-inspector-head"><h3 id="tjy-proc-detail">食材核对明细</h3>
 			<button type="button" data-action="close-detail" aria-label="关闭食材核对明细">×</button></div>
 			<div class="tjy-proc-detail-content">
 				<div class="tjy-proc-ingredient">
@@ -183,34 +154,25 @@
 			</div>`;
 	}
 
-	function open(frm, preview, review) {
-		if (activeDialog) return;
-		const opener = document.activeElement;
+	function render(wrapper, preview, review) {
 		const rows = preview.rows || [];
 		const totals = preview.totals || {};
 		const blockers = preview.blockers || [];
 		const warnings = preview.warnings || [];
 		const { dates, period } = weekDates(preview.week_start, preview.week_end);
-		const dialog = new frappe.ui.Dialog({ title: "采购需求预览" });
-		const $view = $("<div>", { class: "tjy-proc-view" }).appendTo(dialog.$wrapper.find(".modal-content"));
+		const $view = $("<div>", { class: "tjy-proc-view" }).appendTo(wrapper.empty());
 		let selectedDate = "";
 		let purchaseOnly = false;
 		let selectedIndex = null;
 		const reviewed = Boolean(Number(preview.stock_reviewed));
-		activeDialog = { dialog, week: preview.week_name };
-		dialog.$wrapper.addClass("tjy-proc-dialog").one("hidden.bs.modal", () => {
-			activeDialog = undefined;
-			dialog.$wrapper.remove();
-			if (opener?.isConnected) opener.focus();
-		});
 		const advance = preview.advance_purchase_mode ? [preview.advance_purchase_note || "提前采购不预支旧周余量。"] : [];
-		$view.html(`<div class="tjy-proc-shell">
-			${sidebar()}
-			<main class="tjy-proc-main">
-				<div class="tjy-proc-scroll">
-					<div class="tjy-proc-breadcrumb">童健云 <span>›</span> 膳食与食堂 <span>›</span> 采购需求预览</div>
-					<h1>采购需求预览</h1>
-					<p class="tjy-proc-subtitle">${escape([preview.company || frm.doc.company, period].filter(Boolean).join(" · "))}</p>
+		$view.html(`<section class="tjy-proc-shell" aria-label="采购需求预览">
+			<div class="tjy-proc-main">
+				<div class="tjy-proc-content">
+					<header class="tjy-proc-heading">
+						<h2>本周采购需求预览</h2>
+						<span>${escape(period)}</span>
+					</header>
 					<div class="tjy-proc-summary" aria-label="全周汇总">
 						${icon("buying")}<span><b>${escape(totals.ingredient_count ?? "—")}</b> 种食材</span>
 						<span><b>${escape(totals.purchase_row_count ?? "—")}</b> 行需采购</span>
@@ -232,15 +194,13 @@
 						</table>
 					</div>
 				</div>
-				<footer class="tjy-proc-footer">
+				<div class="tjy-proc-footer">
 					<strong role="status">${icon("info")} <span>${reviewed ? "账面库存已核对" : "账面库存待核对"}</span></strong>
-					<div><button type="button" data-action="back">返回周食谱</button>
-						${review ? `<button type="button" class="is-primary" data-action="review" ${blockers.length ? "disabled" : ""}>${reviewed ? "重新核对账面库存" : "核对账面库存"}</button>` : ""}
-					</div>
-				</footer>
-			</main>
+					${review ? `<button type="button" class="is-primary" data-action="review" ${blockers.length ? "disabled" : ""}>${reviewed ? "重新核对账面库存" : "核对账面库存"}</button>` : ""}
+				</div>
+			</div>
 			<aside class="tjy-proc-inspector" aria-labelledby="tjy-proc-detail" hidden></aside>
-		</div>`);
+		</section>`);
 		const $body = $view.find("tbody");
 		const $inspector = $view.find(".tjy-proc-inspector");
 		const $shell = $view.find(".tjy-proc-shell");
@@ -284,11 +244,6 @@
 			});
 		}
 
-		function navigate(route) {
-			dialog.hide();
-			frappe.set_route(...route);
-		}
-
 		$view.on("click", "[data-day]", (event) => {
 			selectedDate = event.currentTarget.dataset.day;
 			$view.find("[data-day]").attr("aria-pressed", "false");
@@ -301,33 +256,19 @@
 			showDetail(Number(event.currentTarget.dataset.entry), true);
 		}).on("click", "[data-action]", (event) => {
 			const button = event.currentTarget;
-			const routes = {
-				home: ["Workspaces", "膳食与食堂"],
-				weeks: ["List", "Meal Planning Week"],
-				purchases: ["List", "Material Request"],
-			};
 			switch (button.dataset.action) {
-				case "back": dialog.hide(); break;
 				case "close-detail": {
 					const index = selectedIndex;
 					showDetail(null);
 					$body.find(`[data-row="${index}"]`).trigger("focus");
 					break;
 				}
-				case "review":
-					review?.($(button), () => {
-						$view.find(".tjy-proc-footer [role='status'] span").text("账面库存已核对");
-						button.remove();
-						$view.find(".tjy-proc-footer [data-action='back']").trigger("focus");
-					});
-					break;
-				case "plan": navigate(["Form", "Production Plan", rows[selectedIndex].production_plan]); break;
-				default: navigate(routes[button.dataset.action]);
+				case "review": review?.($(button)); break;
+				case "plan": frappe.set_route("Form", "Production Plan", rows[selectedIndex].production_plan); break;
 			}
 		});
 		renderRows();
-		dialog.show();
 	}
 
-	window.tjyProcurementPreview = { open };
+	window.tjyProcurementPreview = { render };
 })();
