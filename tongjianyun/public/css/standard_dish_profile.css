@@ -191,6 +191,10 @@
 	background: var(--dish-wash);
 }
 
+.tjy-dish-layout .tjy-dish-recipe > :is(.section-head, .section-body) {
+	margin: 0 !important;
+}
+
 .tjy-dish-recipe-lock {
 	display: none;
 	color: var(--text-muted);

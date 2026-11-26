@@ -6,8 +6,8 @@
 	const assetPath = "/assets/tongjianyun";
 	const ingredientColumns = [
 		{ id: "item_code", name: "食材", width: 30, link: "Item" },
-		{ id: "gross", name: "每份采购毛用量", width: 22, align: "right" },
-		{ id: "net", name: "每份可食净量", width: 22, align: "right" },
+		{ id: "gross", name: "采购毛量/份", width: 22, align: "right" },
+		{ id: "net", name: "可食净量/份", width: 22, align: "right" },
 		{ id: "uom", name: "单位", width: 17, link: "UOM" },
 	];
 	let activeRecipePanel;
@@ -505,7 +505,7 @@
 			const $preview = frm.fields_dict?.[previewField]?.$wrapper;
 			if (frm.doctype_layout?.name === dishLayout && $preview) {
 				const { doc, layout } = frm;
-				await frappe.require(`${assetPath}/css/standard_dish_profile.css?v=1.css`);
+				await frappe.require(`${assetPath}/css/standard_dish_profile.css?v=2.css`);
 				const [view, doctype] = frappe.get_route();
 				if (frm.doc !== doc || frm.layout !== layout || view !== "Form" || doctype !== "Item") return;
 				renderDishLayout(frm, $preview);
