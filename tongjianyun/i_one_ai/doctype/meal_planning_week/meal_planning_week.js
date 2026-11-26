@@ -58,7 +58,7 @@
 		if (!wrapper?.length) return;
 		const assets = "/assets/tongjianyun";
 		previewAssets ??= Promise.resolve(frappe.require([
-			`${assets}/css/meal_procurement_preview.css?v=procurement-inline-2.css`,
+			`${assets}/css/meal_procurement_preview.css?v=procurement-inline-3.css`,
 			`${assets}/js/meal_procurement_preview.js?v=procurement-inline-2.js`,
 		])).catch((error) => {
 			previewAssets = undefined;

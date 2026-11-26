@@ -11,14 +11,13 @@
 	--proc-muted: #43564a;
 	--proc-line: #dbe5de;
 	--proc-paper: #fcfdfc;
-	--proc-pale: #edf5ed;
 	--proc-gutter: 14px;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
 	border: 1px solid var(--proc-line);
 	border-radius: 10px;
 	overflow: hidden;
-	scroll-margin-top: 68px;
+	scroll-margin-top: 108px;
 	color: var(--proc-ink);
 	background: var(--proc-paper);
 	color-scheme: light;
