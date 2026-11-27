@@ -221,7 +221,7 @@
 					frm.add_custom_button("补充票证或检验报告", () => dialog("登记补充票证", [
 						option("evidence_type", "票证类型", "Select", [
 							"送货单", "产品合格证明", "同批次检验报告", "检疫证明", "肉品品质检验合格证", "食品经营资质", "其他票证"
-						]),
+						], "送货单"),
 						{fieldname:"scope", label:"送货单覆盖范围", fieldtype:"Select",
 							options:["本次配送全部明细","指定食材"], default:"本次配送全部明细",
 							depends_on:"eval:doc.evidence_type === '送货单'"},
