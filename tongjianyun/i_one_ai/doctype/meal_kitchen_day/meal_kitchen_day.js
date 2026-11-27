@@ -123,7 +123,9 @@
 						? "已取消"
 						: this.ledger.can_close
 							? "待日结复核"
-							: "执行中";
+							: this.ledger.carry_required && !this.ledger.carry_confirmation_current
+								? "待盘点"
+								: "执行中";
 			const weekday = frappe.datetime
 				.str_to_obj(d.meal_date)
 				.toLocaleDateString("zh-CN", { weekday: "short" });
@@ -381,6 +383,18 @@
 				return;
 			}
 			if (frm._kitchen?.name !== frm.doc.name) frm._kitchen = new KitchenDay(frm);
+			if (frm.doc.docstatus === 0 && !frm.is_dirty() && !frappe.workflow.has_workflow(frm.doc)) {
+				if (frm.toolbar.get_action_status() === "Submit") {
+					frm.page.set_primary_action(__("查看日结清单"), () => {
+						frm.fields_dict.ledger_html.tab?.set_active();
+						frm._kitchen.view = "close";
+						frm._kitchen.load();
+					});
+				}
+				frm.layout.message?.children(".form-message").filter((_, el) =>
+					el.textContent.trim() === __("Submit this document to confirm")
+				).remove();
+			}
 			frm._kitchen.load();
 			frm.add_custom_button(__("周食谱计划"), () =>
 				frappe.set_route("Form", "Meal Planning Week", frm.doc.meal_week),
