@@ -21,6 +21,11 @@ class TongjianyunCanteenReceiving(CanteenDocument):
         delivery.onload()
         manifest = delivery.get_onload() or {}
         details["names"] = manifest.get("delivery_item_names", {})
+        codes = {row.item_code for row in self.items if row.item_code}
+        if codes and frappe.has_permission("Item", "read"):
+            images = frappe.get_list("Item", filters={"name": ("in", list(codes))},
+                                     fields=["name", "image"], limit_page_length=0)
+            details["images"] = {item.name: item.image for item in images if item.image}
         scheduled = manifest.get("delivery_order_dates", {})
         rules, issues = {}, {}
         for row in delivery.items:

@@ -117,64 +117,131 @@
 		});
 	}
 
-	function inspect(frm, row) {
-		const editable = writable(frm), details = line(frm,row);
-		const problems = issues(frm,row), expected = Number(row.expected_qty), unit = __(row.uom || "");
-		const label = title(frm,row), isMutable = editable ? 0 : 1;
-		const input = (fieldname, caption, fieldtype, extra={}) =>
-			({fieldname, label:caption, fieldtype, default:row[fieldname], read_only:isMutable, ...extra});
-		const facts = [
-			[row.receipt_trace_no ? "到货追溯号" : "供应商批号", row.receipt_trace_no || row.lot_number],
-			["需求日期",details.due], ["生产日期",details.made], ["有效期至",row.expires_on]
-		].filter(([,v]) => v);
+	function inspect(frm, firstRow) {
 		const dialog = new frappe.ui.Dialog({
-			title:esc(label), no_submit_on_enter:true,
-			fields:[
-				{fieldtype:"HTML",fieldname:"batch",options:`<div class="tr-batch"><div><span>随货数量</span><strong>${qty(expected)} ${esc(unit)}</strong></div>
-				<dl>${facts.map(([k,v])=>`<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></div>`},
-				...(editable ? [{fieldtype:"Button",fieldname:"use_expected",label:"按随货量填入合格数量",
-					click:() => dialog.set_value("accepted_qty",Math.max(0,flt(expected - Number(dialog.get_value("rejected_qty") || 0), 9)))}] : []),
-				input("accepted_qty","合格数量（"+unit+"）","Float"),
-				{fieldtype:"Column Break"},input("rejected_qty","拒收数量（"+unit+"）","Float"),
-				{fieldtype:"Section Break"},
-				input("reason","差异或拒收原因","Small Text",{default:hasReason(row.reason) ? row.reason : ""}),
-				{fieldtype:"HTML",fieldname:"checks",options:`<p class="tr-evidence ${problems.length ? "tr-warn" : "tr-muted"}">${esc(ticket(frm,row)[0])}</p>`},
-				input("evidence_verified","已人工核对该批票证","Check"),
-				{fieldtype:"Section Break"},
-				input("record_weight","登记现场称重","Check",{default:row.record_weight || Boolean(row.gross_weight || row.tare_weight)}),
-				input("gross_weight","毛重（公斤）","Float",{depends_on:"record_weight"}),
-				{fieldtype:"Column Break"},input("tare_weight","皮重（公斤）","Float",{depends_on:"record_weight"})
-			],
-			primary_action_label:editable ? "应用到明细" : "关闭",
-			primary_action:() => editable ? apply(false) : dialog.hide(),
-			...(editable && rows(frm).length>1 ? {secondary_action_label:"应用并核下一项",secondary_action:()=>apply(true)} : {})
+			title:"食材核对", no_submit_on_enter:true,
+			fields:[{fieldname:"inspection",fieldtype:"HTML"}]
 		});
-		let applying = false;
+		dialog.$wrapper.addClass("tjy-inspection-dialog");
+		const root = dialog.fields_dict.inspection.$wrapper.addClass("tr-inspection");
+		let row, expected, unit, mode, applying = false;
+		const field = name => root.find('[name="' + name + '"]');
+		const amount = name => Number(field(name).val() || 0);
+		const section = name => root.find('[data-part="' + name + '"]');
+		function numeric(name, caption, value, suffix) {
+			return `<label class="tri-numeric"><span>${caption}</span><span class="tri-input"><input type="number" name="${name}"
+				step="any" min="0" inputmode="decimal" value="${esc(value ?? "")}"><span>${esc(suffix)}</span></span></label>`;
+		}
+		function openRow(current) {
+			row = current;
+			expected = Number(row.expected_qty);
+			unit = __(row.uom || "");
+			const editable = writable(frm);
+			const full = Math.abs(Number(row.accepted_qty || 0)-expected)<1e-9 && !Number(row.rejected_qty);
+			mode = full && !hasReason(row.reason) ? "full" :
+				(hasReason(row.reason) || Number(row.rejected_qty) || Number(row.accepted_qty) ? "adjust" : "");
+			const details = line(frm,row), problems = issues(frm,row);
+			const name = title(frm,row), all = rows(frm), idx = all.findIndex(r => r.name === row.name);
+			const image = info(frm).images?.[row.item_code];
+			const photo = typeof image === "string" && /^\/(?:private\/files|files|assets)\//.test(image)
+				? `<img src="${esc(image)}" alt="">` : "";
+			const dates = [["需求日期",details.due],["生产日期",details.made],["有效期至",row.expires_on]];
+			const withWeight = Boolean(Number(row.record_weight) || Number(row.gross_weight) || Number(row.tare_weight));
+			dialog.set_title(`食材核对 <small class="tri-index">第 ${idx+1} / ${all.length} 项</small>`);
+			root.html(`<section class="tri-batch"><div class="tri-identity">
+				<div class="tri-photo" aria-hidden="true">${icon("package")}${photo}</div>
+				<div class="tri-food"><h3 tabindex="-1">${esc(name)}</h3><p>${row.receipt_trace_no ? "到货追溯号" : "供应商批号"} <b>${esc(row.receipt_trace_no || row.lot_number || "待补")}</b></p></div>
+				<div class="tri-expected"><span>随货数量</span><strong>${qty(expected)} <small>${esc(unit)}</small></strong></div></div>
+				<dl>${dates.map(([k,v])=>`<div><dt>${k}</dt><dd>${esc(v || "—")}</dd></div>`).join("")}</dl></section>
+			<section class="tri-block"><h4>到货结果</h4>
+				${editable ? `<div class="tri-choices" role="group" aria-label="到货结果">
+				<button type="button" data-mode="full">${icon("check")}<span><strong>足量合格</strong><small>按随货量填入 ${qty(expected)} ${esc(unit)}</small></span></button>
+				<button type="button" data-mode="adjust">${icon("pencil-line")}<span><strong>登记差异</strong><small>短送、拒收或调整实收量</small></span></button></div>` :
+				`<p class="tri-readresult">${mode ? "合格 "+qty(row.accepted_qty)+" "+esc(unit)+" · 拒收 "+qty(row.rejected_qty)+" "+esc(unit) : "数量待登记"}</p>`}
+				<div data-part="variance" class="tri-variance" hidden><div class="tri-pair">
+					${numeric("accepted","合格数量",row.accepted_qty,unit)}${numeric("rejected","拒收数量",row.rejected_qty,unit)}</div>
+					<div class="tri-balance"><span data-short aria-live="polite"></span>${editable ? '<button type="button" data-fill>按随货量扣除拒收量填入</button>' : ""}</div>
+					<label class="tri-reason">差异或拒收原因<textarea name="reason" rows="2" placeholder="例如：短送 0.1 公斤，或包装破损拒收">${esc(hasReason(row.reason) ? row.reason : "")}</textarea></label>
+				</div></section>
+			<section class="tri-block"><h4>随货票证</h4><div class="tri-ticket ${problems.length ? "tri-missing" : ""}">
+				<div>${icon(problems.length ? "info" : "clipboard")}<strong>${esc(problems.length ? problems.join("、") : "人工核对")}</strong></div>
+				<label><input type="checkbox" name="verified" ${Number(row.evidence_verified) ? "checked" : ""}>已核对该批票证</label>
+				${editable && problems.length ? '<p>可先登记实收，补齐票证后再复核入库。</p>' : ""}</div></section>
+			<section class="tri-weight"><label class="tri-weigh-toggle">${icon("scale")}<span>登记现场称重</span>
+				<input type="checkbox" name="weigh" ${withWeight ? "checked" : ""}></label>
+				<div data-part="weights" hidden><div class="tri-pair">${numeric("gross","毛重",row.gross_weight,"公斤")}${numeric("tare","皮重",row.tare_weight,"公斤")}</div>
+				<p class="tri-balance" data-net aria-live="polite"></p></div></section>
+			<p class="tri-error" role="alert" hidden></p>`);
+			root.find(".tri-photo img").one("error",function(){ this.remove(); });
+			if (!editable) root.find("input,textarea").prop("disabled",true);
+			if (problems.length && !Number(row.evidence_verified)) field("verified").prop("disabled",true);
+			const next = editable && nextRow(frm,row.name);
+			dialog.set_primary_action(editable ? (next ? "应用并核下一项" : "应用到明细") : "关闭",
+				() => editable ? apply(Boolean(next)) : dialog.hide());
+			if (next) {
+				dialog.set_secondary_action(() => apply(false));
+				dialog.set_secondary_action_label("仅应用本项");
+			} else dialog.get_secondary_btn().addClass("hide");
+			update();
+			dialog.$wrapper.find(".modal-body").scrollTop(0);
+		}
+		function update() {
+			root.find("[data-mode]").each((_,el) => el.setAttribute("aria-pressed",String(el.dataset.mode === mode)));
+			section("variance").prop("hidden",mode !== "adjust");
+			section("weights").prop("hidden",!field("weigh").prop("checked"));
+			const short = flt(expected-amount("accepted")-amount("rejected"),9);
+			root.find("[data-short]").text(short < 0 ? "超出随货量 "+qty(-short)+" "+unit : "短送 "+qty(short)+" "+unit);
+			root.find("[data-net]").text("净重 "+qty(flt(amount("gross")-amount("tare"),9))+" 公斤");
+		}
+		function invalid(message, target) {
+			root.find(".tri-error").text(message).prop("hidden",false);
+			target?.trigger("focus");
+		}
 		async function apply(advance) {
 			if (applying || !writable(frm)) return;
-			const values = dialog.get_values();
-			if (!values) return;
-			const accepted = Number(values.accepted_qty || 0), rejected = Number(values.rejected_qty || 0);
-			if (accepted < 0 || rejected < 0 || accepted+rejected > expected+1e-9)
-				return frappe.msgprint("合格量与拒收量均须为非负数，合计不能超过随货数量。");
-			if ((Math.abs(accepted-expected)>1e-9 || rejected) && !hasReason(values.reason))
-				return frappe.msgprint("请填写实际短送或拒收原因。");
-			const gross = Number(values.gross_weight || 0), tare = Number(values.tare_weight || 0);
-			if (values.record_weight && (gross < 0 || tare < 0 || gross < tare)) return frappe.msgprint("请核对毛重与皮重。");
+			if (!mode) return invalid("请先选择足量合格或登记差异。",root.find("[data-mode=full]"));
+			for (const input of root.find('input[type="number"]:visible')) {
+				if (!input.reportValidity()) return;
+			}
+			const accepted = mode === "full" ? expected : amount("accepted");
+			const rejected = mode === "full" ? 0 : amount("rejected");
+			const reason = mode === "adjust" ? String(field("reason").val() || "").trim() : "";
+			if (!Number.isFinite(accepted+rejected) || accepted < 0 || rejected < 0 || flt(accepted+rejected-expected,9) > 0)
+				return invalid("合格量与拒收量合计不能超过随货数量。",field("accepted"));
+			if ((flt(expected-accepted,9) !== 0 || rejected) && !hasReason(reason))
+				return invalid("请填写实际短送或拒收原因。",field("reason"));
+			const weigh = field("weigh").prop("checked"), gross = weigh ? amount("gross") : 0, tare = weigh ? amount("tare") : 0;
+			if (!Number.isFinite(gross+tare) || tare < 0 || gross < tare)
+				return invalid("毛重须大于或等于皮重。",field("gross"));
 			applying = true;
 			try {
 				await frappe.model.set_value(row.doctype,row.name,{
-					accepted_qty:accepted,rejected_qty:rejected,reason:values.reason || "", evidence_verified:values.evidence_verified || 0,
-					record_weight:values.record_weight || 0,gross_weight:values.record_weight ? gross : 0,tare_weight:values.record_weight ? tare : 0
+					accepted_qty:accepted, rejected_qty:rejected, reason, evidence_verified:Number(field("verified").prop("checked")),
+					record_weight:Number(weigh), gross_weight:gross, tare_weight:tare
 				});
-				dialog.hide();
 				render(frm);
-				const next = nextRow(frm,row.name);
-				if (advance && next) inspect(frm,next);
+				const next = advance && nextRow(frm,row.name);
+				if (next) {
+					openRow(next);
+					root.find("h3").trigger("focus");
+				} else dialog.hide();
 			} finally { applying = false; }
 		}
+		root.on("click","[data-mode]",function() {
+			mode = this.dataset.mode;
+			root.find(".tri-error").prop("hidden",true);
+			update();
+			if (mode === "adjust") field("accepted").trigger("focus");
+		}).on("click","[data-fill]",() => {
+			field("accepted").val(Math.max(0,flt(expected-amount("rejected"),9))).trigger("input");
+		}).on("input change","input,textarea",() => {
+			root.find(".tri-error").prop("hidden",true);
+			update();
+		});
+		openRow(firstRow);
 		dialog.show();
 	}
+
 	function refresh(frm) {
 		render(frm);
 		const policy = info(frm).policy;
