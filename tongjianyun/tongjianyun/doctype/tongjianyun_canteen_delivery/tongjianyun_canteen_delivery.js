@@ -15,18 +15,10 @@
 	const incomplete = row => !(row.lot_number || "").trim() || !row.manufactured_on || !row.expires_on;
 	const busy = new WeakSet();
 
-	function focusLine(frm, row) {
-		frm.scroll_to_field("items", false);
-		const grid = frm.fields_dict.items.grid;
-		const pos = grid.data.findIndex(line => line.name === row.name);
-		if (pos < 0) {
-			frappe.show_alert("当前明细筛选隐藏了该行，请清除表格筛选。");
-			return;
-		}
-		const pager = grid.grid_pagination;
-		const page = Math.floor(pos / pager.page_length) + 1;
-		if (pager.page_index !== page) pager.go_to_page(page);
-		grid.grid_rows_by_docname[row.name]?.toggle_view(true);
+	async function quickEntry(frm) {
+		if (frm.is_dirty()) await frm.save();
+		if (frm.is_dirty()) return;
+		if (window.cur_frm === frm) frappe.tjyDeliveryLots.open(frm);
 	}
 
 	async function advance(frm, target, note) {
@@ -95,12 +87,19 @@
 					({note}) => advance(frm, "拒接", note), "登记拒接", "确认拒接")));
 			}
 			if (state === "分拣" && missing.length && perm.write) {
-				buttons.append(action("填写待补明细（" + missing.length + "）", () => focusLine(frm, missing[0]), true));
+				buttons.append(action("快速补录（" + missing.length + " 行待补）", () => quickEntry(frm), true));
 			} else if (target && perm.write && (target !== "配送" || perm.submit)) {
 				buttons.append(action(info[2], () => advance(frm, target), true));
 			} else if (state === "到货" && doc.docstatus === 1) {
 				buttons.append(action("查看验收结果", () => frm.trigger("delivery_acceptance_result"), true));
 			}
+		}
+
+		const grid = frm.fields_dict.items.grid;
+		grid.wrapper.find(".tjy-del-grid-entry").remove();
+		if (!isNew && doc.docstatus === 0 && perm.write && step >= 0 && step <= 3 && items.length) {
+			action("快速补录", () => quickEntry(frm)).addClass("tjy-del-grid-entry btn btn-xs btn-default")
+				.prependTo(grid.wrapper);
 		}
 
 		// Clean saved drafts progress via the delivery actions. Dirty forms retain native Save.

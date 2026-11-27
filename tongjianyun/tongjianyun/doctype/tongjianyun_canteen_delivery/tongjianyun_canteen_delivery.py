@@ -13,9 +13,13 @@ class TongjianyunCanteenDelivery(CanteenDocument):
             "Purchase Order Item",
             filters={"parenttype": "Purchase Order", "parent": self.purchase_order, "parentfield": "items",
                      "name": ("in", list(order_lines))},
-            fields=["name", "item_code", "item_name"],
+            fields=["name", "item_code", "item_name", "schedule_date"],
         )
         self.set_onload("delivery_item_names", {
             row.item_code: row.item_name for row in rows
             if row.item_name and order_lines.get(row.name) == row.item_code
+        })
+        self.set_onload("delivery_order_dates", {
+            row.name: row.schedule_date for row in rows
+            if row.schedule_date and order_lines.get(row.name) == row.item_code
         })

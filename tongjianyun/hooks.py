@@ -10,7 +10,7 @@ app_email = "admin@example.com"
 app_license = "mit"
 required_apps = ["erpnext"]
 app_include_js = ["/assets/tongjianyun/js/meal_overview.js?v=20261127.delivery1", "/assets/tongjianyun/js/meal_list_filters.js?v=20261124.7", "/assets/tongjianyun/js/meal_desk.js?v=20261127.delivery2"]
-app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.7", "/assets/tongjianyun/css/canteen_policy.css?v=20261127.2", "/assets/tongjianyun/css/canteen_delivery.css?v=20261127.3"]
+app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.7", "/assets/tongjianyun/css/canteen_policy.css?v=20261127.2", "/assets/tongjianyun/css/canteen_delivery.css?v=20261127.lots1"]
 app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
 add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]
@@ -40,6 +40,7 @@ doctype_js = {
                              "public/js/canteen_forms.js"],
     **{doctype: "public/js/canteen_forms.js" for doctype in (*_CANTEEN_DOCTYPES, "Meal Kitchen Day",
                                                            "Request for Quotation")},
+    "Tongjianyun Canteen Delivery": ["public/js/canteen_forms.js", "public/js/delivery_lots.js"],
     "Tongjianyun Meal Weekly Task": ["public/js/canteen_forms.js", "public/js/weekly_task_menu.js"],
     "Tongjianyun Meal Term Project": ["public/js/canteen_forms.js", "public/js/meal_term_project.js"],
 }
