@@ -58,6 +58,8 @@
   "canteen",
   "lot_key",
   "lot_number",
+  "lot_source",
+  "receipt_trace_no",
   "column_item_code",
   "item_code",
   "supplier",
@@ -104,10 +106,24 @@
    "fieldname": "lot_number",
    "label": "供应商批号",
    "fieldtype": "Data",
-   "reqd": 1,
    "in_list_view": 1,
    "read_only": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "lot_source",
+   "label": "批号来源",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receipt_trace_no",
+   "label": "到货追溯号",
+   "in_standard_filter": 1,
+   "in_list_view": 1,
+   "fieldtype": "Data",
+   "read_only": 1,
+   "depends_on": "eval:doc.receipt_trace_no"
   },
   {
    "fieldname": "item_code",

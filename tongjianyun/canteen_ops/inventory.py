@@ -23,6 +23,8 @@ class Movement(Handler):
 
 
 def key_for(supplier, lot):
+    if lot.get("receipt_trace_no"):
+        return "MEAL-" + lot.receipt_trace_no
     identity = "|".join((supplier, lot.item_code, lot.lot_number))
     return "MEAL-" + sha256(identity.encode()).hexdigest()[:22].upper()
 
@@ -30,6 +32,7 @@ def key_for(supplier, lot):
 def _append(company, site, lot, origin, detail, quantity, from_wh=None, to_wh=None):
     entry = frappe.get_doc({"doctype": LOT_MOVEMENT, "company": company, "canteen": site, "item_code": lot.item_code,
                             "supplier": lot.supplier, "lot_key": lot.lot_key, "lot_number": lot.lot_number,
+                            "lot_source": lot.lot_source, "receipt_trace_no": lot.receipt_trace_no,
                             "manufactured_on": lot.manufactured_on, "expires_on": lot.expires_on,
                             "receiving": lot.receiving, "posting_date": origin.posting_date,
                             "from_warehouse": from_wh, "to_warehouse": to_wh, "quantity": float(quantity),
@@ -48,6 +51,7 @@ def record_accepted(receiving, receipt, lines):
                     and getdate(known.expires_on) == getdate(lot.expires_on),
                     "同一供应商同一食材批号的生产日期和有效期必须一致。")
         details = frappe._dict(lot_key=number, lot_number=lot.lot_number, item_code=lot.item_code,
+                               lot_source=lot.lot_source, receipt_trace_no=lot.receipt_trace_no,
                                supplier=receiving.supplier, manufactured_on=lot.manufactured_on,
                                expires_on=lot.expires_on, receiving=receiving.name)
         accepted.batch_no = number
@@ -234,7 +238,8 @@ def inventory_rows(site, filters, today):
         if mappings[warehouse] == "隔离仓":
             state = "隔离 · " + state
         yield dict(company=site.company, canteen=site.name, warehouse=warehouse, item_code=lot.item_code,
-                   lot_number=lot.lot_number, lot_key=lot.lot_key, expires_on=expiry, posted_qty=float(qty),
+                   lot_number=lot.lot_number, lot_source=lot.lot_source or "上游原批号", receipt_trace_no=lot.receipt_trace_no,
+                   lot_key=lot.lot_key, expires_on=expiry, posted_qty=float(qty),
                    usable_qty=float(qty) if expiry >= today and mappings[warehouse] != "隔离仓" else 0,
                    stage=state, source_type=RECEIVING, source=receiving)
     if not frappe.has_permission("Stock Ledger Entry", "read"):

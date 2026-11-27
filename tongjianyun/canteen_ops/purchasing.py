@@ -13,6 +13,8 @@ from tongjianyun.canteen_ops.common import (
     lock_company, locked_rows, permission, positive, records, require, restricted_supplier, submitted, unique_active,
 )
 
+from tongjianyun.canteen_ops.delivery_lots import BULK, SUPPLIER, UPSTREAM, lot_identity
+
 ORDER, RECEIPT, REQUEST, RFQ, QUOTE = "Purchase Order", "Purchase Receipt", "Material Request", "Request for Quotation", "Supplier Quotation"
 ADJUSTMENT = "Meal Plan Adjustment"
 PROGRESS = {"待接单": {"已接单", "拒接"}, "已接单": {"备货", "拒接"}, "备货": {"分拣"},
@@ -358,11 +360,35 @@ class Delivery(Handler):
                 shipped[row.order_item] += decimal(row.quantity)
         own = defaultdict(lambda: ZERO)
         keys = set()
+        previous_rows = {r.name: r for r in last.items} if last else {}
+        lot_dates = {}
         for row in doc.items:
             origin = order_items.get(row.order_item)
             require(origin and row.item_code == origin.item_code and row.uom == origin.uom,
                     "配送食材、单位必须与采购订单明细一致。")
-            key = row.order_item, row.lot_number
+            previous = previous_rows.get(row.name)
+            if not doc.flags.get("applying_delivery_lots") and (
+                row.lot_source in (SUPPLIER, BULK) or row.receipt_trace_no
+                or (previous and previous.lot_source in (SUPPLIER, BULK))
+            ):
+                require(previous and (row.lot_source, row.item_code, lot_identity(row)) ==
+                        (previous.lot_source, previous.item_code, lot_identity(previous)),
+                        "请在快速补录中生成或更换批号。")
+            if row.lot_source == BULK:
+                require(row.receipt_trace_no and not row.lot_number, "散装到货须使用单独的到货追溯号。")
+            else:
+                require(not row.receipt_trace_no and row.lot_source in (None, "", UPSTREAM, SUPPLIER),
+                        "请核对批号来源。")
+                if row.lot_number:
+                    row.lot_number = row.lot_number.strip()
+                if row.lot_source != SUPPLIER:
+                    row.lot_source = UPSTREAM if row.lot_number else ""
+            identity = lot_identity(row)
+            if any(identity) and row.manufactured_on and row.expires_on:
+                key = (row.item_code, identity)
+                pair = (getdate(row.manufactured_on), getdate(row.expires_on))
+                require(lot_dates.setdefault(key, pair) == pair, "同一食材同一批次的生产日期与有效期须一致。")
+            key = row.order_item, identity
             require(key not in keys, "同一订单明细的同一批号请合并填写。")
             keys.add(key)
             # The initial order-backed draft can be prepared before a supplier knows the actual lot.
@@ -382,7 +408,8 @@ class Delivery(Handler):
         doc = self.doc
         require(doc.progress == "分拣" and doc.flags.get("changing_progress"), "请通过「开始配送」提交随货批次。")
         for row in doc.items:
-            require(row.lot_number and row.manufactured_on and row.expires_on, "请先填齐所有配送批号、生产日期和有效期。")
+            require(any(lot_identity(row)) and row.manufactured_on and row.expires_on,
+                    "请先填齐每批食材的批号或到货追溯号、生产日期和有效期。")
 
     def before_update_after_submit(self):
         doc = self.doc
@@ -486,7 +513,7 @@ def evidence_problems(delivery, row, policy, date):
             problems.append(f"缺少{rule.evidence_type}")
             continue
         valid = [item for item in matches if (
-            (not rule.require_matching_batch or (item.item_code == row.item_code and item.lot_number == row.lot_number))
+            (not rule.require_matching_batch or (row.lot_number and item.item_code == row.item_code and item.lot_number == row.lot_number))
             and (not rule.require_expiry or item.valid_until)
             and (not item.valid_until or getdate(item.valid_until) >= date)
         )]
@@ -553,6 +580,8 @@ class Receiving(Handler):
             row.expected_qty = lot.quantity
             row.uom = lot.uom
             row.lot_number = lot.lot_number
+            row.lot_source = lot.lot_source or UPSTREAM
+            row.receipt_trace_no = lot.receipt_trace_no
             row.expires_on = lot.expires_on
             issues = evidence_problems(delivery, lot, policy, getdate(doc.arrived_at))
             row.evidence_status = "、".join(issues) or ("已核对" if row.evidence_verified else "票证齐全，待人工核实")

@@ -1,7 +1,9 @@
 (() => {
 	const method = "tongjianyun.canteen_ops.delivery_lots.apply_lots";
 	const number = new Intl.NumberFormat("zh-CN", {maximumFractionDigits: 9});
-	const incomplete = row => !row.lot_number?.trim() || !row.manufactured_on || !row.expires_on;
+	const upstream = "上游原批号", supplier = "供应商自编", bulk = "未提供上游批号";
+	const reference = row => row.receipt_trace_no || row.lot_number?.trim() || "";
+	const incomplete = row => !reference(row) || !row.manufactured_on || !row.expires_on;
 	const escape = value => frappe.utils.escape_html(String(value ?? ""));
 	const button = (key, caption, css = "") =>
 		`<button type="button" data-action="${key}" class="${css}">${caption}</button>`;
@@ -31,7 +33,8 @@
 		const key = () => JSON.stringify([code, date, mode]);
 		const title = id => names[id] || id;
 		const demand = row => dates[row.order_item] || "";
-		const blank = () => ({lot_number:"", manufactured_on:"", expires_on:""});
+		const blank = () => ({lot_source:upstream, lot_number:"", manufactured_on:"", expires_on:""});
+		const fromRow = row => ({...blank(), ...row, reuse_row: incomplete(row) ? "" : row.name});
 		function read() {
 			rows = (frm.doc.items || []).map(r => ({...r}));
 			names = frm.doc.__onload?.delivery_item_names || {};
@@ -50,9 +53,9 @@
 		}
 		function draft(group) {
 			if (!drafts.has(key())) {
-				const only = group.length === 1 && incomplete(group[0]) && !group[0].lot_number ? group[0] : null;
+				const only = group.length === 1 && incomplete(group[0]) && !reference(group[0]) ? group[0] : null;
 				drafts.set(key(), {selected: new Set(only ? [only.name] : []), split: false,
-					first: only ? {...only} : blank(), second: blank(), quantity: "", typed: false});
+					first: only ? fromRow(only) : blank(), second: blank(), quantity: "", typed: false});
 			}
 			return drafts.get(key());
 		}
@@ -65,10 +68,29 @@
 			root.find(".lots-progress").html(`<strong>已补 ${done} / ${rows.length} 行</strong><progress max="${rows.length || 1}" value="${done}"></progress>`);
 		}
 		function lotInputs(id, values, label) {
-			const inputs = [["lot_number","供应商批号","text"],["manufactured_on","生产日期","date"],["expires_on","有效期","date"]]
-				.map(([field,caption,type]) => `<label>${caption}<input type="${type}" data-lot="${id}" data-field="${field}"
-					value="${escape(values[field])}" ${field === "lot_number" ? 'maxlength="140" placeholder="按包装或随货单填写"' : ""} required></label>`).join("");
-			return `<fieldset><legend>${label}</legend><div class="lots-inputs">${inputs}</div></fieldset>`;
+			const current = values.reuse_row ? "reuse:" + values.reuse_row : values.lot_source || upstream;
+			const option = (v, text) => `<option value="${escape(v)}" ${current === v ? "selected" : ""}>${escape(text)}</option>`;
+			const options = [option(upstream,"按包装或随货单填写"), option(supplier,"自产或分装 · 生成供应商批号"),
+				option(bulk,"散装且无上游批号 · 生成到货追溯号")];
+			const known = new Map();
+			for (const row of rows.filter(r => r.item_code === code && !incomplete(r))) {
+				const k = JSON.stringify([row.lot_source || upstream, reference(row), row.manufactured_on, row.expires_on]);
+				if (!known.has(k) || row.name === values.reuse_row) known.set(k, row);
+			}
+			if (known.size) options.push('<optgroup label="复用本单同食材的批次">' + [...known.values()].map(r =>
+				option("reuse:" + r.name, reference(r) + " · " + (r.lot_source || upstream) + " · " + r.manufactured_on)).join("") + "</optgroup>");
+			const generated = current === bulk || current === supplier;
+			const trace = (values.lot_source === bulk);
+			const caption = trace ? "到货追溯号" : "供应商批号";
+			const input = `<label>${caption}<input type="text" data-lot="${id}" data-field="lot_number" maxlength="140"
+				value="${escape(reference(values))}" placeholder="${generated ? "保存时自动生成" : "按包装或随货单填写"}"
+				${generated || values.reuse_row ? "readonly" : "required"}></label>`;
+			const dates = [["manufactured_on","生产日期"],["expires_on","有效期"]].map(([field,text]) =>
+				`<label>${text}<input type="date" data-lot="${id}" data-field="${field}" value="${escape(values[field])}"
+				${values.reuse_row ? "readonly" : "required"}></label>`).join("");
+			return `<fieldset><legend>${label}</legend><label class="lots-source">批号来源<select data-source="${id}">${options.join("")}</select></label>
+				${generated ? `<p class="text-muted">${trace ? "仅用于本次到货追溯，保留“未提供上游批号”记录。" : "仅用于供应商负责标识的自产或分装食材。请将生成的号码标在包装和随货单上。"}</p>` : ""}
+				<div class="lots-inputs">${input}${dates}</div></fieldset>`;
 		}
 		function render() {
 			const groups = visibleGroups();
@@ -90,13 +112,16 @@
 			const selected = group.filter(row => data.selected.has(row.name));
 			const single = selected.length === 1 ? selected[0] : null;
 			if (!single) data.split = false;
-			const eligible = group.filter(r => incomplete(r) && !r.lot_number);
+			const eligible = group.filter(r => incomplete(r) && !reference(r));
+			const issuing = (data.split ? [data.first, data.second] : [data.first]).some(r =>
+				!r.reuse_row && [supplier, bulk].includes(r.lot_source));
+			const saveLabel = issuing ? "生成编号并保存" : data.split ? "保存两批并继续" : "应用到 " + selected.length + " 行并继续";
 			const selectAll = eligible.length && eligible.every(r => data.selected.has(r.name));
 			const lines = group.map(row => `<label class="lots-line">
 				<input type="checkbox" data-row="${escape(row.name)}" ${data.selected.has(row.name) ? "checked" : ""}>
 				<span><strong>${escape(demand(row) || "需求日未登记")}</strong><small>第 ${row.idx} 行</small></span>
 				<span>${number.format(row.quantity)} ${escape(row.uom)}</span>
-				<span class="lots-existing">${escape(row.lot_number || "待填批号")}<small>${row.manufactured_on || row.expires_on ?
+				<span class="lots-existing">${escape(reference(row) || "待填批号")}<small>${reference(row) ? escape(row.lot_source || upstream) + " · " : ""}${row.manufactured_on || row.expires_on ?
 					escape((row.manufactured_on || "待填") + " 至 " + (row.expires_on || "待填")) : ""}</small></span></label>`).join("");
 			editor.html(`${button("back","‹ 食材列表","lots-back")}
 				<div class="lots-heading"><h3>${escape(title(code))}</h3><span>${group.length} 行配送明细</span></div>
@@ -110,7 +135,7 @@
 				${lotInputs("first",data.first,data.split ? "第一批" : "同批食材共用以下资料")}
 				${data.split ? lotInputs("second",data.second,"第二批") : ""}
 				<div class="lots-footer"><span aria-live="polite">${selected.length ? "已选 " + selected.length + " 行" : "请先勾选配送明细"}</span>
-				${button("save", data.split ? "保存两批并继续" : "应用到 " + selected.length + " 行并继续","lots-save")}</div>
+				${button("save",saveLabel,"lots-save")}</div>
 				${needsReload ? button("reload","重新读取最新明细","lots-link") : ""}`);
 			editor.find('[data-action="save"]').prop("disabled", !selected.length || saving || needsReload);
 			updateRemainder();
@@ -125,7 +150,7 @@
 		function seedSelected(data, group) {
 			if (data.typed) return;
 			const chosen = group.filter(row => data.selected.has(row.name));
-			data.first = chosen.length === 1 ? {...chosen[0]} : blank();
+			data.first = chosen.length === 1 ? fromRow(chosen[0]) : blank();
 		}
 		async function reload() {
 			if (window.cur_frm !== frm || frm.doc.name !== name) { dialog.hide(); return false; }
@@ -144,11 +169,11 @@
 			if (!selected.length) return;
 			for (const input of root.find(".lots-editor input[required]")) if (!input.reportValidity()) return;
 			const entries = (data.split ? [data.first, data.second] : [data.first]).map(lot => ({
-				lot_number: (lot.lot_number || "").trim(), manufactured_on: lot.manufactured_on, expires_on: lot.expires_on}));
-			if (entries.some(lot => !lot.lot_number || lot.expires_on < lot.manufactured_on)) return frappe.msgprint("请核对批号、生产日期和有效期。");
+				reuse_row: lot.reuse_row, lot_source: lot.lot_source || upstream, lot_number: (lot.lot_number || "").trim(), manufactured_on: lot.manufactured_on, expires_on: lot.expires_on}));
+			if (entries.some(lot => (!lot.reuse_row && lot.lot_source === upstream && !lot.lot_number) || lot.expires_on < lot.manufactured_on)) return frappe.msgprint("请核对批号、生产日期和有效期。");
 			if (data.split) {
 				if (!(Number(data.quantity) > 0 && Number(data.quantity) < selected[0].quantity)) return frappe.msgprint("第一批数量须大于零且小于原行数量。");
-				if (entries[0].lot_number === entries[1].lot_number) return frappe.msgprint("两批的供应商批号应不同。");
+				if (entries[0].reuse_row && entries[0].reuse_row === entries[1].reuse_row) return frappe.msgprint("请选择两个不同的批次。");
 				entries[0].quantity = data.quantity;
 			}
 			const order = [...groups.keys()], idx = order.indexOf(code);
@@ -161,7 +186,9 @@
 					freeze:true, freeze_message:"正在保存批次资料"});
 				applied = true;
 				if (!await reload()) return;
-				frappe.show_alert({message: "已保存「" + escape(title(previous)) + "」的批次资料", indicator: "green"});
+				const orderRows = new Set(selected.map(r => r.order_item));
+				const saved = [...new Set(rows.filter(r => orderRows.has(r.order_item) && r.item_code === previous).map(reference).filter(Boolean))];
+				frappe.show_alert({message: "已保存「" + escape(title(previous)) + "」：" + escape(saved.join("、")), indicator:"green"}, 8);
 				if (!rows.some(incomplete)) { dialog.hide(); return; }
 				if (search && ![...visibleGroups().values()].some(group => group.some(incomplete))) {
 					search = ""; root.find('[data-filter="search"]').val("");
@@ -178,7 +205,17 @@
 				render();
 			}
 		}
-		root.on("input", "[data-lot]", function () {
+		root.on("change", "[data-source]", function () {
+			const data = drafts.get(key()), id = this.dataset.source, previous = data[id];
+			if (this.value.startsWith("reuse:")) {
+				const row = rows.find(r => r.item_code === code && r.name === this.value.slice(6));
+				if (!row) return;
+				data[id] = fromRow(row);
+			} else {
+				data[id] = {...blank(), lot_source:this.value, manufactured_on:previous.manufactured_on, expires_on:previous.expires_on};
+			}
+			data.typed = true; render();
+		}).on("input", "[data-lot]", function () {
 			const data = drafts.get(key()); data[this.dataset.lot][this.dataset.field] = this.value; data.typed = true;
 		}).on("input", "[data-quantity]", function () {
 			drafts.get(key()).quantity = this.value; updateRemainder();
@@ -205,7 +242,7 @@
 			if (action === "split") { const data = drafts.get(key()); data.split = !data.split; }
 			if (action === "select") {
 				const group = visibleGroups().get(code), data = draft(group);
-				const eligible = group.filter(r => incomplete(r) && !r.lot_number);
+				const eligible = group.filter(r => incomplete(r) && !reference(r));
 				const deselect = eligible.every(r => data.selected.has(r.name));
 				for (const row of eligible) deselect ? data.selected.delete(row.name) : data.selected.add(row.name);
 				seedSelected(data, group);

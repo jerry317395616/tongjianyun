@@ -52,7 +52,7 @@
 		}
 		frm.set_query("canteen", () => ({ filters: { company: frm.doc.company, disabled: 0 } }));
 	}
-	function showLabels(doctype, names) {
+	function showLabels(doctype, names, foodLots = false) {
 		const pop = window.open("", "_blank", "width=620,height=720");
 		if (!pop) {
 			f.msgprint("请允许打开打印窗口。");
@@ -66,7 +66,7 @@
 		const state = doc.createElement("p");
 		state.textContent = "正在生成标签…";
 		doc.body.append(state);
-		api("ui.get_labels", { doctype, names: JSON.stringify(names) }, "GET").then(async (rows) => {
+		api("ui.get_labels", { doctype, names: JSON.stringify(names), food_lots: foodLots ? 1 : 0 }, "GET").then(async (rows) => {
 			if (pop.closed) return;
 			state.remove();
 			const images = [];
@@ -208,6 +208,10 @@
 		},
 		refresh(frm) {
 			if (frm.is_new() || frm.doc.docstatus === 2) return;
+			if (frm.doc.progress !== "拒接" && frm.doc.items?.some(row =>
+				(row.lot_number || row.receipt_trace_no) && row.manufactured_on && row.expires_on)) {
+				frm.add_custom_button("打印食材批次标签", () => showLabels(delivery, [frm.doc.name], true));
+			}
 			if (frm.doc.docstatus === 1) {
 				frm.add_custom_button("打印随货二维码", () => showLabels(delivery, [frm.doc.name]));
 				if (frm.doc.progress !== "到货") {

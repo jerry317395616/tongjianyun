@@ -152,6 +152,9 @@
 .lots-editor fieldset { border: 0; padding: 0; margin-top: 8px; }
 .lots-editor legend { color: var(--text-muted); font-size: 12px; margin: 0 0 6px; }
 .lots-inputs, .lots-quantities { display: grid; grid-template-columns: 1.2fr 1fr 1fr; align-items: end; gap: 10px; }
+.tjy-lots .lots-source { display: block; margin-bottom: 8px; font-size: 13px; }
+.tjy-lots .lots-source select { width: 100%; }
+.tjy-lots .lots-inputs input[readonly] { color: var(--text-muted); background: var(--lots-soft); }
 .lots-inputs label, .lots-quantities { font-size: 13px; }
 .lots-quantities { padding: 10px; margin-top: 6px; background: var(--lots-soft); border-radius: 8px; }
 .tjy-lots .lots-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); }

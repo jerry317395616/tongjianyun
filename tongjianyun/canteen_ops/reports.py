@@ -160,7 +160,8 @@ def ingredient_purchases(ctx):
 
 def inventory_batches(ctx):
     cols = COMPANY_COLS + [col("warehouse", "仓库", "Link", options="Warehouse"), col("item_code", "食材", "Link", options="Item"),
-        col("lot_number", "供应商批号"), col("lot_key", "追溯号"), col("expires_on", "到期日", "Date"),
+        col("lot_number", "供应商批号"), col("lot_source", "批号来源"), col("receipt_trace_no", "到货追溯号"),
+        col("lot_key", "库存追溯号"), col("expires_on", "到期日", "Date"),
         col("posted_qty", "账存或已追溯数量", "Float", 153), col("usable_qty", "合格批次数量", "Float"),
         col("reserved_qty", "原生库存预留", "Float"), col("stage", "状态", width=170)] + SOURCE_COLS
     rows = [row for site in ctx.sites for row in inventory.inventory_rows(site, ctx.filters, ctx.today)]
@@ -397,7 +398,7 @@ def quality_rows(ctx, site):
                     problems = purchasing.evidence_problems(doc, lot, applicable, getdate(doc.expected_on))
                     if problems:
                         yield row("采购与验收", "配送票证待核对", doc.expected_on, DELIVERY, doc.name,
-                                  f"{lot.item_code} / {lot.lot_number} · {'、'.join(problems)}", lot.name)
+                                  f"{lot.item_code} / {lot.lot_number or lot.receipt_trace_no or '待补'} · {'、'.join(problems)}", lot.name)
             if getdate(doc.expected_on) < ctx.today and not accessible(RECEIVING, {"delivery": doc.name, "docstatus": 1}):
                 yield row("采购与验收", "配送待完成验收", doc.expected_on, DELIVERY, doc.name, doc.progress)
         for entry in accessible(PRICE, {**base, "docstatus": 0}):
@@ -410,7 +411,7 @@ def quality_rows(ctx, site):
             if entry.get("stage") != "正常":
                 anchor = entry.get("source") or site.name
                 yield row("库存", entry["stage"], ctx.today, entry.get("source_type") or CANTEEN, anchor,
-                          f"{entry['item_code']} / {entry.get('lot_number', entry.get('warehouse'))}",
+                          f"{entry['item_code']} / {entry.get('lot_number') or entry.get('receipt_trace_no') or entry.get('warehouse')}",
                           f"{entry['warehouse']}-{entry['item_code']}-{entry.get('lot_key', '')}")
     if ctx.can_audit("供餐") or ctx.can_audit("食品安全"):
         for day, week, proof in kitchen_days(ctx, site):

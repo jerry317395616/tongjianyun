@@ -14,6 +14,8 @@
   "expected_qty",
   "uom",
   "lot_number",
+  "lot_source",
+  "receipt_trace_no",
   "expires_on",
   "evidence_status",
   "record_weight",
@@ -40,14 +42,16 @@
    "reqd": 1,
    "in_list_view": 1,
    "read_only": 1,
-   "options": "Item"
+   "options": "Item",
+   "columns": 2
   },
   {
    "fieldname": "expected_qty",
    "label": "随货数量",
    "fieldtype": "Float",
    "read_only": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 1
   },
   {
    "fieldname": "uom",
@@ -61,7 +65,22 @@
    "label": "随货批号",
    "fieldtype": "Data",
    "read_only": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "lot_source",
+   "label": "批号来源",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receipt_trace_no",
+   "label": "到货追溯号",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "expires_on",
@@ -102,14 +121,16 @@
    "label": "合格数量（采购单位）",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "non_negative": 1
+   "non_negative": 1,
+   "columns": 1
   },
   {
    "fieldname": "rejected_qty",
    "label": "拒收数量（采购单位）",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "non_negative": 1
+   "non_negative": 1,
+   "columns": 1
   },
   {
    "fieldname": "batch_no",

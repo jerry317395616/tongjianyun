@@ -12,7 +12,7 @@
 	};
 	const escape = value => frappe.utils.escape_html(String(value ?? ""));
 	const icon = (name) => frappe.utils.icon(name, "sm");
-	const incomplete = row => !(row.lot_number || "").trim() || !row.manufactured_on || !row.expires_on;
+	const incomplete = row => !(row.receipt_trace_no || row.lot_number || "").trim() || !row.manufactured_on || !row.expires_on;
 	const busy = new WeakSet();
 
 	async function quickEntry(frm) {

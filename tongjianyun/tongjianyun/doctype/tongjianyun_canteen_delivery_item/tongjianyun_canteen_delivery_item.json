@@ -14,6 +14,8 @@
   "quantity",
   "uom",
   "lot_number",
+  "lot_source",
+  "receipt_trace_no",
   "manufactured_on",
   "expires_on"
  ],
@@ -59,18 +61,32 @@
    "columns": 2
   },
   {
+   "fieldname": "lot_source",
+   "label": "批号来源",
+   "fieldtype": "Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receipt_trace_no",
+   "label": "到货追溯号",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
    "fieldname": "manufactured_on",
    "label": "生产日期",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "columns": 2
+   "columns": 1
   },
   {
    "fieldname": "expires_on",
    "label": "有效期",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "columns": 2
+   "columns": 1
   }
  ]
 }

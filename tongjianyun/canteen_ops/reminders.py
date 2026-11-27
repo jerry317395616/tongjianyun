@@ -44,4 +44,4 @@ def send_expiry_reminders():
             date = getdate(lot.expires_on)
             if date <= batch_limit:
                 prefix = "食材批次已过期" if date < today else "食材批次临期"
-                _notify(site.manager, frappe.get_doc(LOT_MOVEMENT, lot.name), lot.lot_number, prefix, date)
+                _notify(site.manager, frappe.get_doc(LOT_MOVEMENT, lot.name), lot.lot_number or lot.receipt_trace_no, prefix, date)

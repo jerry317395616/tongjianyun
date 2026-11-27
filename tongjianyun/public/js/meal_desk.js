@@ -25,7 +25,7 @@
 	// A second line identifies the business context when Frappe folds columns on smaller screens.
 	const rowContext = {
 		"Tongjianyun Meal Weekly Task":["week_start","company"], "Tongjianyun Canteen Finding":["category","company"],
-		"Tongjianyun Canteen Stock Lot Movement":["lot_number"], "Tongjianyun Meal Publication":["week_start"],
+		"Tongjianyun Canteen Stock Lot Movement":["lot_number","receipt_trace_no"], "Tongjianyun Meal Publication":["week_start"],
 		"Tongjianyun Canteen Receiving":["company"], "Tongjianyun Canteen Delivery":["purchase_order","company"],
 		"Tongjianyun Meal Safety Check":["company"], "Tongjianyun Meal Class Feedback":["company"],
 		"Tongjianyun Meal Diet Arrangement":["company"], "Tongjianyun Meal Diet Handover":["alternate"],
