@@ -13,7 +13,7 @@
 		frm.fields_dict.items?.disp_status !== "Read" && !frappe.boot.read_only;
 	function issues(frm, row) {
 		const live = line(frm,row).issues;
-		if (Array.isArray(live)) return live;
+		if (Array.isArray(live)) return row.delivery_note_exception ? ["送货单异常：" + row.delivery_note_exception, ...live] : live;
 		const saved = row.evidence_status;
 		return saved && !["已核对","票证齐全，待人工核实"].includes(saved) ? [saved] : [];
 	}
@@ -22,16 +22,22 @@
 		if (accepted < 0 || rejected < 0 || accepted + rejected > Number(row.expected_qty) + 1e-9) return false;
 		return Math.abs(accepted - Number(row.expected_qty)) < 1e-9 || hasReason(row.reason);
 	}
+	function checkedByNote(frm, row) {
+		return !row.delivery_note_exception && Boolean(frm.doc.verified_delivery_note) &&
+			line(frm,row).notes_covering_all_rules?.includes(frm.doc.verified_delivery_note);
+	}
 	function ticket(frm, row) {
 		const problems = issues(frm,row);
 		if (problems.length) return [problems.join("、"), "warn"];
-		return row.evidence_verified ? ["票证已核对","ok"] : ["待核票证","muted"];
+		if (checkedByNote(frm,row)) return ["送货单已核对","ok"];
+		if (row.evidence_verified || (frm.doc.docstatus && row.evidence_status === "已核对")) return ["票证已核对","ok"];
+		return [frm.doc.verified_delivery_note ? "待核明细票证" : "待核票证","muted"];
 	}
 	function nextRow(frm, current) {
 		const all = rows(frm), index = all.findIndex(r => r.name === current);
 		const ordered = index < 0 ? all : all.slice(index+1).concat(all.slice(0,index));
 		return ordered.find(r => !recorded(r)) || ordered.find(r =>
-			Number(r.accepted_qty) > 0 && !r.evidence_verified && !issues(frm,r).length);
+			Number(r.accepted_qty) > 0 && !r.evidence_verified && !checkedByNote(frm,r) && !issues(frm,r).length);
 	}
 	function fieldTab(frm, field) {
 		frm.fields_dict[field]?.tab?.set_active();
@@ -86,6 +92,9 @@
 			${frm.doc.docstatus === 1 && frm.doc.purchase_receipt && frappe.model.can_read("Purchase Receipt") ? act("receipt","查看采购收货单") : ""}
 			${act("proof","现场凭证"+(policy?.require_photo && !frm.doc.photo ? " · 待传照片" : ""))}
 			${editable && all.length ? act(frm.is_dirty() ? "save" : "continue", frm.is_dirty() ? "保存现场记录" : !done ? "开始核对" : done < all.length ? "继续核对" : "查看核对明细","tr-primary") : ""}</div></div>
+			${info(frm).delivery_notes?.length ? `<section class="tr-manifest"><div>${icon("clipboard")} <strong>本次配送送货单</strong>
+				<p>${frm.doc.verified_delivery_note ? "已人工核对整批送货单" : "已上传，待人工核对"} · ${all.length} 行配送明细</p></div>
+				${act("manifest",editable ? (frm.doc.verified_delivery_note ? "查看或调整核对结果" : "核对整批送货单") : "查看送货单")}</section>` : ""}
 			<section class="tr-work"><header><h3>食材验收明细</h3><span class="tr-results"></span></header>
 			<div class="tr-tools"><div class="tr-filters" role="group" aria-label="验收明细筛选">
 			${[["all","全部",all.length],["pending","待填数量",all.length-done],["issues","票证异常",blocked]].map(([k,text,n]) =>
@@ -105,6 +114,7 @@
 			if (row) inspect(frm, row);
 		}).on("click.inspection","[data-act]", async e => {
 			const action = e.currentTarget.dataset.act;
+			if (action === "manifest") return reviewDeliveryNote(frm);
 			if (action === "proof") return fieldTab(frm,"photo");
 			if (action === "receipt") return frappe.set_route("Form","Purchase Receipt",frm.doc.purchase_receipt);
 			if (action === "delivery") return window.open(frappe.utils.get_form_link("Tongjianyun Canteen Delivery",frm.doc.delivery),"_blank","noopener");
@@ -115,6 +125,69 @@
 			}
 			if (action === "continue" && all.length) inspect(frm, nextRow(frm) || all[0]);
 		});
+	}
+
+	function reviewDeliveryNote(frm) {
+		const notes = info(frm).delivery_notes, all = rows(frm), editable = writable(frm);
+		if (!notes?.length) return;
+		const dialog = new frappe.ui.Dialog({
+			title: "核对本次配送送货单", size:"large", no_submit_on_enter:true,
+			fields:[{fieldname:"review",fieldtype:"HTML"}]
+		});
+		const root = dialog.fields_dict.review.$wrapper;
+		const start = notes.find(t => t.id === frm.doc.verified_delivery_note) || notes.find(t => !t.expired) || notes[0];
+		const exceptions = new Map(all.filter(r => r.delivery_note_exception).map(r => [r.name,r.delivery_note_exception]));
+		root.html(`<div class="tr-note-review"><label class="tr-note-source">送货单
+			<select class="form-control" data-note>${notes.map(t=>`<option value="${esc(t.id)}">${esc(t.number)}${t.expired ? "（到货时已过期）" : ""}</option>`).join("")}</select></label>
+			<a data-attachment target="_blank" rel="noopener noreferrer">查看送货单附件 ↗</a>
+			<p>对照附件核对本次配送的 ${all.length} 行。仅标记漏列、批号不符等异常，短送和拒收数量在食材明细登记。</p>
+			<div class="tr-note-list" role="region" aria-label="送货单明细" tabindex="0">${all.map(r => `<div class="tr-note-line" data-line="${esc(r.name)}">
+				<div><strong>${esc(title(frm,r))}</strong><small>${esc(r.lot_number || r.receipt_trace_no || "待补批号")}</small></div>
+				<span>随货 ${qty(r.expected_qty)} ${esc(__(r.uom || ""))}<small>${recorded(r) ? "合格 "+qty(r.accepted_qty)+" · 拒收 "+qty(r.rejected_qty) : "实收待登记"}</small></span>
+				<label><input type="checkbox" ${exceptions.has(r.name) ? "checked" : ""} ${editable ? "" : "disabled"}> 异常</label>
+				<input type="text" class="form-control" aria-label="${esc(title(frm,r))}异常说明" placeholder="填写漏列或批号不符等原因" ${exceptions.has(r.name) ? "" : "hidden"} ${editable ? "" : "readonly"} value="${esc(exceptions.get(r.name) || "")}">
+			</div>`).join("")}</div><div class="tr-note-total" aria-live="polite"></div></div>`);
+		const select = root.find("[data-note]").val(start.id);
+		function update() {
+			const note = notes.find(t => t.id === select.val());
+			const link = root.find("[data-attachment]");
+			link.removeAttr("href");
+			if (note && /^(?:\/(?!\/)|https?:\/\/)/i.test(note.file)) link.attr("href",note.file);
+			root.find(".tr-note-total").text(`本次核对 ${all.length-exceptions.size} 行 · 标记异常 ${exceptions.size} 行`);
+			dialog.get_primary_btn().prop("disabled",editable && (!note || note.expired));
+		}
+		select.on("change",update);
+		root.on("change","input[type=checkbox]",function(){
+			const el = $(this).closest("[data-line]"), key = el.attr("data-line"), input = el.find("input[type=text]");
+			if (this.checked) { exceptions.set(key,input.val()); input.prop("hidden",false).trigger("focus"); }
+			else { exceptions.delete(key); input.val("").prop("hidden",true); }
+			update();
+		}).on("input","input[type=text]",function(){
+			exceptions.set($(this).closest("[data-line]").attr("data-line"),this.value.trim());
+		});
+		dialog.set_primary_action(editable ? "确认核对并保存" : "关闭", async () => {
+			if (!editable) return dialog.hide();
+			if (!writable(frm)) return;
+			for (const r of all) {
+				if (exceptions.has(r.name) && !exceptions.get(r.name)) {
+					root.find("[data-line]").filter((_,el)=>el.dataset.line===r.name).find("input[type=text]").trigger("focus");
+					return frappe.msgprint("请填写「"+esc(title(frm,r))+"」的送货单异常说明。");
+				}
+			}
+			dialog.get_primary_btn().prop("disabled",true);
+			try {
+				for (const r of all) {
+					const reason = exceptions.get(r.name) || "";
+					if (reason !== (r.delivery_note_exception || "")) await frappe.model.set_value(r.doctype,r.name,"delivery_note_exception",reason);
+				}
+				await frm.set_value("verified_delivery_note",select.val());
+				if (frm.is_dirty()) await frm.save();
+				await frm.reload_doc();
+				dialog.hide();
+			} finally { update(); }
+		});
+		dialog.show();
+		update();
 	}
 
 	function inspect(frm, firstRow) {
@@ -140,7 +213,7 @@
 			const full = Math.abs(Number(row.accepted_qty || 0)-expected)<1e-9 && !Number(row.rejected_qty);
 			mode = full && !hasReason(row.reason) ? "full" :
 				(hasReason(row.reason) || Number(row.rejected_qty) || Number(row.accepted_qty) ? "adjust" : "");
-			const details = line(frm,row), problems = issues(frm,row);
+			const details = line(frm,row), problems = issues(frm,row), covered = checkedByNote(frm,row);
 			const name = title(frm,row), all = rows(frm), idx = all.findIndex(r => r.name === row.name);
 			const image = info(frm).images?.[row.item_code];
 			const photo = typeof image === "string" && /^\/(?:private\/files|files|assets)\//.test(image)
@@ -164,8 +237,8 @@
 					<label class="tri-reason">差异或拒收原因<textarea name="reason" rows="2" placeholder="例如：短送 0.1 公斤，或包装破损拒收">${esc(hasReason(row.reason) ? row.reason : "")}</textarea></label>
 				</div></section>
 			<section class="tri-block"><h4>随货票证</h4><div class="tri-ticket ${problems.length ? "tri-missing" : ""}">
-				<div>${icon(problems.length ? "info" : "clipboard")}<strong>${esc(problems.length ? problems.join("、") : "人工核对")}</strong></div>
-				<label><input type="checkbox" name="verified" ${Number(row.evidence_verified) ? "checked" : ""}>已核对该批票证</label>
+				<div>${icon(problems.length ? "info" : "clipboard")}<strong>${esc(problems.length ? problems.join("、") : covered ? "整批送货单已人工核对" : "人工核对")}</strong></div>
+				<label ${covered ? "hidden" : ""}><input type="checkbox" name="verified" ${Number(row.evidence_verified) ? "checked" : ""}>已核对该批票证</label>
 				${editable && problems.length ? '<p>可先登记实收，补齐票证后再复核入库。</p>' : ""}</div></section>
 			<section class="tri-weight"><label class="tri-weigh-toggle">${icon("scale")}<span>登记现场称重</span>
 				<input type="checkbox" name="weigh" ${withWeight ? "checked" : ""}></label>

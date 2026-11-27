@@ -99,6 +99,7 @@
  "field_order": [
   "inspection_tab",
   "inspection_board",
+  "verified_delivery_note",
   "proof_tab",
   "field_section",
   "photo",
@@ -126,6 +127,13 @@
   "amended_from"
  ],
  "fields": [
+  {
+   "fieldname": "verified_delivery_note",
+   "label": "已人工核对的整批送货单",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "no_copy": 1
+  },
   {
    "fieldname": "company",
    "label": "园所 / 账套",

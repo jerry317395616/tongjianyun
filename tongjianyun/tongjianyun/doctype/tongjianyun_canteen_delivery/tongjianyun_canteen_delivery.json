@@ -208,7 +208,7 @@
    "fieldtype": "Table",
    "options": "Tongjianyun Canteen Delivery Evidence",
    "allow_on_submit": 1,
-   "description": "按食堂的验收要求登记票证号，并附上本批次对应的凭证。"
+   "description": "整批送货单只需登记一次，填写票证号并上传附件，对应食材和适用批号留空。专项票证按食堂要求关联食材和批号。"
   },
   {
    "fieldname": "remarks",

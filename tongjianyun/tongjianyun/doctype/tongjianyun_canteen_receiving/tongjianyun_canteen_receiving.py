@@ -2,7 +2,7 @@ import frappe
 from frappe.utils import getdate
 
 from tongjianyun.canteen_ops.common import DELIVERY, CanteenDocument, active_policy
-from tongjianyun.canteen_ops.purchasing import evidence_problems, evidence_rules
+from tongjianyun.canteen_ops.purchasing import evidence_problems, evidence_rules, note_verifies_line, whole_delivery_note
 
 
 class TongjianyunCanteenReceiving(CanteenDocument):
@@ -18,6 +18,11 @@ class TongjianyunCanteenReceiving(CanteenDocument):
         if delivery.company != self.company or delivery.canteen != self.canteen or not delivery.has_permission("read"):
             return
         details["can_open_delivery"] = True
+        notes = [t for t in delivery.evidence if whole_delivery_note(t)]
+        date = getdate(self.arrived_at)
+        details["delivery_notes"] = [{"id": t.name, "number": t.reference_no, "file": t.attachment,
+                                      "expired": bool(t.valid_until and getdate(t.valid_until) < date)} for t in notes]
+        selected = next((t for t in notes if t.name == self.verified_delivery_note), None)
         delivery.onload()
         manifest = delivery.get_onload() or {}
         details["names"] = manifest.get("delivery_item_names", {})
@@ -33,8 +38,11 @@ class TongjianyunCanteenReceiving(CanteenDocument):
             if policy:
                 if row.item_code not in rules:
                     rules[row.item_code] = evidence_rules(policy, row.item_code)
+                applicable = rules[row.item_code]
+                line["notes_covering_all_rules"] = [t.name for t in notes if note_verifies_line(t, applicable)
+                                                    and (not t.valid_until or getdate(t.valid_until) >= date)]
                 key = row.item_code, row.lot_number
                 if key not in issues:
                     issues[key] = evidence_problems(delivery, row, policy, getdate(self.arrived_at),
-                                                    rules=rules[row.item_code])
+                                                    rules=applicable, note=selected)
                 line["issues"] = issues[key]

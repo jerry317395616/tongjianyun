@@ -35,6 +35,7 @@
   {
    "fieldname": "require_matching_batch",
    "label": "核对批号",
+   "description": "整批送货单统一核对配送清单。限定食材的票证及专项票证按本项核对批号。",
    "fieldtype": "Check",
    "default": "1",
    "in_list_view": 1,

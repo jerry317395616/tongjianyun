@@ -18,6 +18,7 @@
   "receipt_trace_no",
   "expires_on",
   "evidence_status",
+  "delivery_note_exception",
   "record_weight",
   "gross_weight",
   "tare_weight",
@@ -29,6 +30,12 @@
   "evidence_verified"
  ],
  "fields": [
+  {
+   "fieldname": "delivery_note_exception",
+   "label": "送货单异常说明",
+   "fieldtype": "Small Text",
+   "no_copy": 1
+  },
   {
    "fieldname": "delivery_item",
    "label": "配送明细编号",

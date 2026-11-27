@@ -222,16 +222,26 @@
 						option("evidence_type", "票证类型", "Select", [
 							"送货单", "产品合格证明", "同批次检验报告", "检疫证明", "肉品品质检验合格证", "食品经营资质", "其他票证"
 						]),
+						{fieldname:"scope", label:"送货单覆盖范围", fieldtype:"Select",
+							options:["本次配送全部明细","指定食材"], default:"本次配送全部明细",
+							depends_on:"eval:doc.evidence_type === '送货单'"},
 						option("reference_no", "票证号", "Data"),
 						{ fieldname: "item_code", label: "对应食材", fieldtype: "Select",
+							depends_on:"eval:doc.evidence_type !== '送货单' || doc.scope === '指定食材'",
+							mandatory_depends_on:"eval:doc.evidence_type === '送货单' && doc.scope === '指定食材'",
 							options: ["", ...new Set(frm.doc.items.map((row) => row.item_code))] },
-						{ fieldname: "lot_number", label: "适用批号", fieldtype: "Data" },
+						{ fieldname: "lot_number", label: "适用批号", fieldtype: "Data",
+							depends_on:"eval:doc.evidence_type !== '送货单' || doc.scope === '指定食材'" },
 						{ fieldname: "valid_until", label: "票证有效期", fieldtype: "Date" }
 					], (values) => {
+						const {scope, ...ticket} = values;
+						if (ticket.evidence_type === "送货单" && scope !== "指定食材") {
+							ticket.item_code = ticket.lot_number = "";
+						}
 						new f.ui.FileUploader({
 							doctype: delivery, docname: frm.doc.name, allow_multiple: false, make_private: 1,
 							async on_success(file) {
-								await api("purchasing.add_delivery_evidence", { name: frm.doc.name, ...values, attachment: file.file_url });
+								await api("purchasing.add_delivery_evidence", { name: frm.doc.name, ...ticket, attachment: file.file_url });
 								await frm.reload_doc();
 							}
 						});

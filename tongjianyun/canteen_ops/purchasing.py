@@ -501,19 +501,42 @@ def add_delivery_evidence(name, evidence_type, reference_no, attachment, item_co
     return doc.name
 
 
-def evidence_problems(delivery, row, policy, date, *, rules=None):
+def whole_delivery_note(ticket):
+    return (ticket.evidence_type == "送货单" and not ticket.item_code and not ticket.lot_number
+            and ticket.reference_no and ticket.attachment)
+
+
+def current_delivery_note(delivery, name, date):
+    if not name:
+        return None
+    note = next((t for t in delivery.evidence if t.name == name and whole_delivery_note(t)), None)
+    require(note, "所核对的送货单须属于本次配送并覆盖整批。")
+    require(not note.valid_until or getdate(note.valid_until) >= date, "所选送货单在到货日已过期。")
+    return note
+
+
+def note_verifies_line(note, rules):
+    return bool(note and rules and all(rule.evidence_type == "送货单" and
+                (not rule.require_expiry or note.valid_until) for rule in rules))
+
+
+def evidence_problems(delivery, row, policy, date, *, rules=None, note=None):
     applicable = rules if rules is not None else evidence_rules(policy, row.item_code)
     if not applicable:
         return ["该食材缺少适用的票证规则"]
     problems = []
     for rule in applicable:
         matches = [item for item in delivery.evidence if item.evidence_type == rule.evidence_type and
-                   (item.item_code == row.item_code or not item.item_code) and item.attachment and item.reference_no]
+                   (item.item_code == row.item_code or not item.item_code) and item.attachment and item.reference_no
+                   and (not note or not whole_delivery_note(item) or item.name == note.name)]
         if not matches:
             problems.append(f"缺少{rule.evidence_type}")
             continue
         valid = [item for item in matches if (
-            (not rule.require_matching_batch or (row.lot_number and item.item_code == row.item_code and item.lot_number == row.lot_number))
+            (whole_delivery_note(item) or (
+                (not item.lot_number or item.lot_number == row.lot_number) and
+                (not rule.require_matching_batch or (row.lot_number and item.item_code == row.item_code and item.lot_number == row.lot_number))
+            ))
             and (not rule.require_expiry or item.valid_until)
             and (not item.valid_until or getdate(item.valid_until) >= date)
         )]
@@ -574,6 +597,9 @@ class Receiving(Handler):
         lots = {row.name: row for row in delivery.items}
         require(len({row.delivery_item for row in doc.items}) == len(doc.items) and
                 set(lots) == {row.delivery_item for row in doc.items}, "请逐条核对配送单的全部批次。")
+        date = getdate(doc.arrived_at)
+        note = current_delivery_note(delivery, doc.verified_delivery_note, date)
+        rules = {code: evidence_rules(policy, code) for code in {lot.item_code for lot in lots.values()}}
         for row in doc.items:
             lot = lots[row.delivery_item]
             row.item_code = lot.item_code
@@ -583,8 +609,13 @@ class Receiving(Handler):
             row.lot_source = lot.lot_source or UPSTREAM
             row.receipt_trace_no = lot.receipt_trace_no
             row.expires_on = lot.expires_on
-            issues = evidence_problems(delivery, lot, policy, getdate(doc.arrived_at))
-            row.evidence_status = "、".join(issues) or ("已核对" if row.evidence_verified else "票证齐全，待人工核实")
+            applicable = rules[lot.item_code]
+            issues = evidence_problems(delivery, lot, policy, date, rules=applicable, note=note)
+            row.delivery_note_exception = (row.delivery_note_exception or "").strip()
+            if row.delivery_note_exception:
+                issues.insert(0, "送货单异常：" + row.delivery_note_exception)
+            checked = row.evidence_verified or note_verifies_line(note, applicable)
+            row.evidence_status = "、".join(issues) or ("已核对" if checked else "票证齐全，待人工核实")
             gross, tare = decimal(row.gross_weight), decimal(row.tare_weight)
             require(gross >= tare >= 0, "称重毛重须大于等于皮重。")
             row.net_weight = float(gross - tare) if row.gross_weight or row.tare_weight else None
@@ -624,14 +655,20 @@ class Receiving(Handler):
         acceptance = [row for row in doc.items if decimal(row.accepted_qty) > 0]
         if acceptance and policy.require_supplier_credential:
             require(credentials(doc.canteen, doc.supplier, getdate(doc.arrived_at)), "供应商资质在验收日期无效。")
+        date = getdate(doc.arrived_at)
+        note = current_delivery_note(delivery, doc.verified_delivery_note, date)
+        rules = {code: evidence_rules(policy, code) for code in {lines[r.delivery_item].item_code for r in acceptance}}
         for row in acceptance:
             lot = lines[row.delivery_item]
+            require(not row.delivery_note_exception, f"第 {row.idx} 行送货单异常待处理。")
             on_date = max(getdate(), getdate(doc.arrived_at))
             require(getdate(lot.manufactured_on) <= getdate(doc.arrived_at) <= on_date <= getdate(lot.expires_on),
                     "生产日期或有效期异常，不能作为合格入库。")
-            problems = evidence_problems(delivery, lot, policy, getdate(doc.arrived_at))
+            applicable = rules[lot.item_code]
+            problems = evidence_problems(delivery, lot, policy, date, rules=applicable, note=note)
             require(not problems, f"{row.item_code}：{'、'.join(problems)}。")
-            require(row.evidence_verified, "合格数量入库前须人工核对随货票证。")
+            require(row.evidence_verified or note_verifies_line(note, applicable),
+                    f"第 {row.idx} 行合格数量入库前须人工核对相应票证。")
         if acceptance:
             doc.purchase_receipt = _mapped_receipt(doc, delivery, linked(CANTEEN, doc.canteen),
                                                    delivery_order(delivery, lock=True), lines)
