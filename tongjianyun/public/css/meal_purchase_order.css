@@ -1,0 +1,65 @@
+.mpo, .mpo-drawer { --po-ink:#173e35; --po-green:#095944; --po-line:#dde5df; --po-muted:#61766b; }
+.mpo { margin:16px clamp(12px,2vw,32px) 24px; color:var(--po-ink); font-size:14px; }
+.mpo-fields-folded { display:none!important; }
+.mpo-head,.mpo-title,.mpo-controls,.mpo-tabs,.mpo footer,.mpo-item,.mpo-banner div,.mpo-invite-lines>div {
+	display:flex; align-items:center;
+}
+.mpo-fields-folded { display:none !important; }
+.mpo-head,.mpo-controls,.mpo footer,.mpo-invite-lines>div { justify-content:space-between; gap:12px; }
+.mpo-head { margin-bottom:18px; }
+.mpo-title { gap:12px; margin-bottom:3px; }
+.mpo-title h1,.mpo-title h2 { margin:0; font-size:clamp(24px,2.1vw,35px); letter-spacing:-.04em; color:var(--heading-color); }
+.mpo-state { background:#f8edcf; color:#845a09; font-weight:600; border-radius:20px; padding:4px 10px; font-size:12px; }
+.mpo-head small,.mpo footer,.mpo-invite small { color:var(--po-muted); }
+.mpo-banner { position:relative; border:1px solid var(--po-line); padding:18px clamp(14px,2vw,26px); border-radius:14px;
+	background:#ecf3e8 url("/assets/tongjianyun/images/weekly-menu-banner.webp") no-repeat right center / auto 100%; overflow:hidden; isolation:isolate; }
+.mpo-banner::before { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(90deg,#eaf3e7 0%,#ecf4e9 45%,rgba(238,245,236,.76) 61%,transparent 87%); }
+.mpo-banner div { flex-wrap:wrap; column-gap:12px; margin-bottom:8px; }
+.mpo-banner div>span { display:inline-flex; align-items:center; gap:7px; color:#476958; }
+.mpo-banner strong { font-size:clamp(15px,1.1vw,19px); color:#163e31; }
+.mpo-banner p { display:flex; gap:6px; align-items:baseline; margin:10px 0 0; color:#375646; }
+.mpo-banner b { font-size:21px; line-height:1.15; color:#123f32; font-variant-numeric:tabular-nums; }
+.mpo-banner i { border-left:1px solid #afc5b7; height:.9em; margin:0 8px; }
+.mpo-controls { padding:16px 0 10px; }
+.mpo-tabs { gap:4px; background:var(--subtle-fg,#f0f3f1); border-radius:9px; padding:3px; }
+.mpo-btn { display:inline-flex; align-items:center; justify-content:center; min-height:33px; padding:6px 13px; border:1px solid var(--po-line); border-radius:7px;
+	background:var(--card-bg,#fff); color:var(--text-color); cursor:pointer; font:inherit; font-weight:550; }
+.mpo-tabs .mpo-btn { border:0; background:transparent; }
+.mpo-btn.mpo-primary,.mpo-tabs .mpo-btn[aria-pressed=true] { background:var(--po-green); color:white; }
+.mpo-primary { min-height:38px; padding-inline:18px; }
+.mpo-btn:focus-visible,.mpo a:focus-visible { outline:2px solid #419f79; outline-offset:2px; }
+.mpo-btn:hover { filter:brightness(.96); }
+.mpo-scroll { max-height:min(62vh,720px); overflow:auto; border:1px solid var(--po-line); border-radius:12px; background:var(--card-bg,#fff); }
+.mpo table { width:100%; min-width:580px; border-collapse:separate; border-spacing:0; color:var(--text-color); font-variant-numeric:tabular-nums; }
+.mpo td,.mpo th { padding:9px 14px; text-align:left; white-space:nowrap; }
+.mpo td { border-top:1px solid var(--po-line); }
+.mpo thead th { position:sticky; top:0; background:var(--subtle-fg,#f3f6f3); color:var(--po-muted); z-index:1; font-weight:600; font-size:13px; }
+.mpo .mpo-number { text-align:right; }
+.mpo tbody tr:hover { background:var(--subtle-fg,#f5f7f5); }
+.mpo-item { gap:11px; }
+.mpo-item img,.mpo-item i { width:46px; height:37px; border-radius:6px; object-fit:cover; background:#eff3eb; }
+.mpo-item i { display:grid; place-content:center; }
+.mpo-item b { font-weight:600; }
+.mpo-day th { background:var(--subtle-fg,#f3f6f3); color:var(--po-green); }
+.mpo-day small { margin-left:8px; font-weight:400; }
+.mpo footer { margin-top:11px; font-size:12px; }
+.mpo footer a,.mpo-invite a { color:var(--po-green); }
+.mpo-drawer .modal-dialog { width:min(100%,530px); max-width:530px; margin:0 0 0 auto; }
+.mpo-drawer .modal-content { border-radius:16px 0 0 16px; min-height:100dvh; }
+.mpo-drawer .modal-body { padding:18px 22px; }
+.mpo-drawer .modal-footer { margin-top:auto; }
+.mpo-vendor { padding:16px; border-radius:10px; background:#edf4ee; color:#174c3d; }
+.mpo-vendor strong { display:block; font-size:18px; margin-top:5px; }
+.mpo-invite h4 { font-size:16px; margin:22px 0 8px; }
+.mpo-invite h4 small { margin-left:6px; font-size:13px; }
+.mpo-invite-lines { max-height:55vh; overflow:auto; }
+.mpo-invite-lines>div { border-bottom:1px solid var(--po-line); padding:7px 0; }
+.mpo-invite p { margin:14px 0; }
+@media(max-width:640px){
+	.mpo { margin:10px 6px 16px; }
+	.mpo td,.mpo th { padding:8px; }
+	.mpo-title { flex-wrap:wrap; gap:5px; }
+	.mpo-banner::before { background:linear-gradient(90deg,#ecf4e9 20%,rgba(238,245,236,.94) 70%,rgba(238,245,236,.55)); }
+	.mpo-controls { flex-wrap:wrap; }
+	.mpo-item img,.mpo-item i { width:32px; height:30px; }
+}

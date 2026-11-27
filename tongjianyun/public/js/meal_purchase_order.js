@@ -1,56 +1,195 @@
 (() => {
-	const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
-	const canPurchase = () => ["System Manager", "Purchase Manager", "膳食业务经办员"].some((role) => frappe.user.has_role(role));
-	const canConfirm = () => ["System Manager", "Purchase Manager"].some((role) => frappe.user.has_role(role));
-
-	async function action(frm, button, method, args) {
-		if (frm.__meal_quote_busy) return;
-		try {
-			if (frm.is_new() || frm.is_dirty()) frappe.throw(__("请先保存采购订单，再应用或确认供应商报价。"));
-			frm.__meal_quote_busy = true;
-			button?.prop("disabled", true);
-			const response = await frappe.call({ method, args, freeze: true, freeze_message: __("正在核对本单供应商报价…") });
-			if (response.exc) throw new Error(__("操作未完成，请查看服务器提示。"));
-			await frm.reload_doc();
-		} catch (error) {
-			if (!error?._server_messages && !error?.responseJSON?._server_messages) frappe.msgprint({ title: __("报价操作未完成"), indicator: "red", message: esc(error?.message || "请求失败，请重试。") });
-		} finally {
-			frm.__meal_quote_busy = false;
-			button?.prop("disabled", false);
+	const esc = value => frappe.utils.escape_html(String(value ?? ""));
+	const icon = name => frappe.utils.icon(name, "sm");
+	const hasRole = (...roles) => roles.some(role => frappe.user.has_role(role));
+	const buyer = () => hasRole("System Manager", "Purchase Manager", "膳食业务经办员");
+	const reviewer = () => hasRole("System Manager", "Purchase Manager");
+	const quoteApi = "tongjianyun.meal_order_quotation.";
+	const buyApi = "tongjianyun.meal_purchasing.";
+	const formatQty = value => Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 9 });
+	const fmtDate = value => value ? value.slice(5).replace(/^(\d\d)-(\d\d)$/, (_, m, d) => Number(m) + "月" + Number(d) + "日") : "—";
+	const datesOf = rows => [...new Set(rows.map(r => r.schedule_date).filter(Boolean))].sort();
+	const period = dates => dates.length > 1 ? fmtDate(dates[0]) + " – " + fmtDate(dates.at(-1)) : fmtDate(dates[0]);
+	const link = (dt, name, label) => `<a href="${esc(frappe.utils.get_form_link(dt, name))}">${esc(label)}</a>`;
+	const btn = (key, label, primary = false) => `<button type="button" data-po-action="${key}" class="mpo-btn${primary ? " mpo-primary" : ""}">${esc(label)}</button>`;
+	function snapshot(doc) {
+		try { return JSON.parse(doc.custom_meal_quote_snapshot || "{}") || {}; } catch { return {}; }
+	}
+	function groups(rows) {
+		const result = new Map();
+		for (const row of rows) {
+			const key = JSON.stringify([row.item_code, row.uom]);
+			if (!result.has(key)) result.set(key, []);
+			result.get(key).push(row);
+		}
+		return [...result.values()];
+	}
+	function dishCell(row) {
+		const src = /^\/(?!\/)|^https?:\/\//i.test(row.image || "") ? row.image : "";
+		return `<span class="mpo-item">${src ? `<img alt="" loading="lazy" src="${esc(src)}">` : `<i>${icon("package")}</i>`}<b>${esc(row.item_name || row.item_code)}</b></span>`;
+	}
+	function price(rows, currency) {
+		if (rows.some(r => !r.supplier_quotation || !Number(r.rate))) return "—";
+		const rates = rows.map(r => Number(r.rate));
+		const fmt = value => esc(format_currency(value, currency));
+		const lo = Math.min(...rates), hi = Math.max(...rates);
+		return lo === hi ? fmt(lo) : fmt(lo) + " – " + fmt(hi);
+	}
+	function renderTable(view) {
+		const { doc, panel, byDate } = view;
+		const rows = doc.items || [];
+		const body = [];
+		const tableRow = (items, date) => {
+			const first = items[0];
+			return `<tr><td>${dishCell(first)}</td><td class="mpo-number">${formatQty(items.reduce((n, r) => n + Number(r.qty), 0))}</td><td>${esc(first.uom)}</td><td>${esc(date)}</td><td class="mpo-number">${price(items, doc.currency)}</td></tr>`;
+		};
+		if (byDate) {
+			const days = new Map();
+			for (const row of rows) {
+				const day = row.schedule_date || "";
+				if (!days.has(day)) days.set(day, []);
+				days.get(day).push(row);
+			}
+			for (const day of [...days.keys()].sort()) {
+				body.push(`<tr class="mpo-day"><th colspan="5">${fmtDate(day)} <small>${days.get(day).length} 条明细</small></th></tr>`);
+				for (const row of days.get(day)) body.push(tableRow([row], fmtDate(day)));
+			}
+		} else {
+			for (const items of groups(rows)) body.push(tableRow(items, period(datesOf(items))));
+		}
+		panel.find(".mpo-tabs button").each((_, el) => el.setAttribute("aria-pressed", String((el.dataset.poAction === "days") === byDate)));
+		panel.find("tbody").html(body.join("") || '<tr><td colspan="5">暂无采购明细</td></tr>');
+		panel.find(".mpo-qty").text(byDate ? "需求数量" : "采购总量");
+	}
+	function actionState(view) {
+		const { doc, invitation } = view;
+		if (doc.docstatus === 2) return ["已取消"];
+		if (doc.docstatus === 1) return [__(doc.status || "Submitted")];
+		if (snapshot(doc).confirmed) return ["报价已确认", "submit", "提交订单"];
+		if (doc.items?.length && doc.items.every(r => r.supplier_quotation)) return ["待审核", "review", "确认本单报价"];
+		if (invitation?.outdated) return ["询价待更新", "progress", "核对询价单"];
+		if (invitation?.name) return [invitation.quotes?.length ? "已收到报价" : invitation.submitted ? "等待供应商报价" : "询价草稿", "progress", "查看报价进度"];
+		return ["待报价", "invite", "邀请供应商报价"];
+	}
+	function renderHeader(frm, view) {
+		const [state, key, label] = actionState(view);
+		view.panel.find(".mpo-state").text(state);
+		if (view.doc.docstatus === 0 && !snapshot(view.doc).confirmed) {
+			if (frm.page.btn_primary?.attr("data-label") === __("Submit")) frm.page.clear_primary_action();
+			frm.layout.message?.children(".form-message").filter((_, el) =>
+				el.textContent.trim() === __("Submit this document to confirm")).remove();
+		}
+		const permitted = buyer() && frm.perm?.[0]?.write && (key !== "invite" || frappe.model.can_create("Request for Quotation"))
+			&& (key !== "review" || (reviewer() && view.doc.owner !== frappe.session.user))
+			&& (key !== "submit" || (reviewer() && frm.perm?.[0]?.submit));
+		view.panel.find(".mpo-next").html(key && permitted ? btn(key, label, true) : "");
+	}
+	function dialog(title, fields, label, primary) {
+		const d = new frappe.ui.Dialog({ title, fields, primary_action_label: label, primary_action: primary });
+		d.$wrapper.addClass("mpo-drawer");
+		d.show();
+		return d;
+	}
+	function showInvite(frm, view) {
+		const doc = view.doc, entries = groups(doc.items);
+		const html = `<div class="mpo-invite"><div class="mpo-vendor"><small>报价供应商</small><strong>${esc(doc.supplier_name || doc.supplier)}</strong></div><h4>报价清单 <small>${entries.length} 项</small></h4><div class="mpo-invite-lines">${entries.map(items => `<div>${dishCell(items[0])}<span>${formatQty(items.reduce((s,r) => s + Number(r.qty), 0))} ${esc(items[0].uom)}</span></div>`).join("")}</div><p>生成询价草稿后，核对供应商联系人并提交询价单。供应商可登录门户填写单价。</p></div>`;
+		const d = dialog("邀请供应商报价", [{ fieldtype:"HTML", fieldname:"summary", options:html }], "生成询价草稿", async () => {
+			if (frm.is_dirty()) return frappe.msgprint("请先保存订单字段。");
+			d.get_primary_btn().prop("disabled", true);
+			try {
+				const { message } = await frappe.call({ method:quoteApi+"prepare", args:{ order:doc.name }, freeze:true });
+				if (message) {
+					d.hide();
+					frappe.set_route("Form", "Request for Quotation", message);
+				}
+			} finally { d.get_primary_btn().prop("disabled", false); }
+		});
+	}
+	function showProgress(frm, view) {
+		const info = view.invitation;
+		const quotes = (info.quotes || []).map(q => `<p>${link("Supplier Quotation", q.name, q.name)} · ${q.docstatus === 1 ? "已提交" : "草稿，待补全有效期并提交"}</p>`).join("");
+		const html = `<div class="mpo-invite"><div class="mpo-vendor"><small>供应商</small><strong>${esc(view.doc.supplier_name || view.doc.supplier)}</strong></div><h4>询价单</h4><p>${link("Request for Quotation", info.name, info.name)} · ${info.submitted ? "已提交" : "草稿"}</p>
+			<h4>供应商报价</h4>${quotes || `<p>${info.outdated ? "本单的供应商或采购明细与询价单有差异，请打开原询价单核对后重新邀请。" : info.submitted ? "等待供应商登录门户填写单价。" : "打开询价单，核对联系人并提交后即可邀请报价。"}</p>`}
+			${info.portal_url ? '<button type="button" class="mpo-btn mpo-copy">复制供应商报价链接</button>' : ""}</div>`;
+		const d = dialog("查看报价进度", [{fieldtype:"HTML", fieldname:"summary", options:html}], "打开询价单", () => {
+			d.hide(); frappe.set_route("Form", "Request for Quotation", info.name);
+		});
+		d.$wrapper.find(".mpo-copy").on("click", () => frappe.utils.copy_to_clipboard(info.portal_url));
+		const submitted = info.quotes?.find(q => q.docstatus === 1);
+		if (submitted) {
+			d.set_secondary_action(() => { d.hide(); applyQuote(frm, submitted.name); });
+			d.set_secondary_action_label("应用供应商报价");
 		}
 	}
-
-	function quoteState(frm) {
-		try { return JSON.parse(frm.doc.custom_meal_quote_snapshot || "{}"); } catch (error) { return {}; }
+	async function update(frm, method, args) {
+		if (frm.__meal_quote_busy) return;
+		if (frm.is_dirty()) return frappe.msgprint("请先保存订单字段。");
+		frm.__meal_quote_busy = true;
+		try {
+			await frappe.call({ method:buyApi+method, args:{ po_name:frm.doc.name, ...args }, freeze:true });
+			await frm.reload_doc();
+		} finally { frm.__meal_quote_busy = false; }
 	}
-
+	function applyQuote(frm, initial) {
+		frappe.prompt([{fieldname:"quote", fieldtype:"Link", options:"Supplier Quotation", label:"有效供应商报价", reqd:1,
+			default:initial, description:"报价晚于草稿日期时，将按当天日期下单。", get_query:() => ({filters:{
+				docstatus:1, company:frm.doc.company, supplier:frm.doc.supplier, currency:frm.doc.currency, valid_till:[">=",frappe.datetime.get_today()]
+			}})}], values => update(frm,"apply_supplier_quotation",{ quotation_name:values.quote }), "应用本单供应商报价", "应用报价");
+	}
+	function review(frm) {
+		if (frm.doc.owner === frappe.session.user) return frappe.msgprint("请由另一位采购审核人确认本单报价。");
+		frappe.confirm("已核对本单食材、采购单位、单价和配送日期？", () => update(frm, "confirm_purchase_order_quote", {}));
+	}
+	function render(frm) {
+		const doc = frm.doc, previous = frm.__mealOrderView;
+		previous?.panel.remove();
+		frm.layout.page.removeClass("mpo-fields-folded");
+		frm.__mealOrderView = null;
+		if (!doc.custom_meal_week || frm.is_new()) return;
+		frappe.require("/assets/tongjianyun/css/meal_purchase_order.css?v=1.css");
+		const same = previous?.doc.name === doc.name;
+		const view = { doc, byDate:same && previous.byDate, fields:same && previous.fields, invitation:null };
+		const panel = view.panel = $('<section class="mpo" aria-label="膳食采购订单"></section>').insertBefore(frm.layout.page);
+		frm.__mealOrderView = view;
+		const rows = doc.items || [];
+		panel.html(`<header class="mpo-head"><div><div class="mpo-title"><h2>采购订单</h2><span class="mpo-state"></span></div><small>${esc(doc.name)}</small></div><div class="mpo-next"></div></header>
+		<div class="mpo-banner"><div><span>${icon("building")} 供应商</span><strong>${esc(doc.supplier_name || doc.supplier)}</strong></div><div><span>${icon("calendar")} 配送周期</span><strong>${period(datesOf(rows))}</strong></div><p><b>${new Set(rows.map(r=>r.item_code)).size}</b> 种食材 <i></i> <b>${rows.length}</b> 条配送明细</p></div>
+		<div class="mpo-controls"><div class="mpo-tabs" role="group" aria-label="明细查看方式">${btn("items","按食材汇总")}${btn("days","按配送日期")}</div>${btn("fields","订单字段")}</div>
+		<div class="mpo-scroll"><table><thead><tr><th>食材</th><th class="mpo-number mpo-qty">采购总量</th><th>单位</th><th>配送日</th><th class="mpo-number">报价单价</th></tr></thead><tbody></tbody></table></div>
+		<footer>${link("Meal Planning Week",doc.custom_meal_week,"来源周食谱 ↗")}<span>${esc(doc.company)}</span></footer>`);
+		const syncFields = () => {
+			frm.layout.page.toggleClass("mpo-fields-folded", !view.fields);
+			panel.find('[data-po-action="fields"]').attr("aria-expanded", String(!!view.fields)).text(view.fields ? "收起订单字段" : "订单字段");
+		};
+		syncFields();
+		panel.on("click", "[data-po-action]", function () {
+			switch (this.dataset.poAction) {
+				case "days": case "items": view.byDate = this.dataset.poAction === "days"; renderTable(view); break;
+				case "fields": view.fields = !view.fields; syncFields(); if (view.fields) frm.layout.page[0].scrollIntoView({block:"start"}); break;
+				case "invite": showInvite(frm, view); break;
+				case "progress": showProgress(frm, view); break;
+				case "review": review(frm); break;
+				case "submit": frm.savesubmit(); break;
+			}
+		});
+		renderTable(view);
+		renderHeader(frm, view);
+		if (doc.docstatus === 0 && buyer()) {
+			frm.add_custom_button("应用供应商报价", () => applyQuote(frm), "采购操作");
+			if (reviewer() && doc.owner !== frappe.session.user && doc.items?.every(r => r.supplier_quotation))
+				frm.add_custom_button("确认本单报价", () => review(frm), "采购操作");
+			frappe.call({ method:quoteApi+"status", type:"GET", args:{order:doc.name} }).then(({message}) => {
+				if (frm.__mealOrderView !== view) return;
+				view.invitation = message || {};
+				renderHeader(frm, view);
+			});
+		}
+	}
 	frappe.ui.form.on("Purchase Order", {
-		refresh(frm) {
-			if (!frm.doc.custom_meal_week) return;
-			const snapshot = quoteState(frm);
-			const confirmed = snapshot.confirmed === true;
-			const quotations = Array.isArray(snapshot.quotation_names) ? snapshot.quotation_names.join("、") : "";
-			frm.set_intro(confirmed
-				? `${esc("本单报价已确认")}：${esc(snapshot.confirmed_by)} · ${esc(snapshot.confirmed_at)}${quotations ? ` · ${esc(quotations)}` : ""}`
-				: __("本单来自周食谱采购需求。请应用已提交且在有效期内的供应商报价，报价须覆盖本单全部食材及采购单位；由另一位授权采购审核人确认后提交订单。"), confirmed ? "green" : "orange");
-			frm.add_custom_button(__("来源周食谱"), () => frappe.set_route("Form", "Meal Planning Week", frm.doc.custom_meal_week));
-			if (frm.doc.docstatus !== 0 || !canPurchase() || frm.is_new()) return;
-			const apply = frm.add_custom_button(__("应用供应商报价"), () => {
-				if (frm.__meal_quote_busy) return;
-				frappe.prompt([{ fieldname: "quotation_name", fieldtype: "Link", options: "Supplier Quotation", label: __("已提交的供应商报价"), reqd: 1,
-					get_query: () => ({ filters: { docstatus: 1, supplier: frm.doc.supplier, company: frm.doc.company, currency: frm.doc.currency,
-						valid_till: [">=", frappe.datetime.get_today()] } }) }], (values) => action(frm, apply,
-					"tongjianyun.meal_purchasing.apply_supplier_quotation", { po_name: frm.doc.name, quotation_name: values.quotation_name }), __("应用本单供应商报价"), __("应用报价"));
-			});
-			if (!canConfirm()) return;
-			const confirm = frm.add_custom_button(__("确认本单报价"), () => {
-				if (frm.doc.owner === frappe.session.user) return frappe.msgprint(__("采购订单创建人不能确认自己的订单报价，请由另一位授权采购审核人操作。"));
-				frappe.confirm(__("请确认本单品种、采购单位、单价及送货日期与供应商已提交报价一致。确认后仍需按原生流程提交采购订单。"), () => action(frm, confirm,
-					"tongjianyun.meal_purchasing.confirm_purchase_order_quote", { po_name: frm.doc.name }));
-			});
-		},
+		refresh: render,
 		before_submit(frm) {
-			if (frm.doc.custom_meal_week && quoteState(frm).confirmed !== true) frappe.throw(__("请先应用供应商报价，并由另一位授权采购审核人确认本单报价。"));
+			if (frm.doc.custom_meal_week && snapshot(frm.doc).confirmed !== true)
+				frappe.throw(__("请先应用供应商报价，并由另一位授权采购审核人确认本单报价。"));
 		},
 	});
 })();

@@ -74,7 +74,8 @@ GROUPS = (
         ("Report", "Tongjianyun Weekly Menu", "周食谱报表", "calendar-days"),
         ("DocType", "Tongjianyun Meal Publication", "食谱公示", "book-open"),
     )),
-    ("采购验收", "truck", (("DocType", "Material Request", "采购申请", "list-checks"),)
+    ("采购验收", "truck", (("DocType", "Material Request", "采购申请", "list-checks"),
+                       ("DocType", "Purchase Order", "采购订单", "shopping-cart"))
      + _links(2, 3) + _links(3, 0, 2, 3)),
     ("今日供餐", "calendar-days", _links(1, 1, 2) + _links(4, 3, 4) + (
         ("DocType", "Tongjianyun Meal Delivery Handover", "到园成品交接", "truck"),
@@ -130,6 +131,8 @@ def install_navigation(module, dish_route_options):
                 entry.update(link_to=None, url=target, open_in_new_tab=0)
             elif target == "Item":
                 entry["route_options"] = dish_route_options
+            elif target == "Purchase Order":
+                entry["route_options"] = '{"custom_meal_week": ["is", "set"]}'
             row = links.get(_entry_key(entry))
             if row is None:
                 row = sidebar.append("sidebar_items", entry)

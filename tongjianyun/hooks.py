@@ -26,6 +26,7 @@ after_migrate = [
     "tongjianyun.weekly_menu_setup.install",
     "tongjianyun.canteen_ops.setup.install_project_fields",
     "tongjianyun.canteen_ops.setup.install_public_notice_field",
+    "tongjianyun.meal_order_quotation.install",
 ]
 after_install = [*after_migrate]
 setup_wizard_success = "tongjianyun.ingredient_library_setup.ensure_food_masters"

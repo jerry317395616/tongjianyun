@@ -229,7 +229,7 @@ def _weight_proof(week, requests):
 	return proof
 
 
-def _quotation(quote_name, po):
+def _quotation(quote_name, po, *, align_draft_date=False):
 	quote = frappe.get_doc("Supplier Quotation", quote_name, for_update=True)
 	quote.check_permission("read")
 	if (
@@ -242,7 +242,10 @@ def _quotation(quote_name, po):
 			_("The quotation must be submitted and match the order's supplier, company and currency.")
 		)
 	if _date(quote.transaction_date) > _date(po.transaction_date):
-		frappe.throw(_("The order cannot precede its supplier quotation."))
+		if align_draft_date and po.docstatus == 0 and _date(quote.transaction_date) <= _today():
+			po.transaction_date = _today()
+		else:
+			frappe.throw(_("The order cannot precede its supplier quotation."))
 	if not quote.get("valid_till") or _date(quote.valid_till) < max(_today(), _date(po.transaction_date)):
 		frappe.throw(_("The supplier quotation needs an explicit, unexpired validity date."))
 	return quote
@@ -624,7 +627,7 @@ def create_purchase_order_draft(week_name, supplier, material_request_items=None
 @frappe.whitelist(methods=["POST"])
 def apply_supplier_quotation(po_name, quotation_name):
 	po, week, _sources = _draft_order(po_name)
-	quote = _quotation(quotation_name, po)
+	quote = _quotation(quotation_name, po, align_draft_date=True)
 	by_key = defaultdict(list)
 	for row in quote.items:
 		by_key[(row.item_code, row.uom)].append(row)
