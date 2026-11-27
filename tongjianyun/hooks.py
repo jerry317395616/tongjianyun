@@ -9,8 +9,8 @@ app_description = "幼儿园膳食、采购与食堂管理"
 app_email = "admin@example.com"
 app_license = "mit"
 required_apps = ["erpnext"]
-app_include_js = ["/assets/tongjianyun/js/meal_overview.js?v=20261124.7", "/assets/tongjianyun/js/meal_list_filters.js?v=20261124.7", "/assets/tongjianyun/js/meal_desk.js?v=20261127.2"]
-app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.7"]
+app_include_js = ["/assets/tongjianyun/js/meal_overview.js?v=20261127.policy2", "/assets/tongjianyun/js/meal_list_filters.js?v=20261124.7", "/assets/tongjianyun/js/meal_desk.js?v=20261127.2"]
+app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.7", "/assets/tongjianyun/css/canteen_policy.css?v=20261127.2"]
 app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
 add_to_apps_screen = [{"name": app_name, "title": app_title, "route": app_home, "logo": app_logo_url}]

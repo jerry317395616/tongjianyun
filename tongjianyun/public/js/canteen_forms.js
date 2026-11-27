@@ -378,7 +378,8 @@
 			}
 		}
 	});
-	for (const doctype of [rule, review, "Tongjianyun Canteen Credential", "Tongjianyun Canteen Training"]) {
+	f.ui.form.on(rule, { setup: setSiteQuery });
+	for (const doctype of [review, "Tongjianyun Canteen Credential", "Tongjianyun Canteen Training"]) {
 		f.ui.form.on(doctype, { setup: setSiteQuery, refresh: photoExisting });
 	}
 	f.ui.form.on(site, {

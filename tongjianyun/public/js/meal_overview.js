@@ -186,6 +186,10 @@
 		const filter=list.get_filters_for_args?.().find(f=>f[0]===list.doctype && f[1]==="company" && f[2]==="=");
 		const scope=scopeName(rows,filter?.[3]);
 		const facts=listFacts(title,rows);
+		if (list.doctype === "Tongjianyun Canteen Policy") {
+			draw(main, title, "list", scope || title, "按食堂和有效期设置采购经办人、验收票证和对账方式。", facts);
+			return;
+		}
 		const unit=({"标准食材库":"种食材","标准菜品库":"道菜品"})[title];
 		const heading=scope || (unit ? "本页 "+facts[0].value+" "+unit : facts[0].value+" 条"+title+"记录");
 		draw(main,title,"list",heading,"",scope ? facts.filter(f=>f.label!=="涉及园所" || f.value!=="1") : facts.slice(1));
@@ -204,6 +208,7 @@
 			.filter(head=>head.offsetWidth && head.textContent.trim() && !head.closest(".grid-row"));
 	}
 	function form(frm,title,labels) {
+		if (frm.doctype === "Tongjianyun Canteen Policy") return;
 		const main=frm.page.main?.[0];
 		if (!main) return;
 		if (frm.is_new()) {

@@ -1,0 +1,77 @@
+.tjy-policy-form {
+	--policy-ink: #203e35;
+	--policy-accent: #22624e;
+	--policy-line: var(--meal-line, var(--border-color));
+	--policy-soft: color-mix(in srgb, #4e8468 7%, var(--card-bg, white));
+}
+.tjy-policy-form .tjy-policy-header {
+	box-sizing: border-box;
+	margin: 18px clamp(12px, 2vw, 28px) 14px;
+	padding: clamp(19px, 2.2vw, 32px);
+	border: 1px solid #d3ded3;
+	border-radius: 16px;
+	color: var(--policy-ink);
+	background: linear-gradient(92deg, #edf3e9 18%, rgba(237,243,233,.98) 46%, rgba(237,243,233,.24) 76%, transparent),
+		#edf3e9 url("/assets/tongjianyun/images/weekly-menu-banner.webp") no-repeat right center / auto 100%;
+}
+.tjy-policy-header h2 {
+	margin: 10px 0 7px;
+	color: var(--policy-ink);
+	font-size: clamp(23px, 2vw, 33px);
+	font-weight: 650;
+	line-height: 1.25;
+}
+.tjy-policy-header p { margin: 0; max-width: min(58%, 36em); font-size: 14px; color: #425c50; line-height: 1.65; }
+.tjy-policy-state {
+	display: inline-flex; align-items: center; gap: 7px;
+	font-size: 12px; font-weight: 600; color: #3c6553;
+}
+.tjy-policy-state::before { content: ""; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
+.tjy-policy-form .form-layout .form-tabs-list { padding-inline: clamp(10px, 2vw, 30px); }
+.tjy-policy-form .form-layout .form-tabs-list .nav-link { padding: 12px 14px; font-weight: 550; }
+.tjy-policy-form .form-layout .form-tabs-list .nav-link.active { color: var(--policy-accent); border-color: var(--policy-accent); }
+.tjy-policy-form .form-layout .tab-pane > .card-section:not(.empty-section) {
+	min-width: 0; margin: 14px clamp(10px, 2vw, 28px); border: 1px solid var(--policy-line);
+	border-radius: 13px; padding: 0 clamp(14px, 1.8vw, 26px) 7px;
+	background: var(--card-bg);
+}
+.tjy-policy-form .form-layout .form-section .section-head:not(:empty) {
+	display: flex; align-items: center; gap: 9px; padding: 15px 0 12px;
+	color: var(--heading-color); font-weight: 650; font-size: 16px;
+}
+.tjy-policy-section-icon {
+	display: inline-grid; place-items: center; width: 28px; height: 28px;
+	border-radius: 8px; color: var(--policy-accent); background: var(--policy-soft);
+}
+.tjy-policy-form .form-layout .tab-pane > .card-section > .section-head,
+.tjy-policy-form .form-layout .tab-pane > .card-section > .section-body {
+	max-width: none; width: 100%; margin-inline: 0;
+}
+.tjy-policy-form .form-layout .tab-pane > .card-section > .section-head {
+	padding-inline: 0; background: transparent;
+}
+.tjy-policy-form .section-head:has(.tjy-policy-section-icon)::before { display: none; }
+.tjy-policy-form .form-layout .section-body { column-gap: 0; }
+.tjy-policy-form .form-layout .control-input .form-control:not(:focus) {
+	border: 1px solid var(--policy-line); background-color: var(--control-bg);
+}
+.tjy-policy-form .tjy-policy-tickets { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 13px; }
+.tjy-policy-tickets button {
+	display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px;
+	border: 1px solid var(--policy-line); border-radius: 8px;
+	background: var(--card-bg); color: var(--text-color); font-size: 13px; font-weight: 550;
+}
+.tjy-policy-tickets button:hover:enabled, .tjy-policy-tickets button:disabled {
+	background: var(--policy-soft); color: var(--policy-accent);
+}
+.tjy-policy-tickets button:focus-visible { outline: 2px solid var(--policy-accent); outline-offset: 2px; }
+.tjy-policy-form .form-grid { border-radius: 8px; }
+[data-theme="dark"] .tjy-policy-form { --policy-accent: #8fc6ab; }
+@media (max-width: 767px) {
+	.tjy-policy-form .tjy-policy-header { margin: 10px 8px; padding: 16px;
+		background-image: linear-gradient(100deg, #edf3e9 16%, rgba(237,243,233,.94) 56%, rgba(237,243,233,.46)), url("/assets/tongjianyun/images/weekly-menu-banner.webp");
+		background-size: auto 100%; }
+	.tjy-policy-header p { max-width: 80%; }
+	.tjy-policy-form .form-layout .form-tabs-list .nav-link { white-space: nowrap; padding-inline: 10px; }
+	.tjy-policy-form .tjy-policy-tickets { gap: 6px; }
+}

@@ -118,47 +118,66 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "basics_tab",
+  "scope_section",
   "company",
   "canteen",
-  "policy_name",
   "column_from_date",
   "from_date",
   "to_date",
+  "owner_column",
+  "purchase_assignee",
+  "policy_name",
+  "evidence_section",
+  "evidence_shortcuts",
+  "evidence_rules",
+  "purchasing_tab",
   "purchase_section",
   "procurement_mode",
-  "purchase_assignee",
   "lead_days",
-  "column_min_quotations",
   "min_quotations",
+  "column_min_quotations",
   "price_deviation",
   "contract_deviation",
   "safety_section",
   "require_photo",
-  "require_location",
   "require_dual_review",
   "require_supplier_credential",
-  "column_stock_warning_days",
+  "require_location",
+  "reminder_section",
   "stock_warning_days",
   "credential_warning_days",
+  "column_stock_warning_days",
   "sample_required",
   "sample_min_weight",
   "sample_keep_hours",
   "companion_required",
-  "evidence_rules",
+  "finance_tab",
   "finance_section",
-  "finance_reviewer",
-  "settlement_limit",
-  "column_settlement_cycle",
   "settlement_cycle",
+  "finance_reviewer",
+  "column_settlement_cycle",
+  "settlement_limit",
   "cost_center",
+  "attachment_section",
   "report_template",
   "remarks",
   "amended_from"
  ],
  "fields": [
   {
+   "fieldname": "basics_tab",
+   "fieldtype": "Tab Break",
+   "label": "基本设置"
+  },
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "适用范围与经办人"
+  },
+  {
    "fieldname": "company",
-   "label": "园所 / 账套",
+   "label": "园所",
    "fieldtype": "Link",
    "reqd": 1,
    "in_standard_filter": 1,
@@ -174,33 +193,73 @@
    "in_list_view": 1
   },
   {
-   "fieldname": "policy_name",
-   "label": "规则名称",
-   "fieldtype": "Data",
-   "reqd": 1,
-   "in_list_view": 1
+   "fieldname": "column_from_date",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "from_date",
-   "label": "起始日期",
+   "label": "生效日期",
    "fieldtype": "Date",
    "reqd": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "default": "Today"
   },
   {
    "fieldname": "to_date",
-   "label": "结束日期",
+   "label": "截止日期",
    "fieldtype": "Date",
    "reqd": 1
   },
   {
+   "fieldname": "owner_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "purchase_assignee",
+   "label": "采购经办人",
+   "fieldtype": "Link",
+   "reqd": 1,
+   "options": "User",
+   "description": "下发采购申请时，系统把待办发给此人。"
+  },
+  {
+   "fieldname": "policy_name",
+   "label": "规则名称",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "按生效日期自动命名，可自行修改。"
+  },
+  {
+   "fieldname": "evidence_section",
+   "fieldtype": "Section Break",
+   "label": "收货时核对哪些票证"
+  },
+  {
+   "fieldname": "evidence_shortcuts",
+   "fieldtype": "HTML",
+   "label": "常用票证"
+  },
+  {
+   "fieldname": "evidence_rules",
+   "label": "验收票证清单",
+   "fieldtype": "Table",
+   "options": "Tongjianyun Canteen Evidence Rule",
+   "description": "至少选一种票证。食材分类留空表示适用于所有食材，验收时逐条核对。"
+  },
+  {
+   "fieldname": "purchasing_tab",
+   "fieldtype": "Tab Break",
+   "label": "采购与验收"
+  },
+  {
    "fieldname": "purchase_section",
-   "label": "采购规则",
+   "label": "报价与下单",
    "fieldtype": "Section Break"
   },
   {
    "fieldname": "procurement_mode",
-   "label": "采购模式",
+   "label": "采购方式",
    "fieldtype": "Select",
    "reqd": 1,
    "options": "校内采购\n框架协议采购\n区域集中采购",
@@ -208,24 +267,23 @@
    "in_list_view": 1
   },
   {
-   "fieldname": "purchase_assignee",
-   "label": "采购受理人",
-   "fieldtype": "Link",
-   "reqd": 1,
-   "options": "User"
-  },
-  {
    "fieldname": "lead_days",
-   "label": "默认采购提前天数",
+   "label": "提前下单天数",
    "fieldtype": "Int",
    "non_negative": 1,
-   "default": "1"
+   "default": "1",
+   "description": "按首个需求日期向前推算下单期限。"
   },
   {
    "fieldname": "min_quotations",
-   "label": "最低有效报价家数",
+   "label": "至少比较几家报价",
    "fieldtype": "Int",
-   "non_negative": 1
+   "non_negative": 1,
+   "description": "填 0 表示不设最低家数。"
+  },
+  {
+   "fieldname": "column_min_quotations",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "price_deviation",
@@ -243,7 +301,7 @@
   },
   {
    "fieldname": "safety_section",
-   "label": "验收与食品安全",
+   "label": "到货验收要求",
    "fieldtype": "Section Break"
   },
   {
@@ -251,11 +309,6 @@
    "label": "验收须拍照",
    "fieldtype": "Check",
    "default": "1"
-  },
-  {
-   "fieldname": "require_location",
-   "label": "验收须定位",
-   "fieldtype": "Check"
   },
   {
    "fieldname": "require_dual_review",
@@ -270,18 +323,32 @@
    "default": "1"
   },
   {
+   "fieldname": "require_location",
+   "label": "验收须定位",
+   "fieldtype": "Check"
+  },
+  {
+   "fieldname": "reminder_section",
+   "fieldtype": "Section Break",
+   "label": "临期提醒与留样"
+  },
+  {
    "fieldname": "stock_warning_days",
-   "label": "批次临期提醒（天）",
+   "label": "库存临期提前提醒（天）",
    "fieldtype": "Int",
    "non_negative": 1,
    "default": "7"
   },
   {
    "fieldname": "credential_warning_days",
-   "label": "证照到期提醒（天）",
+   "label": "证照到期提前提醒（天）",
    "fieldtype": "Int",
    "non_negative": 1,
    "default": "30"
+  },
+  {
+   "fieldname": "column_stock_warning_days",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "sample_required",
@@ -314,26 +381,14 @@
    "read_only": 1
   },
   {
-   "fieldname": "evidence_rules",
-   "label": "验收必需票证",
-   "fieldtype": "Table",
-   "options": "Tongjianyun Canteen Evidence Rule"
+   "fieldname": "finance_tab",
+   "fieldtype": "Tab Break",
+   "label": "财务与对账"
   },
   {
    "fieldname": "finance_section",
-   "label": "财务与报送",
+   "label": "对账与结算",
    "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "finance_reviewer",
-   "label": "指定财务审核人",
-   "fieldtype": "Link",
-   "options": "User"
-  },
-  {
-   "fieldname": "settlement_limit",
-   "label": "单批结算审核限额",
-   "fieldtype": "Currency"
   },
   {
    "fieldname": "settlement_cycle",
@@ -343,19 +398,43 @@
    "default": "按月"
   },
   {
+   "fieldname": "finance_reviewer",
+   "label": "指定财务审核人",
+   "fieldtype": "Link",
+   "options": "User",
+   "description": "指定后，该人员负责提交财务复核。"
+  },
+  {
+   "fieldname": "column_settlement_cycle",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "settlement_limit",
+   "label": "单批结算审核限额",
+   "fieldtype": "Currency",
+   "description": "留空或填 0 表示不限额。"
+  },
+  {
    "fieldname": "cost_center",
    "label": "食堂成本中心",
    "fieldtype": "Link",
-   "options": "Cost Center"
+   "options": "Cost Center",
+   "description": "生成会计凭证时使用。"
+  },
+  {
+   "fieldname": "attachment_section",
+   "fieldtype": "Section Break",
+   "label": "报送与备注"
   },
   {
    "fieldname": "report_template",
    "label": "地方报送模板",
-   "fieldtype": "Attach"
+   "fieldtype": "Attach",
+   "description": "先保存草稿，再上传私有附件。"
   },
   {
    "fieldname": "remarks",
-   "label": "说明",
+   "label": "备注",
    "fieldtype": "Small Text"
   },
   {
@@ -365,22 +444,6 @@
    "read_only": 1,
    "no_copy": 1,
    "options": "Tongjianyun Canteen Policy"
-  },
-  {
-   "fieldname": "column_from_date",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_min_quotations",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_stock_warning_days",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_settlement_cycle",
-   "fieldtype": "Column Break"
   }
  ],
  "show_title_field_in_link": 1
