@@ -163,24 +163,6 @@
 			});
 		}
 	});
-	f.ui.form.on("Purchase Order", {
-		refresh(frm) {
-			if (frm.is_new() || frm.doc.docstatus === 2 || !allowed(delivery) && !allowed(review)) return;
-			if (!(frm.doc.items || []).some((row) => row.material_request)) return;
-			api("ui.order_site", { purchase_order: frm.doc.name }, "GET").then((canteen) => {
-				if (!canteen || f.get_route().at(-1) !== frm.doc.name) return;
-				if (frm.doc.docstatus === 1 && allowed(delivery)) {
-					frm.add_custom_button("建立供应商配送批次", async () => {
-						open(delivery, await api("purchasing.create_delivery", { purchase_order: frm.doc.name }));
-					}, "食堂采购");
-				}
-				if (frm.doc.docstatus === 0 && allowed(review)) {
-					frm.add_custom_button("采购价格复核", () =>
-						newDoc(review, { company: frm.doc.company, canteen, purchase_order: frm.doc.name }), "食堂采购");
-				}
-			});
-		}
-	});
 	f.ui.form.on("Request for Quotation", {
 		refresh(frm) {
 			if (!saved(frm) || !frm.doc.docstatus) return;

@@ -395,6 +395,23 @@ class Delivery(Handler):
                 "配送已有验收记录，请先核对验收。")
 
 
+def remaining_delivery_items(order):
+    shipped = defaultdict(lambda: ZERO)
+    batches = frappe.get_all(DELIVERY, filters={"purchase_order": order.name, "docstatus": 1}, pluck="name")
+    if batches:
+        received = frappe.get_all(RECEIVING, filters={"delivery": ("in", batches), "docstatus": 1}, pluck="delivery")
+        in_transit = set(batches).difference(received)
+        if in_transit:
+            for row in frappe.get_all("Tongjianyun Canteen Delivery Item",
+                                      filters={"parenttype": DELIVERY, "parent": ("in", list(in_transit)), "docstatus": 1},
+                                      fields=["order_item", "quantity"]):
+                shipped[row.order_item] += decimal(row.quantity)
+    for row in order.items:
+        remaining = decimal(row.qty) - decimal(row.received_qty) - shipped[row.name]
+        if remaining > 0:
+            yield row, remaining
+
+
 @frappe.whitelist(methods=["POST"])
 def create_delivery(purchase_order):
     order = submitted(linked(ORDER, purchase_order))
@@ -409,15 +426,9 @@ def create_delivery(purchase_order):
     doc = frappe.get_doc({"doctype": DELIVERY, "company": order.company, "canteen": site, "supplier": order.supplier,
                           "purchase_order": order.name, "expected_on": order.schedule_date or getdate(),
                           "package_reference": order.name, "items": []})
-    for row in order.items:
-        remaining = decimal(row.qty) - decimal(row.received_qty)
-        shipped = frappe.get_all("Tongjianyun Canteen Delivery Item",
-                                 filters={"parenttype": DELIVERY, "order_item": row.name, "docstatus": 1},
-                                 fields=["parent", "quantity"])
-        remaining -= sum((decimal(line.quantity) for line in shipped
-                          if not frappe.db.exists(RECEIVING, {"delivery": line.parent, "docstatus": 1})), ZERO)
-        if remaining > 0:
-            doc.append("items", {"order_item": row.name, "item_code": row.item_code, "uom": row.uom, "quantity": float(remaining)})
+    for row, remaining in remaining_delivery_items(order):
+        doc.append("items", {"order_item": row.name, "item_code": row.item_code, "uom": row.uom, "quantity": float(remaining)})
+    require(doc.items, "本订单已全部安排配送。")
     doc.insert()
     return doc.name
 

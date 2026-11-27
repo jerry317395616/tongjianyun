@@ -259,7 +259,7 @@
 					}, (result) => {
 						if (!result?.purchase_order) throw new Error(__("未返回采购订单编号，请刷新列表核对。"));
 						dialog.hide();
-						frappe.set_route("Form", "Purchase Order", result.purchase_order);
+						frappe.set_route(frappe.tjyMealDesk.purchaseOrderLink(result.purchase_order));
 					}).finally(() => dialog.get_primary_btn().prop("disabled", false));
 				},
 			});

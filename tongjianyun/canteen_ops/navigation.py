@@ -1,4 +1,5 @@
 """Native sidebar entries for the meal and canteen module."""
+import json
 from urllib.parse import urlencode
 
 import frappe
@@ -10,6 +11,9 @@ from tongjianyun.ingredient_library import LAYOUT, LIBRARY, MARKER
 
 _OLD_INGREDIENT_URL = "/desk/item/view/list?" + urlencode({"layout": LAYOUT, MARKER: 1})
 INGREDIENT_URL = _OLD_INGREDIENT_URL.replace("/desk/", "/desk/膳食与食堂/", 1)
+
+ORDER_LAYOUT = "膳食采购订单"
+ORDER_OPTIONS = json.dumps({"layout": ORDER_LAYOUT}, ensure_ascii=False)
 
 _OLD_GROUPS = (
     ("菜品与食谱", "book-open", (
@@ -104,6 +108,11 @@ def install_navigation(module, dish_route_options):
     previous = list(sidebar.sidebar_items)
     updated = False
     for row in previous:
+        if (row.link_type == "DocType" and row.link_to == "Purchase Order" and row.label == "采购订单"
+                and row.route_options == '{"custom_meal_week": ["is", "set"]}'):
+            row.route_options = ORDER_OPTIONS
+            row.key = item_key(row)
+            updated = True
         if row.link_type == "URL" and row.url == _OLD_INGREDIENT_URL and row.label == LIBRARY:
             row.url = INGREDIENT_URL
             row.key = item_key(row)
@@ -132,7 +141,7 @@ def install_navigation(module, dish_route_options):
             elif target == "Item":
                 entry["route_options"] = dish_route_options
             elif target == "Purchase Order":
-                entry["route_options"] = '{"custom_meal_week": ["is", "set"]}'
+                entry["route_options"] = ORDER_OPTIONS
             row = links.get(_entry_key(entry))
             if row is None:
                 row = sidebar.append("sidebar_items", entry)
@@ -148,6 +157,7 @@ def install_navigation(module, dish_route_options):
     # keep their original order and child relationships.
     old_headings = {title for title, _, _ in _OLD_GROUPS} | {"食品安全与人员"}
     old_targets = {(typ, target, label) for _, _, entries in _OLD_GROUPS for typ, target, label, _ in entries}
+    old_targets.add(("DocType", "Purchase Order", "采购订单"))
     by_section = {id(section): children for section, children in layout}
     remaining = []
     parent = None

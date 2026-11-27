@@ -122,6 +122,7 @@ def install_meal_planning():
 			"dt": "Purchase Order",
 			"fieldname": "custom_meal_week",
 			"label": "食谱周计划",
+			"hidden": 1,
 			"fieldtype": "Link",
 			"options": "Meal Planning Week",
 			"insert_after": "company",

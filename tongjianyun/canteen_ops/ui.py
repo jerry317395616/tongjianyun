@@ -40,6 +40,32 @@ def order_site(purchase_order):
 
 
 @frappe.whitelist(methods=["GET"])
+def order_delivery_status(purchase_order):
+    order = linked("Purchase Order", purchase_order)
+    result = {"batches": []}
+    if order.docstatus != 1 or not order.get("custom_meal_week"):
+        return result
+    if frappe.has_permission(DELIVERY, "read"):
+        result["batches"] = frappe.get_list(
+            DELIVERY, filters={"purchase_order": order.name, "docstatus": ["<", 2]},
+            fields=["name", "docstatus", "progress"], order_by="creation desc", limit_page_length=0,
+        )
+        result["pending"] = next((batch.name for batch in result["batches"]
+                                  if batch.docstatus == 0 and batch.progress != "拒接"), None)
+    if order.status in purchasing.FINAL_ORDER_STATES or not frappe.has_permission(DELIVERY, "create"):
+        return result
+    if purchasing.order_site(order, strict=False):
+        result["can_create"] = any(purchasing.remaining_delivery_items(order))
+    else:
+        requests = {row.material_request for row in order.items if row.material_request}
+        if len(requests) == 1:
+            request = next(iter(requests))
+            if frappe.has_permission("Material Request", "read", doc=request):
+                result["dispatch_request"] = request
+    return result
+
+
+@frappe.whitelist(methods=["GET"])
 def dispatch_source(request):
     from tongjianyun.canteen_ops.common import linked
     linked("Material Request", request)

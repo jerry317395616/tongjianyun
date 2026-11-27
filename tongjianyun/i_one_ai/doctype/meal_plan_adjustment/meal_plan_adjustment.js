@@ -42,7 +42,7 @@
 								material_request: request.name, material_request_items: selected } });
 						if (response.exc || !response.message?.purchase_order) throw new Error(__("未返回采购订单编号，请刷新列表核对。"));
 						dialog.hide();
-						frappe.set_route("Form", "Purchase Order", response.message.purchase_order);
+						frappe.set_route(frappe.tjyMealDesk.purchaseOrderLink(response.message.purchase_order));
 					} catch (error) {
 						if (!error?._server_messages && !error?.responseJSON?._server_messages) frappe.msgprint({ title: __("创建补采订单失败"), indicator: "red", message: esc(error?.message || "请求失败，请重试。") });
 					} finally {

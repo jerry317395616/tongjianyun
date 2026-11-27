@@ -289,7 +289,11 @@
 			if (value && typeof value === "string" && (value !== id || doc.external_dish)) frm.page.set_title(value);
 		}
 	}
-	frappe.tjyMealDesk = {installLists, registerReport};
+	const purchaseOrderLayout = "膳食采购订单";
+	function purchaseOrderLink(name) {
+		return "/desk/膳食与食堂/purchase-order/" + (name ? encodeURIComponent(name) : "view/list") + "?layout=" + encodeURIComponent(purchaseOrderLayout);
+	}
+	frappe.tjyMealDesk = {installLists, registerReport, purchaseOrderLayout, purchaseOrderLink};
 	frappe.router.on("change",syncScope);
 	const formTimers = new WeakMap();
 	const requiredTimers = new WeakMap();

@@ -9,7 +9,7 @@ app_description = "幼儿园膳食、采购与食堂管理"
 app_email = "admin@example.com"
 app_license = "mit"
 required_apps = ["erpnext"]
-app_include_js = ["/assets/tongjianyun/js/meal_overview.js?v=20261124.7", "/assets/tongjianyun/js/meal_list_filters.js?v=20261124.7", "/assets/tongjianyun/js/meal_desk.js?v=20261124.7"]
+app_include_js = ["/assets/tongjianyun/js/meal_overview.js?v=20261124.7", "/assets/tongjianyun/js/meal_list_filters.js?v=20261124.7", "/assets/tongjianyun/js/meal_desk.js?v=20261127.2"]
 app_include_css = ["/assets/tongjianyun/css/meal_desk.css?v=20261124.7"]
 app_home = "/desk/tongjianyun/query-report/Tongjianyun%20Weekly%20Menu"
 app_logo_url = "/assets/tongjianyun/images/tongjianyun-logo-20261029.svg"
@@ -39,11 +39,12 @@ doctype_js = {
     "Meal Plan Adjustment": ["public/js/meal_portions.js", "public/js/meal_adjustment_portions.js",
                              "public/js/canteen_forms.js"],
     **{doctype: "public/js/canteen_forms.js" for doctype in (*_CANTEEN_DOCTYPES, "Meal Kitchen Day",
-                                                           "Purchase Order", "Request for Quotation")},
+                                                           "Request for Quotation")},
     "Tongjianyun Meal Weekly Task": ["public/js/canteen_forms.js", "public/js/weekly_task_menu.js"],
     "Tongjianyun Meal Term Project": ["public/js/canteen_forms.js", "public/js/meal_term_project.js"],
 }
-doctype_list_js = {"BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js",
+doctype_list_js = {"Purchase Order": "public/js/meal_purchase_order_list.js",
+                   "BOM": "public/js/standard_recipe_list.js", "Item": "public/js/standard_dish_list.js",
                    "Tongjianyun Canteen Receiving": "public/js/canteen_receiving_list.js",
                    "Tongjianyun Food Sample": "public/js/canteen_sample_list.js"}
 extend_doctype_class = {

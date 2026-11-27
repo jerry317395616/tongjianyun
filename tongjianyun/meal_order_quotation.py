@@ -24,6 +24,29 @@ def _matches_order(rfq, po):
 
 
 def install():
+    from tongjianyun.canteen_ops.navigation import ORDER_LAYOUT
+    from tongjianyun.standard_recipe_setup import _save_layout
+
+    line_layout = "膳食采购订单明细"
+    # Keep the app-owned source link in storage, exposing it only in the meal layout.
+    source = frappe.db.get_value("Custom Field", {"dt": "Purchase Order", "fieldname": "custom_meal_week"},
+                                 ["name", "hidden"], as_dict=True)
+    if source and not source.hidden:
+        field = frappe.get_doc("Custom Field", source.name)
+        field.hidden = 1
+        field.save()
+    _save_layout("Purchase Order Item", line_layout, {
+        "item_name": {"label": "食材名称", "in_list_view": 1},
+        "qty": {"label": "采购数量"}, "schedule_date": {"label": "需求日期"},
+    }, is_child_table=1)
+    _save_layout("Purchase Order", ORDER_LAYOUT, {
+        "company": {"label": "园所", "in_standard_filter": 1},
+        "supplier": {"in_list_view": 1, "in_standard_filter": 1},
+        "custom_meal_week": {"label": "来源周食谱", "in_list_view": 1, "hidden": 0},
+        "schedule_date": {"label": "需求日期", "in_list_view": 1, "in_standard_filter": 1},
+        "grand_total": {"label": "订单金额", "in_list_view": 1},
+        "items": {"label": "采购食材"},
+    }, condition="", child_tables=[{"table_fieldname": "items", "child_layout": line_layout}])
     create_custom_fields({RFQ: [{
         "fieldname": ORDER_FIELD, "label": "来源膳食采购订单", "fieldtype": "Link",
         "options": "Purchase Order", "module": "Tongjianyun", "insert_after": "company",
