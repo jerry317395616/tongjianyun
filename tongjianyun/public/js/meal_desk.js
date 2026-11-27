@@ -26,7 +26,7 @@
 	const rowContext = {
 		"Tongjianyun Meal Weekly Task":["week_start","company"], "Tongjianyun Canteen Finding":["category","company"],
 		"Tongjianyun Canteen Stock Lot Movement":["lot_number"], "Tongjianyun Meal Publication":["week_start"],
-		"Tongjianyun Canteen Receiving":["company"], "Tongjianyun Canteen Delivery":["company"],
+		"Tongjianyun Canteen Receiving":["company"], "Tongjianyun Canteen Delivery":["purchase_order","company"],
 		"Tongjianyun Meal Safety Check":["company"], "Tongjianyun Meal Class Feedback":["company"],
 		"Tongjianyun Meal Diet Arrangement":["company"], "Tongjianyun Meal Diet Handover":["alternate"],
 		"Tongjianyun Meal Family Opinion":["menu_detail","company"], "Tongjianyun Canteen Credential":["issuer"],
@@ -113,7 +113,7 @@
 		frappe.tjyMealOverview.list(list,label);
 		frappe.tjyMealFilters.render(list,label);
 		const action = list.page.btn_primary?.find(".es-button__label").first();
-		if (/^(添加|新建|Add |New )/.test(action?.text() || "")) action.text("新建"+label);
+		if (list.doctype !== "Tongjianyun Canteen Delivery" && /^(添加|新建|Add |New )/.test(action?.text() || "")) action.text("新建"+label);
 
 		const rows = new Map(list.data.map(doc => [doc.name, doc]));
 		const cells = [];
@@ -170,6 +170,19 @@
 			const onload = settings.onload, refresh = settings.refresh;
 			settings.onload = function(list) {
 				onload?.call(this,list);
+				if (type === "Tongjianyun Canteen Delivery") {
+					const canArrange = () => list.can_create && !frappe.boot.read_only && frappe.model.can_read("Purchase Order")
+						&& (!frappe.user_roles.includes("膳食供应商") || frappe.user_roles.includes("System Manager"));
+					settings.primary_action = () => {
+						if (canArrange()) return frappe.set_route(purchaseOrderLink());
+						frappe.msgprint("请在园方已建立的配送批次中接单。");
+					};
+					list.set_primary_action = function () {
+						if (canArrange()) this.page.set_primary_action("从采购订单建批", settings.primary_action, "plus");
+						else this.page.clear_primary_action();
+					};
+					list.set_primary_action();
+				}
 				// Shared ERP doctypes retain their own columns outside the meal layouts.
 				if (["Item","Material Request","Meal Planning Week","Meal Kitchen Day"].includes(type)) {
 					const original = list.setup_columns.bind(list);
@@ -269,7 +282,7 @@
 		}
 		const display = (type,id) => labels[type]?.[id] || (type==="User" && id===frappe.session.user && frappe.boot.user.full_name) || translated[id];
 		for (const {cell,type,id} of cells) {
-			const value = display(type,id);
+			const value = display(type,id) || (frm.doctype === "Tongjianyun Canteen Delivery" && type === "Item" && doc.__onload?.delivery_item_names?.[id]);
 			if (value && cell.isConnected) {
 				const target = cell.querySelector("a") || cell;
 				target.textContent = value;

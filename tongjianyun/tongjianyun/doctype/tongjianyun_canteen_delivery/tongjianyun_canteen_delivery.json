@@ -93,6 +93,13 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "manifest_tab",
+  "section_items",
+  "items",
+  "evidence_tab",
+  "evidence_section",
+  "evidence",
+  "details_tab",
   "section_company",
   "company",
   "canteen",
@@ -105,9 +112,6 @@
   "progress",
   "progress_at",
   "progress_note",
-  "section_items",
-  "items",
-  "evidence",
   "remarks",
   "amended_from"
  ],
@@ -195,18 +199,20 @@
    "fieldname": "items",
    "label": "配送批次明细",
    "fieldtype": "Table",
-   "options": "Tongjianyun Canteen Delivery Item"
+   "options": "Tongjianyun Canteen Delivery Item",
+   "description": "发货前按实际配送填写数量、供应商批号、生产日期和有效期。"
   },
   {
    "fieldname": "evidence",
    "label": "随货票证及检验报告",
    "fieldtype": "Table",
    "options": "Tongjianyun Canteen Delivery Evidence",
-   "allow_on_submit": 1
+   "allow_on_submit": 1,
+   "description": "按食堂的验收要求登记票证号，并附上本批次对应的凭证。"
   },
   {
    "fieldname": "remarks",
-   "label": "说明",
+   "label": "配送备注",
    "fieldtype": "Small Text"
   },
   {
@@ -229,7 +235,27 @@
   {
    "fieldname": "section_items",
    "fieldtype": "Section Break",
-   "label": "随货明细"
+   "label": "本批食材"
+  },
+  {
+   "fieldname": "manifest_tab",
+   "fieldtype": "Tab Break",
+   "label": "配送明细"
+  },
+  {
+   "fieldname": "evidence_tab",
+   "fieldtype": "Tab Break",
+   "label": "随货票证"
+  },
+  {
+   "fieldname": "evidence_section",
+   "fieldtype": "Section Break",
+   "label": "票证与检验报告"
+  },
+  {
+   "fieldname": "details_tab",
+   "fieldtype": "Tab Break",
+   "label": "批次信息"
   }
  ]
 }

@@ -187,48 +187,33 @@
 	});
 	f.ui.form.on(delivery, {
 		setup: setSiteQuery,
+		async delivery_acceptance_result(frm) {
+			const result = await api("purchasing.delivery_acceptance", { name: frm.doc.name }, "GET");
+			if (!result.items.length) return f.msgprint(result.stage);
+			const summary = new f.ui.Dialog({ title: result.stage,
+				fields: [{ fieldname: "result", fieldtype: "HTML" }],
+				primary_action_label: result.receiving ? "打开验收单" : "关闭",
+				primary_action() {
+					summary.hide();
+					if (result.receiving) open(receiving, result.receiving);
+				}
+			});
+			const list = $("<ul>");
+			for (const row of result.items) {
+				list.append($("<li>").text((frm.doc.__onload?.delivery_item_names?.[row.item_code] || row.item_code) + " · 随货 " + row.quantity + " · 合格 " +
+					row.accepted + " · 拒收 " + row.rejected + " " + row.uom));
+			}
+			summary.fields_dict.result.$wrapper.append(list);
+			summary.show();
+		},
 		refresh(frm) {
 			if (frm.is_new() || frm.doc.docstatus === 2) return;
-			const transitions = {
-				待接单: [["已接单", "确认接单"], ["拒接", "拒接"]],
-				已接单: [["备货", "登记备货"], ["拒接", "拒接"]],
-				备货: [["分拣", "登记分拣"]],
-				分拣: [["配送", "开始配送"]],
-				配送: [["到货", "报告到货"]]
-			};
-			if (allowed(delivery, "write")) {
-				for (const [target, label] of transitions[frm.doc.progress] || []) {
-					frm.add_custom_button(label, () => {
-						if (target === "拒接") {
-							return dialog("登记拒接", [option("note", "拒接原因", "Small Text")],
-								({ note }) => change(frm, "purchasing.advance_delivery", { target, note }));
-						}
-						return change(frm, "purchasing.advance_delivery", { target });
-					}, "履约状态");
-				}
-			}
 			if (frm.doc.docstatus === 1) {
 				frm.add_custom_button("打印随货二维码", () => showLabels(delivery, [frm.doc.name]));
-				frm.add_custom_button("查看验收结果", async () => {
-					const result = await api("purchasing.delivery_acceptance", { name: frm.doc.name }, "GET");
-					if (!result.items.length) return f.msgprint(result.stage);
-					const summary = new f.ui.Dialog({ title: result.stage,
-						fields: [{ fieldname: "result", fieldtype: "HTML" }],
-						primary_action_label: result.receiving ? "打开验收单" : "关闭",
-						primary_action() {
-							summary.hide();
-							if (result.receiving) open(receiving, result.receiving);
-						}
-					});
-					const list = $("<ul>");
-					for (const row of result.items) {
-						list.append($("<li>").text(row.item_code + " · 随货 " + row.quantity + " · 合格 " +
-							row.accepted + " · 拒收 " + row.rejected + " " + row.uom));
-					}
-					summary.fields_dict.result.$wrapper.append(list);
-					summary.show();
-				});
-				if (allowed(delivery, "write")) {
+				if (frm.doc.progress !== "到货") {
+					frm.add_custom_button("查看验收结果", () => frm.trigger("delivery_acceptance_result"));
+				}
+				if (frm.perm?.[0]?.write) {
 					frm.add_custom_button("补充票证或检验报告", () => dialog("登记补充票证", [
 						option("evidence_type", "票证类型", "Select", [
 							"送货单", "产品合格证明", "同批次检验报告", "检疫证明", "肉品品质检验合格证", "食品经营资质", "其他票证"

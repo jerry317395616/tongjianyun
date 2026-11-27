@@ -11,8 +11,8 @@
  "field_order": [
   "order_item",
   "item_code",
-  "uom",
   "quantity",
+  "uom",
   "lot_number",
   "manufactured_on",
   "expires_on"
@@ -30,7 +30,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_list_view": 1,
-   "options": "Item"
+   "options": "Item",
+   "columns": 2
   },
   {
    "fieldname": "uom",
@@ -38,7 +39,8 @@
    "fieldtype": "Link",
    "reqd": 1,
    "in_list_view": 1,
-   "options": "UOM"
+   "options": "UOM",
+   "columns": 1
   },
   {
    "fieldname": "quantity",
@@ -46,24 +48,29 @@
    "fieldtype": "Float",
    "reqd": 1,
    "in_list_view": 1,
-   "non_negative": 1
+   "non_negative": 1,
+   "columns": 1
   },
   {
    "fieldname": "lot_number",
    "label": "供应商批号",
    "fieldtype": "Data",
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "manufactured_on",
    "label": "生产日期",
-   "fieldtype": "Date"
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "columns": 2
   },
   {
    "fieldname": "expires_on",
    "label": "有效期",
    "fieldtype": "Date",
-   "in_list_view": 1
+   "in_list_view": 1,
+   "columns": 2
   }
  ]
 }

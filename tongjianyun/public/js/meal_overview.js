@@ -12,7 +12,7 @@
 	const byTitle = new Map(groups.flatMap(group => group[3].map(title => [title,group])));
 	const listDimensions = {
 		"自定义周食谱":["custom_tjy_canteen","week_start"],"食谱公示":["canteen","week_start"],
-		"采购申请":["company","schedule_date"],"供应商配送批次":["supplier","expected_on"],"食材扫码验收":["supplier","inspector"],
+		"采购申请":["company","schedule_date"],"供应商配送批次":["supplier","expected_on","progress"],"食材扫码验收":["supplier","inspector"],
 		"每周膳食任务":["task_kind","assigned_to"],"逐餐供餐与日结":["meal_date","kitchen_warehouse"],
 		"食品留样":["meal_type","weight"],"陪餐登记与评价":["companion","meal_type"],"到园成品交接":["supplier","meal_type"],
 		"班级进餐反馈":["student_group","meal_type"],"特殊餐交接":["student_group","meal_type"],
@@ -190,6 +190,14 @@
 			draw(main, title, "list", scope || title, "按食堂和有效期设置采购经办人、验收票证和对账方式。", facts);
 			return;
 		}
+		if (list.doctype === "Tongjianyun Canteen Delivery") {
+			const count = states => rows.filter(row => row.docstatus !== 2 && states.includes(row.progress)).length;
+			draw(main, title, "list", "供应商配送批次", "园方按订单建立批次，供应商接单发货，食堂凭随货码验收。", [
+				metric("本页待接单", count(["待接单"]), "批"), metric("备货分拣中", count(["已接单", "备货", "分拣"]), "批"),
+				metric("配送途中", count(["配送"]), "批"),
+			]);
+			return;
+		}
 		const unit=({"标准食材库":"种食材","标准菜品库":"道菜品"})[title];
 		const heading=scope || (unit ? "本页 "+facts[0].value+" "+unit : facts[0].value+" 条"+title+"记录");
 		draw(main,title,"list",heading,"",scope ? facts.filter(f=>f.label!=="涉及园所" || f.value!=="1") : facts.slice(1));
@@ -208,7 +216,7 @@
 			.filter(head=>head.offsetWidth && head.textContent.trim() && !head.closest(".grid-row"));
 	}
 	function form(frm,title,labels) {
-		if (frm.doctype === "Tongjianyun Canteen Policy") return;
+		if (["Tongjianyun Canteen Policy", "Tongjianyun Canteen Delivery"].includes(frm.doctype)) return;
 		const main=frm.page.main?.[0];
 		if (!main) return;
 		if (frm.is_new()) {
