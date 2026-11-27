@@ -97,6 +97,18 @@
  ],
  "is_submittable": 1,
  "field_order": [
+  "inspection_tab",
+  "inspection_board",
+  "proof_tab",
+  "field_section",
+  "photo",
+  "remarks",
+  "location_section",
+  "position",
+  "accuracy",
+  "location_at",
+  "location_note",
+  "manifest_tab",
   "section_company",
   "company",
   "canteen",
@@ -104,12 +116,6 @@
   "column_supplier",
   "supplier",
   "arrived_at",
-  "field_section",
-  "photo",
-  "position",
-  "accuracy",
-  "location_at",
-  "location_note",
   "column_received_at",
   "received_at",
   "inspector",
@@ -117,7 +123,6 @@
   "purchase_receipt",
   "section_items",
   "items",
-  "remarks",
   "amended_from"
  ],
  "fields": [
@@ -163,7 +168,7 @@
   },
   {
    "fieldname": "field_section",
-   "label": "现场证据",
+   "label": "验收照片与说明",
    "fieldtype": "Section Break"
   },
   {
@@ -259,7 +264,33 @@
   {
    "fieldname": "section_items",
    "fieldtype": "Section Break",
-   "label": "批次验收明细"
+   "label": "原始验收明细",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "inspection_tab",
+   "fieldtype": "Tab Break",
+   "label": "现场验收"
+  },
+  {
+   "fieldname": "inspection_board",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "proof_tab",
+   "fieldtype": "Tab Break",
+   "label": "现场凭证"
+  },
+  {
+   "fieldname": "manifest_tab",
+   "fieldtype": "Tab Break",
+   "label": "配送资料"
+  },
+  {
+   "fieldname": "location_section",
+   "fieldtype": "Section Break",
+   "label": "现场定位",
+   "collapsible": 1
   }
  ]
 }

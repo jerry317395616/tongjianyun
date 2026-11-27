@@ -501,8 +501,8 @@ def add_delivery_evidence(name, evidence_type, reference_no, attachment, item_co
     return doc.name
 
 
-def evidence_problems(delivery, row, policy, date):
-    applicable = evidence_rules(policy, row.item_code)
+def evidence_problems(delivery, row, policy, date, *, rules=None):
+    applicable = rules if rules is not None else evidence_rules(policy, row.item_code)
     if not applicable:
         return ["该食材缺少适用的票证规则"]
     problems = []
@@ -617,6 +617,10 @@ class Receiving(Handler):
         attached_file(doc, doc.photo, required=bool(policy.require_photo), image=True)
         require(not policy.require_location or doc.position, "该食堂规则要求验收现场定位。")
         lines = {row.name: row for row in delivery.items}
+        for row in doc.items:
+            if decimal(row.accepted_qty) < decimal(lines[row.delivery_item].quantity):
+                require((row.reason or "").strip() not in ("", "待现场核对"),
+                        f"第 {row.idx} 行：请填写实际短送或拒收原因后再提交。")
         acceptance = [row for row in doc.items if decimal(row.accepted_qty) > 0]
         if acceptance and policy.require_supplier_credential:
             require(credentials(doc.canteen, doc.supplier, getdate(doc.arrived_at)), "供应商资质在验收日期无效。")
