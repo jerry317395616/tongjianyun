@@ -4,6 +4,7 @@ from collections import defaultdict
 import frappe
 from frappe import _
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
 from tongjianyun.meal_purchasing import _decimal, _draft_order
 
@@ -28,6 +29,8 @@ def install():
         "options": "Purchase Order", "module": "Tongjianyun", "insert_after": "company",
         "read_only": 1, "no_copy": 1, "print_hide": 1, "search_index": 1,
     }]})
+    if not frappe.get_meta("Supplier Quotation Item").get_field("item_name").in_list_view:
+        make_property_setter("Supplier Quotation Item", "item_name", "in_list_view", "1", "Check")
 
 
 @frappe.whitelist(methods=["GET"])
