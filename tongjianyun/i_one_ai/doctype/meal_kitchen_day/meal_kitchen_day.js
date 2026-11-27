@@ -1,215 +1,410 @@
 (() => {
+	const type = "Meal Kitchen Day";
+	const slots = ["早餐", "早点", "午餐", "午点", "晚餐"];
+	const mealIcons = ["sunrise", "apple", "sun", "coffee", "moon"];
+	const steps = [
+		["prep", "shopping-basket", "领用备料"],
+		["meals", "utensils", "逐餐供餐"],
+		["ledger", "scale", "余料盘点"],
+		["close", "clipboard-check", "日结复核"],
+	];
+	const actions = ["领用", "耗用", "退料", "损耗"];
 	const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
-	const canOperate = () => ["System Manager", "Stock Manager", "Stock User", "膳食业务经办员"].some((role) => frappe.user.has_role(role));
-	const number = (value) => {
-		if (value === null || value === undefined || value === "") return "—";
-		const result = Number(value);
-		return Number.isFinite(result) ? result.toLocaleString("zh-CN", { maximumFractionDigits: 9 }) : String(value);
-	};
-	const closingQty = (row) => row.carry_out_qty ?? row.balance_qty;
-	const allowed = (row, action) => Array.isArray(row.allowed_actions)
-		? row.allowed_actions.includes(action) && (action !== "领用" || row.can_issue !== false)
-		: action !== "领用" || row.can_issue !== false;
-
-	function saved(frm) {
-		if (frm.is_new() || frm.is_dirty()) frappe.throw(__("请先保存实际供餐记录，再执行库存操作。"));
+	const icon = (name) => frappe.utils.icon(name, "sm");
+	const fmt = (value) => Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 9 });
+	const balance = (r) => r.carry_out_qty ?? r.balance_qty;
+	const rpc = async (method, args, freeze = false) =>
+		(await frappe.call({ method: "tongjianyun.meal_kitchen." + method, args, freeze })).message;
+	const btn = (act, label, primary = false, disabled = false) =>
+		`<button type="button" data-act="${esc(act)}" class="ky-btn ${primary ? "ky-primary" : ""}" ${disabled ? "disabled" : ""}>${esc(label)}</button>`;
+	const input = (map, code, unit, value, label) =>
+		`<label class="ky-qty"><input type="number" inputmode="decimal" min="0" step="any" aria-label="${esc(label)}" data-map="${map}" data-code="${esc(code)}" value="${esc(value ?? "")}" placeholder="请输入"><span>${esc(__(unit))}</span></label>`;
+	const photo = (url) => typeof url === "string" && /^\/(?:files|private\/files|assets)\//.test(url);
+	const stockLink = (entry) =>
+		`<a class="ky-entry" href="/desk/stock-entry/${encodeURIComponent(entry.name)}">${esc(entry.action)} · ${esc(entry.name)}<small>${esc(entry.posting_date)} · ${["草稿", "已提交", "已取消"][entry.docstatus] || ""}</small></a>`;
+	function writable(frm) {
+		return frm.doc.docstatus === 0 && !frm.is_new() && frm.perm?.[0]?.write && !frappe.boot.read_only;
+	}
+	function mealStatus(row, menu) {
+		if (row.actual_confirmed) return Number(row.actual_headcount) ? "已确认" : "已确认停供";
+		return menu?.suspended ? "待确认停供" : "待确认";
 	}
 
-	async function call(frm, button, method, args, callback) {
-		if (frm.__meal_kitchen_busy) return;
-		try {
-			saved(frm);
-			frm.__meal_kitchen_busy = true;
-			button?.prop("disabled", true);
-			const response = await frappe.call({ method, args, freeze: true, freeze_message: __("正在核对厨房执行记录…") });
-			if (response.exc) throw new Error(__("操作失败，请查看服务器提示。"));
-			await callback?.(response.message);
-		} catch (error) {
-			if (!error?._server_messages && !error?.responseJSON?._server_messages) {
-				frappe.msgprint({ title: __("操作未完成"), indicator: "red", message: esc(error?.message || "请求失败，请检查连接和权限后重试。") });
+	class KitchenDay {
+		constructor(frm) {
+			this.frm = frm;
+			this.name = frm.doc.name;
+			this.root = frm.fields_dict.ledger_html.$wrapper;
+			this.view = frm.doc.docstatus ? "close" : "prep";
+			this.meal = slots[0];
+			this.stockEdits = new Map(actions.map((action) => [action, new Map()]));
+			this.counts = new Map();
+			this.mealEdits = new Map();
+			this.query = "";
+			this.lossReason = "";
+			this.sequence = 0;
+			this.root
+				.off(".kday")
+				.on("click.kday", "[data-act]", (e) => this.activate(e.currentTarget))
+				.on("input.kday", "input,textarea", (e) => this.changed(e.currentTarget))
+				.on("submit.kday", "form", (e) => e.preventDefault());
+		}
+		async load() {
+			const token = ++this.sequence;
+			if (this.ledger) this.draw();
+			else this.root.html('<div class="ky-placeholder" role="status">正在读取当日供餐计划和库存流水…</div>');
+			try {
+				const ledger = await rpc("get_kitchen_ledger", { day_name: this.name, include_menu: 1 });
+				if (token !== this.sequence || this.frm.doc.name !== this.name) return;
+				if (ledger?.day_name !== this.name) throw new Error("未读取到本日流水。");
+				if (this.ledger && this.ledger.basis_hash !== ledger.basis_hash) {
+					this.counts.clear();
+					this.carryNotes = undefined;
+				}
+				this.ledger = ledger;
+				this.draw();
+			} catch (e) {
+				if (token !== this.sequence || this.frm.doc.name !== this.name) return;
+				this.ledger = null;
+				this.root.html(
+					`<div class="ky-placeholder">暂时无法读取本日流水。 ${btn("refresh", "重新读取")}</div>`,
+				);
 			}
-		} finally {
-			frm.__meal_kitchen_busy = false;
-			button?.prop("disabled", false);
+		}
+		changed(el) {
+			const s = el.dataset;
+			if (s.map === "qty") this.quantities.set(s.code, el.value);
+			if (s.map === "count") this.counts.set(s.code, el.value);
+			if (s.key === "carry") this.carryNotes = el.value;
+			if (s.key === "loss") this.lossReason = el.value;
+			if (s.key === "query") {
+				this.query = el.value;
+				const term = this.query.trim().toLowerCase();
+				this.root.find("[data-search]").each((_, r) => {
+					r.hidden = !r.dataset.search.includes(term);
+				});
+				this.root
+					.find(".ky-no-match")
+					.prop("hidden", !term || this.root.find("[data-search]:not([hidden])").length > 0);
+			}
+			if (s.key === "actual" || s.key === "reason") {
+				const row = this.mealRow();
+				this.editFor(row)[s.key] = el.value;
+				this.updateDifference(row);
+			}
+		}
+		mealRow() {
+			return (this.frm.doc.meals || []).find((r) => r.meal_type === this.meal);
+		}
+		editFor(row) {
+			const source = JSON.stringify([row.actual_confirmed, row.actual_headcount, row.reason]);
+			if (this.mealEdits.get(row.name)?.source !== source)
+				this.mealEdits.set(row.name, {
+					source,
+					actual:
+						row.actual_confirmed || Number(row.actual_headcount) > 0 ? String(row.actual_headcount || 0) : "",
+					reason: row.reason || "",
+				});
+			return this.mealEdits.get(row.name);
+		}
+		get quantities() {
+			return this.stockEdits.get(this.view === "prep" ? "领用" : this.action);
+		}
+		draw() {
+			const frm = this.frm,
+				d = frm.doc;
+			if (!this.ledger || d.name !== this.name) return;
+			this.root.addClass("ky-root");
+			const editable = writable(frm);
+			const stage =
+				d.docstatus === 1
+					? "已日结"
+					: d.docstatus === 2
+						? "已取消"
+						: this.ledger.can_close
+							? "待日结复核"
+							: "执行中";
+			const weekday = frappe.datetime
+				.str_to_obj(d.meal_date)
+				.toLocaleDateString("zh-CN", { weekday: "short" });
+			this.root
+				.html(`<section class="ky-app"><header class="ky-heading"><div><h2>厨房每日执行</h2><p>${esc(d.company)}<i></i>${esc(d.meal_date)} · ${esc(weekday)}</p></div>
+				<span class="ky-tag">${esc(stage)}</span></header>
+				<nav class="ky-steps" aria-label="当日操作">${steps.map(([v, i, l]) => `<button type="button" data-act="view:${v}" aria-current="${this.view === v ? "step" : "false"}">${icon(i)}<b>${l}</b></button>`).join("")}</nav>
+				${this.view === "prep" ? this.prep(editable && frappe.model.can_create("Stock Entry")) : this.view === "meals" ? this.service(editable) : this.view === "ledger" ? this.stock(editable) : this.review(editable)}</section>`);
+			if (this.view === "meals" && this.mealRow()) this.updateDifference(this.mealRow());
+			this.root.find("[data-key=query]").each((_, el) => this.changed(el));
+			this.root.find("img").one("error", function () {
+				this.remove();
+			});
+		}
+		prep(editable) {
+			const frm = this.frm,
+				l = this.ledger,
+				meals = frm.doc.meals || [];
+			const entries = l.stock_entries.filter((r) => r.action === "领用" && r.docstatus === 0);
+			const rows = l.rows.filter((r) => r.can_issue && r.allowed_actions.includes("领用"));
+			return `<div class="ky-prep"><section class="ky-card"><header class="ky-hero"><h3>今日领用备料</h3><p>${esc(frm.doc.source_warehouse)} → ${esc(frm.doc.kitchen_warehouse)}</p></header>
+				<div class="ky-card-body"><h4>领用明细</h4>${entries.map(stockLink).join("")}
+				${this.qtyTable(rows, editable && !entries.length, true)}${editable && !entries.length && rows.length ? `<footer>${btn("draft", "生成领用草稿", true)}</footer>` : ""}</div></section>
+				<section class="ky-card ky-card-body"><h3>今日供餐</h3>${slots
+					.map((s, i) => {
+						const r = meals.find((x) => x.meal_type === s);
+						if (!r) return "";
+						const m = l.menus?.[s];
+						return `<button type="button" class="ky-slot" data-act="meal:${s}"><span class="ky-icon">${icon(mealIcons[i])}</span><span><b>${s}</b><small>${m?.suspended ? "计划停供" : "计划 " + fmt(r.planned_headcount) + " 人"}</small></span><em class="ky-pill ${r.actual_confirmed ? "ok" : m?.suspended ? "muted" : "pending"}">${mealStatus(r, m)}</em></button>`;
+					})
+					.join("")}<footer>${btn("view:ledger", "查看库存流水")}</footer></section></div>`;
+		}
+		qtyTable(rows, editable, prep) {
+			if (!rows.length) return '<p class="ky-empty">本日没有可操作的食材。</p>';
+			return `<div class="ky-scroll"><table><thead><tr><th>食材</th><th>${prep ? "计划量" : "厨房结存"}</th>${editable ? "<th>本次数量</th>" : ""}</tr></thead><tbody>${rows.map((r) => `<tr><th>${esc(r.item_name || r.item_code)}</th><td>${fmt(prep ? r.planned_qty : balance(r))} ${esc(__(r.stock_uom))}</td>${editable ? `<td>${input("qty", r.item_code, r.stock_uom, this.quantities.get(r.item_code), r.item_name + "本次数量")}</td>` : ""}</tr>`).join("")}</tbody></table></div>`;
+		}
+		service(editable) {
+			const l = this.ledger,
+				row = this.mealRow();
+			if (!row) return '<p class="ky-empty">本日缺少对应餐次。</p>';
+			const menu = l.menus?.[this.meal] || {},
+				ed = this.editFor(row);
+			return `<nav class="ky-meals" aria-label="选择餐次">${slots
+				.map((s, i) => {
+					const r = this.frm.doc.meals.find((x) => x.meal_type === s);
+					return r
+						? `<button type="button" data-act="meal:${s}" aria-pressed="${s === this.meal}">${icon(mealIcons[i])}<b>${s}</b><small>${mealStatus(r, l.menus?.[s])}</small></button>`
+						: "";
+				})
+				.join("")}</nav><div class="ky-pair"><section class="ky-card ky-card-body"><h3>${this.meal}菜单</h3>
+				${menu.suspended ? `<p class="ky-empty">计划停供${menu.reason ? " · " + esc(menu.reason) : ""}</p>` : (menu.dishes || []).map((d) => `<div class="ky-dish"><span class="ky-photo">${icon("utensils")}${photo(d.image) ? `<img src="${esc(d.image)}" alt="">` : ""}</span><b>${esc(d.name)}</b></div>`).join("") || '<p class="ky-empty">暂无已编排菜品</p>'}</section>
+				<section class="ky-card ky-card-body"><h3>${editable ? "确认" : ""}${this.meal}人数</h3><p>计划供餐 <b>${fmt(row.planned_headcount)}</b> 人</p>
+				<div class="ky-stepper">${editable ? btn("minus", "−") : ""}<label><input data-key="actual" aria-label="实际供餐人数" type="number" min="0" step="1" inputmode="numeric" placeholder="实际人数" value="${esc(ed.actual)}" ${editable ? "" : "disabled"}></label>${editable ? btn("plus", "＋") : ""}</div>
+				<div class="ky-diff"><span data-diff></span>${editable ? btn("use-plan", menu.suspended ? "填入停供人数 0" : "按计划填入") : ""}</div>
+				<label class="ky-label">差异或停供原因<textarea data-key="reason" rows="2" ${editable ? "" : "disabled"}>${esc(ed.reason)}</textarea></label>
+				${editable ? `<footer>${btn("confirm-meal", `确认${this.meal}人数`, true)}</footer>` : ""}</section></div>`;
+		}
+		updateDifference(row) {
+			const value = this.editFor(row).actual,
+				delta = Number(value) - Number(row.planned_headcount);
+			this.root
+				.find("[data-diff]")
+				.text(
+					value === ""
+						? "待登记实际人数"
+						: Number(value) === 0
+							? "实际停供，请填写原因"
+							: delta === 0
+								? "与计划人数一致"
+								: `比计划${delta > 0 ? "多" : "少"} ${fmt(Math.abs(delta))} 人`,
+				);
+		}
+		stock(editable) {
+			const l = this.ledger,
+				headers = ["期初", "领用", "耗用", "退料", "损耗", "结存"];
+			const canStock = editable && frappe.model.can_create("Stock Entry");
+			const recent = l.stock_entries || [];
+			return `<div class="ky-ledger"><section class="ky-card ky-card-body"><h3>食材收支明细</h3><div class="ky-tools"><input type="search" data-key="query" aria-label="查找食材" placeholder="查找食材" value="${esc(this.query)}">
+				${canStock ? actions.map((a) => btn("stock:" + a, a)).join("") : ""}${btn("refresh", "刷新流水")}</div>
+				<div class="ky-scroll"><table><thead><tr><th>食材</th>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${l.rows.map((r) => `<tr data-search="${esc([r.item_name, r.item_code].join(" ").toLowerCase())}"><th>${esc(r.item_name || r.item_code)}<small>${esc(__(r.stock_uom))}</small></th>${[r.opening_qty, r.issued_qty, r.consumed_qty, r.returned_qty, r.loss_qty, balance(r)].map((q) => `<td>${fmt(q)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="ky-no-match ky-empty" hidden>没有匹配的食材。</p>
+				<p class="ky-help">仅已提交的库存单计入余额。</p>${l.opening_day?.day_name ? `<a href="/desk/meal-kitchen-day/${encodeURIComponent(l.opening_day.day_name)}">查看期初来源日结</a>` : ""}
+				${recent.length ? `<h4>关联库存单</h4>${recent.map(stockLink).join("")}` : ""}</section>${this.action && canStock ? this.stockForm() : this.carry(editable)}</div>`;
+		}
+		stockForm() {
+			const a = this.action,
+				pending = this.ledger.stock_entries.find((r) => r.action === a && !r.docstatus);
+			const rows = this.ledger.rows.filter(
+				(r) => r.allowed_actions.includes(a) && (a !== "领用" || r.can_issue),
+			);
+			return `<aside class="ky-card ky-card-body"><div class="ky-between"><h3>登记${a}</h3>${btn("carry", "返回盘点")}</div>${pending ? stockLink(pending) : this.qtyTable(rows, true, false)}
+				${!pending && rows.length ? `${a === "损耗" ? `<label class="ky-label">损耗原因<textarea data-key="loss">${esc(this.lossReason)}</textarea></label>` : ""}<footer>${btn("draft", "生成" + a + "草稿", true)}</footer>` : ""}</aside>`;
+		}
+		carry(editable) {
+			const l = this.ledger,
+				rows = l.rows.filter((r) => Number(balance(r)) > 0);
+			const future = this.frm.doc.meal_date > frappe.datetime.get_today();
+			const canCount = editable && !future && !l.has_drafts;
+			return `<aside class="ky-card ky-card-body"><h3>${icon("scale")} 清点厨房余料</h3>${
+				!rows.length
+					? '<p class="ky-empty">本日没有正结存，无需盘点余料。</p>'
+					: `
+				<p class="ky-pill ${l.carry_confirmation_current ? "ok" : "pending"}">${rows.length} 项${l.carry_confirmation_current ? "已实盘" : "待盘点"}</p>
+				${rows.map((r) => `<div class="ky-count"><b>${esc(r.item_name || r.item_code)}</b><small>账面 ${fmt(balance(r))} ${esc(__(r.stock_uom))}</small>${l.carry_confirmation_current ? `<small>已盘 ${fmt(l.physical_counts?.[r.item_code])} ${esc(__(r.stock_uom))}</small>` : ""}${canCount ? input("count", r.item_code, r.stock_uom, this.counts.get(r.item_code), r.item_name + "实盘量") : ""}</div>`).join("")}
+				<label class="ky-label">留厨说明<textarea data-key="carry" ${canCount ? "" : "disabled"}>${esc(this.carryNotes ?? this.frm.doc.carry_notes ?? "")}</textarea></label>
+				${canCount ? `<footer>${btn("count", "保存实盘记录", true)}</footer>` : editable ? `<p class="ky-help">${future ? "供餐日当天可登记实盘。" : "先处理未提交的库存单，再清点余料。"}</p>` : ""}`
+			}</aside>`;
+		}
+		review(editable) {
+			const l = this.ledger,
+				d = this.frm.doc,
+				closed = d.docstatus === 1;
+			const confirmed = (d.meals || []).filter((r) => r.actual_confirmed).length;
+			const blocks = d.docstatus ? [] : l.blockers || [];
+			const permitted =
+				editable &&
+				this.frm.perm?.[0]?.submit &&
+				d.owner !== frappe.session.user &&
+				(!l.carry_confirmation_current || l.carry_reviewer !== frappe.session.user) &&
+				!frappe.workflow.has_workflow(this.frm.doc);
+			return `<section class="ky-card ky-card-body"><h3>${closed ? "当日日结记录" : "日结复核"}</h3><div class="ky-checks">
+				<div><b>实际供餐人数</b><span>${confirmed} / 5 餐已确认</span>${btn("view:meals", "查看餐次")}</div>
+				<div><b>库存单据</b><span>${l.has_drafts ? "有待处理草稿" : "已提交流水 " + l.stock_entries.filter((r) => r.docstatus === 1).length + " 笔"}</span>${btn("view:ledger", "查看流水")}</div>
+				<div><b>厨房余料</b><span>${l.carry_required ? (l.carry_confirmation_current ? "已实盘" : "待实盘") : "无正结存"}</span>${btn("view:ledger", "查看余料")}</div></div>
+				${blocks.length ? `<ul class="ky-blockers">${blocks.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+				${closed ? `<p>审核人 ${esc(d.approved_by || "—")} · ${esc(d.approved_at || "")}</p>` : editable ? `<footer><small>由另一位有权限的审核人员完成日结。</small>${permitted ? btn("submit", "复核并提交日结", true, !l.can_close) : ""}</footer>` : ""}</section>`;
+		}
+		async activate(el) {
+			const [a, key] = el.dataset.act.split(":");
+			if (this.busy) return;
+			if (a === "refresh") return this.load();
+			if (a === "view" || a === "meal" || a === "stock" || a === "carry") {
+				if (a === "view") {
+					this.view = key;
+					if (key === "prep") this.action = "领用";
+					if (key === "ledger") this.action = null;
+				} else if (a === "meal") {
+					this.view = "meals";
+					this.meal = key;
+				} else {
+					this.view = "ledger";
+					this.action = a === "carry" ? null : key;
+				}
+				return this.draw();
+			}
+			if (!writable(this.frm)) return;
+			const row = this.mealRow();
+			if (["minus", "plus", "use-plan"].includes(a)) {
+				const ed = this.editFor(row);
+				ed.actual = String(
+					a === "use-plan"
+						? Number(row.planned_headcount)
+						: Math.max(0, Number(ed.actual || 0) + (a === "plus" ? 1 : -1)),
+				);
+				this.root.find("[data-key=actual]").val(ed.actual);
+				return this.updateDifference(row);
+			}
+			this.busy = true;
+			el.disabled = true;
+			try {
+				if (a === "confirm-meal") await this.confirmMeal(row);
+				else if (a === "draft") await this.createDraft();
+				else if (a === "count") await this.confirmCarry();
+				else if (a === "submit" && this.ledger.can_close) await this.frm.savesubmit();
+			} catch (e) {
+				if (!e?._server_messages && !e?.responseJSON?._server_messages)
+					frappe.msgprint(esc(e?.message || "操作未完成，请重新核对。"));
+			} finally {
+				this.busy = false;
+				el.disabled = false;
+			}
+		}
+		async confirmMeal(row) {
+			const ed = this.editFor(row),
+				actual = Number(ed.actual);
+			if (!ed.actual.trim() || !Number.isSafeInteger(actual) || actual < 0)
+				throw new Error("请填写实际供餐人数，停供填 0。");
+			if ((actual === 0 || actual !== Number(row.planned_headcount)) && !ed.reason.trim())
+				throw new Error("请填写差异或停供原因。");
+			await frappe.model.set_value(row.doctype, row.name, "actual_headcount", actual);
+			await frappe.model.set_value(row.doctype, row.name, "reason", ed.reason.trim());
+			await frappe.model.set_value(row.doctype, row.name, "actual_confirmed", 1);
+			if (this.frm.is_dirty()) await this.frm.save();
+			this.mealEdits.delete(row.name);
+			await this.load();
+			frappe.show_alert({ message: row.meal_type + "人数已确认", indicator: "green" });
+		}
+		async createDraft() {
+			if (this.frm.is_dirty()) throw new Error("请先保存执行资料，再生成库存单。");
+			const action = this.view === "prep" ? "领用" : this.action,
+				items = [];
+			const eligible = this.ledger.rows.filter((r) => r.allowed_actions.includes(action));
+			for (const r of eligible) {
+				const v = this.quantities.get(r.item_code);
+				if (!v || v === "0") continue;
+				const qty = Number(v);
+				if (!Number.isFinite(qty) || qty < 0) throw new Error("数量须为非负数。");
+				if (qty > 0) items.push({ item_code: r.item_code, qty: v });
+			}
+			if (!items.length) throw new Error("请至少填写一种食材的实际操作量。");
+			if (action === "损耗" && !this.lossReason.trim()) throw new Error("请填写实际损耗原因。");
+			const result = await rpc(
+				"create_kitchen_stock_entry",
+				{ day_name: this.name, action, items, reason: action === "损耗" ? this.lossReason : "" },
+				true,
+			);
+			if (!result?.stock_entry) throw new Error("未取得库存单草稿。");
+			this.quantities.clear();
+			if (action === "损耗") this.lossReason = "";
+			frappe.set_route("Form", "Stock Entry", result.stock_entry);
+		}
+		async confirmCarry() {
+			if (this.frm.is_dirty()) throw new Error("请先保存执行资料，再登记实盘。");
+			const positive = this.ledger.rows.filter((r) => Number(balance(r)) > 0);
+			const physical_counts = positive.map((r) => ({
+				item_code: r.item_code,
+				qty: this.counts.get(r.item_code) || "",
+			}));
+			if (
+				!positive.length ||
+				physical_counts.some((r) => !r.qty.trim() || !Number.isFinite(Number(r.qty)) || Number(r.qty) < 0)
+			)
+				throw new Error("请填写每项余料的实际清点数量。");
+			const notes = (this.carryNotes ?? this.frm.doc.carry_notes ?? "").trim();
+			if (!notes) throw new Error("请填写食材留厨说明。");
+			const result = await rpc(
+				"confirm_kitchen_carry",
+				{ day_name: this.name, physical_counts, notes },
+				true,
+			);
+			if (!result?.carry_confirmed) throw new Error("实盘未确认，请刷新流水核对。");
+			this.counts.clear();
+			this.carryNotes = undefined;
+			await this.frm.reload_doc();
+			frappe.show_alert({ message: "清点记录已保存", indicator: "green" });
 		}
 	}
-
-	function renderLedger(frm, ledger) {
-		const wrapper = frm.fields_dict.ledger_html?.$wrapper;
-		if (!wrapper) return;
-		const rows = Array.isArray(ledger?.rows) ? ledger.rows : [];
-		const entries = Array.isArray(ledger?.stock_entries) ? ledger.stock_entries : [];
-		const blockers = Array.isArray(ledger?.blockers) ? ledger.blockers : [];
-		const historical = frm.doc.docstatus === 1;
-		const cells = rows.map((row) => `<tr><td>${esc(row.item_name || row.item_code)}${Number(row.planned_qty) === 0 && Number(row.opening_qty) > 0
-			? `<div class="text-muted small">${esc("今日无计划，来自期初留存")}</div>` : ""}</td><td>${esc(row.stock_uom)}</td>${[
-			row.planned_qty, row.opening_qty, row.issued_qty, row.consumed_qty, row.returned_qty, row.loss_qty, closingQty(row),
-		].map((value) => `<td class="text-right">${esc(number(value))}</td>`).join("")}</tr>`).join("");
-		const links = entries.map((entry) => {
-			const status = { 0: "草稿，未计入余额", 1: "已提交", 2: "已取消" }[Number(entry.docstatus)] || "待核对";
-			return `<li><a href="/desk/stock-entry/${encodeURIComponent(entry.name)}">${esc(entry.name)}</a> · ${esc(entry.action)} · ${esc(entry.posting_date)} · ${esc(status)}</li>`;
-		}).join("");
-		const carryMessage = ledger?.carry_required
-			? ledger?.carry_confirmation_current
-				? "本日正结存已按当前流水逐项实盘确认。"
-				: "本日有食材余料留厨，请逐项输入真实清点数量并确认；库存、人数或说明改变后须重新清点。"
-			: "本日没有正结存，无需额外余料确认；五餐实际人数和库存流水仍须核对。";
-		const opening = ledger?.opening_day?.day_name;
-		wrapper.html(`<p class="text-muted">下列数量均为食材库存单位。期初留存＋本日领用－耗用－退料－损耗＝期末留存；只计已提交流水。食材留在厨房不另造移库或入库。</p>
-			${historical ? `<p class="text-muted">${esc("这是当日结存记录，后续日期可能已继续使用，不能据此认定当前厨房可用量。")}</p>` : ""}
-			${opening ? `<p>${esc("期初来源日结：")}<a href="/desk/meal-kitchen-day/${encodeURIComponent(opening)}">${esc(opening)}</a></p>` : ""}
-			${blockers.length ? `<div class="alert alert-warning"><ul style="margin-bottom:0">${blockers.map((value) => `<li>${esc(value)}</li>`).join("")}</ul></div>` : ""}
-			${ledger?.has_drafts ? '<p class="text-warning">存在未处理的库存单草稿，请先核对再日结。</p>' : ""}
-			<div style="overflow-x:auto"><table class="table table-bordered table-condensed"><thead><tr><th>食材</th><th>单位</th><th>本日计划</th><th>期初留存</th><th>本日领用</th><th>本日耗用</th><th>本日退料</th><th>本日损耗</th><th>期末留存${historical ? "（当日记录）" : ""}</th></tr></thead>
-			<tbody>${cells || '<tr><td colspan="9">暂无计划或期初留存食材。</td></tr>'}</tbody></table></div>
-			<p class="${ledger?.carry_required && !ledger?.carry_confirmation_current ? "text-warning" : "text-muted"}">${esc(carryMessage)}</p>
-			<p>${ledger?.can_close ? "本日实际人数、库存操作与留存已核对，可交由另一位授权审核人提交日结。" : "请完成实际人数、库存草稿和余料清点核对后提交日结。"}</p>
-			<strong>关联原生库存单</strong><ul>${links || "<li>尚无关联库存单。</li>"}</ul>`);
-		frm.__meal_kitchen_ledger = ledger;
-	}
-
-	function openAction(frm, action, ledger, button) {
-		if (frm.__meal_kitchen_dialog_open) return;
-		const rows = (Array.isArray(ledger?.rows) ? ledger.rows : []).filter((row) => allowed(row, action));
-		if (!rows.length) return frappe.msgprint(__("本日没有可操作食材。"));
-		frm.__meal_kitchen_dialog_open = true;
-		const data = rows.map((row) => ({ item_code: row.item_code, item_name: row.item_name,
-			stock_uom: row.stock_uom, balance_qty: closingQty(row), qty: 0 }));
-		const dialog = new frappe.ui.Dialog({
-			title: __(`创建${action}库存单草稿`), size: "extra-large",
-			fields: [
-				{ fieldname: "notice", fieldtype: "HTML", options: `<p>${esc("请填写本次实际操作量，未填写或零数量的食材不会加入单据。所有数量均为该食材库存单位；生成后须在原生库存单中审核提交。")} ${esc(action === "领用" ? "仅列出本日允许领用的计划食材，从原料仓调拨到厨房仓。" : "系统按已核实的领用来源分配，包括允许使用的期初余料；不能重复退料、耗用或损耗。")}</p>` },
-				{ fieldname: "items", fieldtype: "Table", label: __("本次操作食材"), in_place_edit: true, cannot_add_rows: true, cannot_delete_rows: true, data,
-					fields: [
-						{ fieldname: "item_code", fieldtype: "Link", label: __("食材"), options: "Item", read_only: 1, in_list_view: 1 },
-						{ fieldname: "item_name", fieldtype: "Data", label: __("名称"), read_only: 1, in_list_view: 1 },
-						{ fieldname: "stock_uom", fieldtype: "Data", label: __("库存单位"), read_only: 1, in_list_view: 1 },
-						{ fieldname: "balance_qty", fieldtype: "Float", label: __("当前可用留存"), read_only: 1, in_list_view: 1, precision: 9 },
-						{ fieldname: "qty", fieldtype: "Float", label: __("本次操作量"), in_list_view: 1, non_negative: 1, precision: 6 },
-					] },
-				{ fieldname: "reason", fieldtype: "Small Text", label: __("操作说明"), reqd: action === "损耗" ? 1 : 0 },
-			],
-			onhide() { frm.__meal_kitchen_dialog_open = false; },
-			primary_action_label: __("生成库存单草稿"),
-			primary_action(values) {
-				if (frm.__meal_kitchen_busy) return;
-				const items = (values.items || []).filter((row) => Number(row.qty) > 0).map((row) => ({ item_code: row.item_code, qty: row.qty }));
-				if (!items.length) return frappe.msgprint(__("请至少填写一项正数操作量。"));
-				dialog.get_primary_btn().prop("disabled", true);
-				return call(frm, button, "tongjianyun.meal_kitchen.create_kitchen_stock_entry", {
-					day_name: frm.doc.name, action, items, reason: values.reason || "",
-				}, async (result) => {
-					if (!result?.stock_entry) throw new Error(__("未返回库存单编号，请刷新流水核对。"));
-					dialog.hide();
-					await frm.reload_doc();
-					frappe.set_route("Form", "Stock Entry", result.stock_entry);
-				}).finally(() => dialog.get_primary_btn().prop("disabled", false));
-			},
-		});
-		dialog.show();
-	}
-
-	function invalidateCarryView(frm) {
-		frm.__meal_kitchen_ledger = null;
-		frm.fields_dict.ledger_html?.$wrapper.html(`<p class="text-warning">${esc("本日记录已修改。请保存后刷新流水；有余料留厨时须按当前记录重新清点确认。")}</p>`);
-	}
-
-	function openCarryCount(frm, ledger, button) {
-		if (frm.__meal_kitchen_dialog_open) return;
-		if (ledger?.has_drafts) return frappe.msgprint(__("请先处理库存单草稿，再清点厨房余料。"));
-		if (!ledger?.carry_required) return frappe.msgprint(__("本日没有正结存，无需额外余料确认。"));
-		const rows = (Array.isArray(ledger.rows) ? ledger.rows : []).filter((row) => Number(closingQty(row)) > 0);
-		if (!rows.length) return frappe.msgprint(__("余料明细不完整，请刷新后重试。"));
-		frm.__meal_kitchen_dialog_open = true;
-		const dialog = new frappe.ui.Dialog({
-			title: __("逐项实盘厨房食材余料"), size: "extra-large",
-			fields: [
-				{ fieldname: "notice", fieldtype: "HTML", options: `<p>${esc("请现场清点后逐项输入实际数量，系统不会自动填入实盘量。数量使用表中的库存单位；与本日结存不一致时，请先核对并按真实业务更正。此操作不创建库存移动。")}</p>` },
-				{ fieldname: "physical_counts", fieldtype: "Table", label: __("实际清点"), cannot_add_rows: true, cannot_delete_rows: true, in_place_edit: true,
-					data: rows.map((row) => ({ item_code: row.item_code, item_name: row.item_name, stock_uom: row.stock_uom,
-						closing_qty: closingQty(row), physical_qty: "" })), fields: [
-						{ fieldname: "item_code", fieldtype: "Link", options: "Item", label: __("食材"), read_only: 1, in_list_view: 1 },
-						{ fieldname: "item_name", fieldtype: "Data", label: __("名称"), read_only: 1, in_list_view: 1 },
-						{ fieldname: "stock_uom", fieldtype: "Data", label: __("库存单位"), read_only: 1, in_list_view: 1 },
-						{ fieldname: "closing_qty", fieldtype: "Float", label: __("本日账面结存"), read_only: 1, in_list_view: 1, precision: 9 },
-						{ fieldname: "physical_qty", fieldtype: "Data", label: __("实际清点数量"), reqd: 1, in_list_view: 1 },
-					] },
-				{ fieldname: "notes", fieldtype: "Small Text", label: __("食材留厨说明"), default: frm.doc.carry_notes || "", reqd: 1 },
-			],
-			onhide() { frm.__meal_kitchen_dialog_open = false; },
-			primary_action_label: __("确认真实清点数量"),
-			primary_action(values) {
-				if (frm.__meal_kitchen_busy) return;
-				const counts = values.physical_counts || [];
-				if (counts.length !== rows.length || counts.some((row) => !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(String(row.physical_qty ?? "").trim())
-					|| !Number.isFinite(Number(row.physical_qty)))) return frappe.msgprint(__("请逐项输入非负的实际清点数量，不能留空。"));
-				dialog.get_primary_btn().prop("disabled", true);
-				return call(frm, button, "tongjianyun.meal_kitchen.confirm_kitchen_carry", { day_name: frm.doc.name,
-					physical_counts: counts.map((row) => ({ item_code: row.item_code, qty: String(row.physical_qty).trim() })), notes: values.notes }, async (result) => {
-					if (!result?.carry_confirmed) throw new Error(__("实盘尚未确认，请刷新流水核对。"));
-					dialog.hide();
-					await frm.reload_doc();
-					const fresh = await frappe.call({ method: "tongjianyun.meal_kitchen.get_kitchen_ledger", args: { day_name: frm.doc.name } });
-					if (fresh.exc || !fresh.message) throw new Error(__("请重新刷新库存流水核对确认状态。"));
-					renderLedger(frm, fresh.message);
-				}).finally(() => dialog.get_primary_btn().prop("disabled", false));
-			},
-		});
-		dialog.show();
-	}
-
-	async function checkCarryBeforeSubmit(frm) {
-		const response = await frappe.call({ method: "tongjianyun.meal_kitchen.get_kitchen_ledger", args: { day_name: frm.doc.name } });
-		if (response.exc || !response.message) frappe.throw(__("请先成功刷新库存流水，再提交日结。"));
-		renderLedger(frm, response.message);
-		if (response.message.carry_required && !response.message.carry_confirmation_current) frappe.throw(__("本日正余料尚未按当前流水逐项实盘确认，请先清点厨房余料。"));
-	}
-
-	frappe.ui.form.on("Meal Kitchen Day", {
+	frappe.ui.form.on(type, {
 		setup(frm) {
-			frm.set_query("kitchen_warehouse", () => ({ filters: { company: frm.doc.company, is_group: 0, name: ["!=", frm.doc.source_warehouse] } }));
+			frm.set_query("kitchen_warehouse", () => ({
+				filters: { company: frm.doc.company, is_group: 0, name: ["!=", frm.doc.source_warehouse] },
+			}));
 		},
 		refresh(frm) {
-			for (const name of ["meals", "items"]) {
-				const grid = frm.fields_dict[name]?.grid;
-				if (grid) { grid.cannot_add_rows = true; grid.cannot_delete_rows = true; }
+			for (const field of ["meals", "items"]) {
+				const grid = frm.fields_dict[field]?.grid;
+				if (grid) {
+					grid.cannot_add_rows = true;
+					grid.cannot_delete_rows = true;
+				}
 			}
-			frm.__meal_kitchen_ledger = null;
-			frm.set_intro(__("逐餐确认实际供餐人数，按真实数量登记领用、耗用、退料或损耗。余料可留在厨房；有正结存时须逐项实盘确认，再由另一位授权人员审核日结。"), "blue");
-			frm.fields_dict.ledger_html?.$wrapper.html(`<p class="text-muted">${esc("点击“刷新库存流水”查看期初留存、本日操作和期末留存。已日结的期末数是当日记录，不代表以后日期仍可用。")}</p>`);
-			if (frm.is_new()) return;
-			frm.add_custom_button(__("周食谱计划"), () => frappe.set_route("Form", "Meal Planning Week", frm.doc.meal_week));
-			const refresh = frm.add_custom_button(__("刷新库存流水"), () => call(frm, refresh, "tongjianyun.meal_kitchen.get_kitchen_ledger", { day_name: frm.doc.name }, (ledger) => renderLedger(frm, ledger)));
-			if (frm.doc.docstatus !== 0 || !canOperate()) return;
-			const carry = frm.add_custom_button(__("清点厨房余料"), () => call(frm, carry, "tongjianyun.meal_kitchen.get_kitchen_ledger", { day_name: frm.doc.name }, (ledger) => {
-				renderLedger(frm, ledger);
-				openCarryCount(frm, ledger, carry);
-			}));
-			for (const action of ["领用", "退料", "耗用", "损耗"]) {
-				const button = frm.add_custom_button(__(`${action}草稿`), () => call(frm, button, "tongjianyun.meal_kitchen.get_kitchen_ledger", { day_name: frm.doc.name }, (ledger) => {
-					renderLedger(frm, ledger);
-					openAction(frm, action, ledger, button);
-				}), __("库存操作"));
+			if (frm.is_new()) {
+				frm.fields_dict.ledger_html.$wrapper.html(
+					'<p class="ky-placeholder">请从已提交周食谱的「厨房执行 → 打开每日执行」建立当日记录。</p>',
+				);
+				return;
 			}
+			if (frm._kitchen?.name !== frm.doc.name) frm._kitchen = new KitchenDay(frm);
+			frm._kitchen.load();
+			frm.add_custom_button(__("周食谱计划"), () =>
+				frappe.set_route("Form", "Meal Planning Week", frm.doc.meal_week),
+			);
 		},
-		before_submit(frm) {
-			if ((frm.doc.meals || []).length !== 5 || frm.doc.meals.some((row) => !row.actual_confirmed)) {
-				frappe.throw(__("请逐一确认五个餐次的实际供餐人数，零人停供也须明确确认。"));
-			}
-			if (frm.doc.meals.some((row) => (Number(row.actual_headcount) === 0 || Number(row.actual_headcount) !== Number(row.planned_headcount)) && !String(row.reason || "").trim())) {
-				frappe.throw(__("实际人数与计划不同，或实际停供时，请填写该餐原因。"));
-			}
-			return checkCarryBeforeSubmit(frm);
+		async before_submit(frm) {
+			if (frm.doc.meals?.length !== 5 || frm.doc.meals.some((r) => !r.actual_confirmed))
+				frappe.throw("请逐一确认五个餐次的实际供餐人数。");
+			if (
+				frm.doc.meals.some(
+					(r) =>
+						(Number(r.actual_headcount) === 0 ||
+							Number(r.actual_headcount) !== Number(r.planned_headcount)) &&
+						!r.reason?.trim(),
+				)
+			)
+				frappe.throw("请填写人数差异或停供原因。");
+			const ledger = await rpc("get_kitchen_ledger", { day_name: frm.doc.name });
+			if (!ledger?.can_close) frappe.throw(esc(ledger?.blockers?.join(" ") || "请先核对本日库存流水。"));
 		},
-		carry_notes(frm) { invalidateCarryView(frm); },
 	});
-
 	frappe.ui.form.on("Meal Kitchen Meal", {
 		actual_headcount(frm, cdt, cdn) {
-			frappe.model.set_value(cdt, cdn, "actual_confirmed", 0);
-			invalidateCarryView(frm);
+			return frappe.model.set_value(cdt, cdn, "actual_confirmed", 0);
 		},
-		actual_confirmed(frm) { invalidateCarryView(frm); },
-		reason(frm) { invalidateCarryView(frm); },
 	});
 })();

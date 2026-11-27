@@ -855,8 +855,50 @@ def confirm_kitchen_carry(day_name, physical_counts, notes=None):
 	return {"name": day.name, "carry_confirmed": True, "basis_hash": basis}
 
 
+def _service_menus(day):
+	from tongjianyun.meal_adjustments import get_effective_meals
+
+	meals = [row for row in get_effective_meals(day.meal_week) if _date(row.meal_date) == _date(day.meal_date)]
+	plans = [row.production_plan for row in meals if row.production_plan]
+	visible = []
+	if plans and frappe.has_permission("Production Plan", "read"):
+		visible = frappe.get_list(
+			"Production Plan", filters={"name": ("in", plans)}, pluck="name", limit_page_length=0
+		)
+
+	lines = []
+	if visible:
+		lines = frappe.get_all(
+			"Production Plan Item",
+			filters={"parent": ("in", visible), "parenttype": "Production Plan", "parentfield": "po_items"},
+			fields=["parent", "item_code", "custom_dish_name"], order_by="parent, idx",
+		)
+
+	codes = {line.item_code for line in lines if line.item_code}
+	images = {}
+	if codes and frappe.has_permission("Item", "read"):
+		items = frappe.get_list(
+			"Item", filters={"name": ("in", list(codes))}, fields=["name", "image"], limit_page_length=0
+		)
+		images = {item.name: item.image for item in items}
+
+	dishes = defaultdict(list)
+	for line in lines:
+		dishes[line.parent].append({"name": line.custom_dish_name or line.item_code, "image": images.get(line.item_code)})
+	menus = {}
+	for meal in meals:
+		menus[meal.meal_type] = {
+			"suspended": bool(meal.service_suspended),
+			"reason": meal.suspension_reason,
+			"dishes": dishes.get(meal.production_plan) or [
+				{"name": name.strip()} for name in (meal.menu or "").split("、") if name.strip()
+			],
+		}
+	return menus
+
+
 @frappe.whitelist()
-def get_kitchen_ledger(day_name):
+def get_kitchen_ledger(day_name, include_menu=False):
 	day = _day(day_name)
 	facts = _ledger(day, verify_sle=True)
 	blockers = []
@@ -864,7 +906,7 @@ def get_kitchen_ledger(day_name):
 		blockers.append("未来日期不能日结。")
 	if facts["drafts"]:
 		blockers.append("仍有未提交库存草稿，请核实后提交或删除。")
-	positive, basis, confirmed, _ = _carry_confirmation(day, facts)
+	positive, basis, confirmed, proof = _carry_confirmation(day, facts)
 	if positive and not confirmed:
 		blockers.append("厨房正余料尚未按当前流水逐项实盘确认留存。")
 	if not all(row.actual_confirmed for row in day.meals):
@@ -896,6 +938,7 @@ def get_kitchen_ledger(day_name):
 	return {
 		"day_name": day.name,
 		"meal_date": str(_date(day.meal_date)),
+		**({"menus": _service_menus(day)} if str(include_menu).lower() in ("1", "true") else {}),
 		"rows": rows,
 		"stock_entries": [
 			{
@@ -911,6 +954,8 @@ def get_kitchen_ledger(day_name):
 		"blockers": blockers,
 		"carry_required": bool(positive),
 		"carry_confirmation_current": confirmed,
+		"carry_reviewer": proof.get("confirmed_by") if confirmed else None,
+		"physical_counts": proof.get("physical_counts", {}) if confirmed else {},
 		"basis_hash": basis,
 		"opening_day": facts.get("opening_day"),
 	}

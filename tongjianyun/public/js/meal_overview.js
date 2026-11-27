@@ -217,7 +217,7 @@
 			.filter(head=>head.offsetWidth && head.textContent.trim() && !head.closest(".grid-row"));
 	}
 	function form(frm,title,labels) {
-		if (["Tongjianyun Canteen Policy", "Tongjianyun Canteen Delivery", "Tongjianyun Canteen Receiving"].includes(frm.doctype)) return;
+		if (["Tongjianyun Canteen Policy", "Tongjianyun Canteen Delivery", "Tongjianyun Canteen Receiving", "Meal Kitchen Day"].includes(frm.doctype)) return;
 		const main=frm.page.main?.[0];
 		if (!main) return;
 		if (frm.is_new()) {
