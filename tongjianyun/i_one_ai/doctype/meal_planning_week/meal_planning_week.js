@@ -237,9 +237,9 @@
 				fields: [
 					{ fieldname: "supplier", fieldtype: "Link", options: "Supplier", label: __("实际供应商"), reqd: 1,
 						get_query: () => ({ filters: { disabled: 0 } }) },
-					{ fieldname: "notice", fieldtype: "HTML", options: `<p>${escape("待采购明细默认全选。请用左侧复选框取消本供应商不承接的明细。生成后需要有效的供应商报价，并由另一位授权人员确认及提交订单。")}</p>` },
+					{ fieldname: "notice", fieldtype: "HTML", options: `<p>${escape("待采购明细默认全选。可在左侧取消本供应商不承接的明细，表头复选框控制当前页。生成后需要有效的供应商报价，并由另一位授权人员确认及提交订单。")}</p>` },
 					{ fieldname: "items", fieldtype: "Table", label: __("采购申请明细"), cannot_add_rows: true, cannot_delete_rows: true,
-						in_place_edit: true, data: rows,
+						in_place_edit: true, data: rows.map((row) => ({ ...row, __checked: 1 })),
 						fields: [
 							{ fieldname: "source_row", fieldtype: "Data", hidden: 1, read_only: 1 },
 							{ fieldname: "item_code", fieldtype: "Link", options: "Item", label: __("食材"), read_only: 1, in_list_view: 1 },
@@ -264,7 +264,7 @@
 				},
 			});
 			dialog.show();
-			dialog.fields_dict.items.check_all_rows();
+			dialog.fields_dict.items.grid.grid_pagination.update_select_all_checkbox();
 		} catch (error) {
 			if (!error?._server_messages && !error?.responseJSON?._server_messages) frappe.msgprint({ title: __("读取采购申请失败"), indicator: "red", message: escape(error?.message || "请检查读取权限后重试。") });
 		}
