@@ -68,7 +68,7 @@
 		const source = order && frappe.model.can_read("Purchase Order")
 			? `<a href="${escape(frappe.tjyMealDesk.purchaseOrderLink(order))}">${orderText}</a>` : orderText;
 		panel.html(`<header class="tjy-del-hero">
-			<div class="tjy-del-kicker">${icon("truck")} 供应商配送批次</div>
+			<div class="tjy-del-kicker"><span aria-hidden="true" class="tjy-del-symbol">${icon("truck")}</span><span>供应商配送批次</span></div>
 			<h2>${escape(doc.supplier || "新建配送批次")}</h2>
 			<p>园方按订单建批，供应商登记实际发货，食堂凭随货码验收。</p>
 			<dl><div><dt>来源订单</dt><dd>${source}</dd></div>

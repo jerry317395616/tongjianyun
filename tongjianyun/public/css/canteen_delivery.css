@@ -17,7 +17,8 @@
 	background: url("/assets/tongjianyun/images/meal-sections.webp") 33.333% top / 400% 200%;
 	mask-image: radial-gradient(ellipse at center, #000 48%, transparent 73%);
 }
-.tjy-del-kicker { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; color: #43634b; }
+.tjy-del-kicker { display: inline-flex; width: fit-content; align-items: center; gap: 7px; font-size: 12px; font-weight: 650; color: #43634b; }
+.tjy-del-symbol { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; }
 .tjy-del-kicker .icon { --icon-stroke: currentColor; flex: none; width: 16px; height: 16px; }
 .tjy-del-hero h2 {
 	max-width: 76%; margin: 7px 0 5px; font-weight: 670; font-size: clamp(24px, 2vw, 34px);
