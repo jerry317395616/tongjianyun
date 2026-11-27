@@ -492,6 +492,60 @@ def _draft_order(po_name, review=False):
 	return po, week, sources
 
 
+def _order_draft_source(week, material_request=None, *, for_update=False):
+	if week.docstatus != 1 or not (request_name := material_request or week.get("material_request")):
+		frappe.throw(_("The meal week needs a submitted procurement request first."))
+	mr = frappe.get_doc("Material Request", request_name, for_update=for_update)
+	mr.check_permission("read")
+	if (
+		mr.docstatus != 1
+		or mr.material_request_type != "Purchase"
+		or mr.company != week.company
+		or mr.status == "Stopped"
+	):
+		frappe.throw(_("The material request must be an active submitted purchase request in this company."))
+	return mr
+
+
+def _draft_order_rows(request_name, *, for_update=False):
+	order = frappe.qb.DocType("Purchase Order")
+	item = frappe.qb.DocType("Purchase Order Item")
+	query = (
+		frappe.qb.from_(order)
+		.join(item).on(item.parent == order.name)
+		.select(order.name, order.supplier, item.material_request_item)
+		.where((order.docstatus == 0) & (item.material_request == request_name))
+		.orderby(order.name).orderby(item.idx)
+	)
+	return (query.for_update() if for_update else query).run(as_dict=True)
+
+
+def _outstanding_stock_qty(row):
+	return _decimal(row.stock_qty) - max(_decimal(row.ordered_qty), _decimal(row.received_qty))
+
+
+@frappe.whitelist(methods=["GET"])
+def purchase_order_candidates(week_name):
+	"""Show the lines still available to place on a new draft purchase order."""
+	_operator()
+	if not frappe.has_permission("Purchase Order", "create"):
+		frappe.throw(_("You do not have permission to create purchase orders."), frappe.PermissionError)
+	week = _week(week_name)
+	mr = _order_draft_source(week)
+	owned = _plan_names(week)
+	in_drafts = {row.material_request_item for row in _draft_order_rows(mr.name)}
+	rows = []
+	for row in mr.items:
+		if row.production_plan not in owned:
+			frappe.throw(_("The request contains a source outside this meal week."))
+		remaining = _outstanding_stock_qty(row)
+		if remaining > ZERO and row.name not in in_drafts:
+			rows.append(dict(source_row=row.name, item_code=row.item_code, item_name=row.item_name,
+			                 qty=float(remaining / _decimal(row.conversion_factor)),
+			                 uom=row.uom, schedule_date=row.schedule_date))
+	return rows
+
+
 @frappe.whitelist(methods=["POST"])
 def create_purchase_order_draft(week_name, supplier, material_request_items=None, material_request=None):
 	_operator()
@@ -505,16 +559,7 @@ def create_purchase_order_draft(week_name, supplier, material_request_items=None
 	lock_claim_scope(week.company)
 	frappe.db.sql("SELECT name FROM `tabMeal Planning Week` WHERE name=%s FOR UPDATE", (week.name,))
 	week = _week(week.name, for_update=True)
-	mr = frappe.get_doc("Material Request", material_request or week.material_request, for_update=True)
-	mr.check_permission("read")
-	frappe.db.sql("SELECT name FROM `tabMaterial Request` WHERE name=%s FOR UPDATE", (mr.name,))
-	if (
-		mr.docstatus != 1
-		or mr.material_request_type != "Purchase"
-		or mr.company != week.company
-		or mr.status == "Stopped"
-	):
-		frappe.throw(_("The material request must be an active submitted purchase request in this company."))
+	mr = _order_draft_source(week, material_request, for_update=True)
 	supplier_doc = frappe.get_doc("Supplier", supplier)
 	supplier_doc.check_permission("read")
 	if supplier_doc.disabled:
@@ -534,24 +579,13 @@ def create_purchase_order_draft(week_name, supplier, material_request_items=None
 	for row in items:
 		if row.production_plan not in owned:
 			frappe.throw(_("The request contains a source outside this meal week."))
-	requested = {
-		row.name
-		for row in items
-		if _decimal(row.stock_qty) > max(_decimal(row.ordered_qty), _decimal(row.received_qty))
-	}
+	requested = {row.name for row in items if _outstanding_stock_qty(row) > ZERO}
 	if not requested:
 		frappe.throw(_("All selected material request quantities have already been ordered."))
 	# Native ordered_qty excludes draft orders. Locking the MR and inspecting
 	# existing drafts prevents two clicks or suppliers from ordering them twice.
-	drafts = frappe.db.sql(
-		"""SELECT p.name,p.supplier,i.material_request_item
-		FROM `tabPurchase Order` p JOIN `tabPurchase Order Item` i ON i.parent=p.name
-		WHERE p.docstatus=0 AND i.material_request=%s ORDER BY p.name,i.idx FOR UPDATE""",
-		(mr.name,),
-		as_dict=True,
-	)
 	by_order = defaultdict(set)
-	for row in drafts:
+	for row in _draft_order_rows(mr.name, for_update=True):
 		by_order[(row.name, row.supplier)].add(row.material_request_item)
 	for (name, owner), existing_rows in by_order.items():
 		if not existing_rows.intersection(requested):
@@ -576,9 +610,7 @@ def create_purchase_order_draft(week_name, supplier, material_request_items=None
 	current_items = {row.name: row for row in mr.items}
 	for row in po.items:
 		source = current_items[row.material_request_item]
-		remaining = _decimal(source.stock_qty) - max(
-			_decimal(source.ordered_qty), _decimal(source.received_qty)
-		)
+		remaining = _outstanding_stock_qty(source)
 		row.qty = float(remaining / _decimal(source.conversion_factor))
 		row.stock_qty = float(remaining)
 	with _managed():

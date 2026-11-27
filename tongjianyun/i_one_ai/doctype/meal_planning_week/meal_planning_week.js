@@ -225,34 +225,37 @@
 		try {
 			ensureSaved(frm);
 			if (frm.__meal_action_running) return;
-			const request = await frappe.db.get_doc("Material Request", frm.doc.material_request);
-			if (request.docstatus !== 1) return frappe.msgprint(__("请先由授权人员审核并提交采购申请，再生成采购订单草稿。"));
+			const week = frm.doc.name;
+			const { message: rows } = await frappe.call({
+				method: "tongjianyun.meal_purchasing.purchase_order_candidates",
+				type: "GET", args: { week_name: week },
+			});
+			if (window.cur_frm !== frm || frm.doc.name !== week) return;
+			if (!rows?.length) return frappe.msgprint(__("没有可加入新订单的采购明细，请查看已有采购订单。"));
 			const dialog = new frappe.ui.Dialog({
 				title: __("按采购申请生成订单草稿"), size: "extra-large",
 				fields: [
 					{ fieldname: "supplier", fieldtype: "Link", options: "Supplier", label: __("实际供应商"), reqd: 1,
 						get_query: () => ({ filters: { disabled: 0 } }) },
-					{ fieldname: "notice", fieldtype: "HTML", options: `<p>${escape("勾选本供应商承接的申请明细。生成后需要有效的供应商报价，并由另一位授权人员确认及提交订单。")}</p>` },
+					{ fieldname: "notice", fieldtype: "HTML", options: `<p>${escape("待采购明细默认全选。请用左侧复选框取消本供应商不承接的明细。生成后需要有效的供应商报价，并由另一位授权人员确认及提交订单。")}</p>` },
 					{ fieldname: "items", fieldtype: "Table", label: __("采购申请明细"), cannot_add_rows: true, cannot_delete_rows: true,
-						in_place_edit: true, data: (request.items || []).map((row) => ({ selected: 0, source_row: row.name,
-							item_code: row.item_code, item_name: row.item_name, qty: row.qty, uom: row.uom, schedule_date: row.schedule_date })),
+						in_place_edit: true, data: rows,
 						fields: [
-							{ fieldname: "selected", fieldtype: "Check", label: __("采购本项"), in_list_view: 1 },
 							{ fieldname: "source_row", fieldtype: "Data", hidden: 1, read_only: 1 },
 							{ fieldname: "item_code", fieldtype: "Link", options: "Item", label: __("食材"), read_only: 1, in_list_view: 1 },
 							{ fieldname: "item_name", fieldtype: "Data", label: __("名称"), read_only: 1, in_list_view: 1 },
-							{ fieldname: "qty", fieldtype: "Float", label: __("申请数量"), read_only: 1, in_list_view: 1 },
+							{ fieldname: "qty", fieldtype: "Float", label: __("待采购数量"), read_only: 1, in_list_view: 1 },
 							{ fieldname: "uom", fieldtype: "Data", label: __("采购单位"), read_only: 1, in_list_view: 1 },
 							{ fieldname: "schedule_date", fieldtype: "Date", label: __("需要日期"), read_only: 1, in_list_view: 1 },
 						] },
 				],
 				primary_action_label: __("生成订单草稿"),
 				primary_action(values) {
-					const selected = (values.items || []).filter((row) => row.selected).map((row) => row.source_row);
+					const selected = (values.items || []).filter((row) => row.__checked).map((row) => row.source_row);
 					if (!selected.length) return frappe.msgprint(__("请勾选本供应商承接的申请明细。"));
 					dialog.get_primary_btn().prop("disabled", true);
 					runAction(frm, button, "tongjianyun.meal_purchasing.create_purchase_order_draft", {
-						week_name: frm.doc.name, supplier: values.supplier, material_request_items: selected,
+						week_name: week, supplier: values.supplier, material_request_items: selected,
 					}, (result) => {
 						if (!result?.purchase_order) throw new Error(__("未返回采购订单编号，请刷新列表核对。"));
 						dialog.hide();
@@ -261,6 +264,7 @@
 				},
 			});
 			dialog.show();
+			dialog.fields_dict.items.check_all_rows();
 		} catch (error) {
 			if (!error?._server_messages && !error?.responseJSON?._server_messages) frappe.msgprint({ title: __("读取采购申请失败"), indicator: "red", message: escape(error?.message || "请检查读取权限后重试。") });
 		}
