@@ -41,6 +41,40 @@ class KitchenIssueReviewTests(unittest.TestCase):
     def approve(self, issue_date=None):
         return self.kitchen.approve_kitchen_issue("DAY", "TRANSFER", self.token, issue_date)
 
+    def test_day_close_delegates_only_effective_meal_plans_and_restores_permissions(self):
+        day = self.day
+        day._action, day.docstatus, day.owner, day.approved_by = "submit", 1, "clerk", "reviewer"
+        day.check_permission, day.db_set = Mock(), Mock()
+        plan = SimpleNamespace(name="ACTIVE", custom_meal_type="早餐", status="Submitted",
+                               flags=SimpleNamespace(ignore_permissions=None))
+        meal = SimpleNamespace(production_plan=plan.name, meal_type="早餐", meal_date=day.meal_date)
+        adjustments = SimpleNamespace(get_effective_meals=Mock(return_value=[meal]))
+        self.kitchen._day_execution = Mock(return_value={})
+        self.kitchen._week = Mock()
+        self.kitchen._day_plans = Mock(return_value=[plan])
+        self.frappe.as_json = str
+
+        def native_close(p):
+            self.assertTrue(p.flags.ignore_permissions)
+            return p.name
+
+        with patch.dict("sys.modules", {"tongjianyun.meal_adjustments": adjustments}):
+            self.kitchen._native_close = Mock(side_effect=native_close)
+            self.kitchen.on_submit_day(day)
+            self.assertIsNone(plan.flags.ignore_permissions)
+            day.db_set.assert_called_once()
+            day.db_set.reset_mock()
+            self.kitchen._native_close.side_effect = ValueError("有生产工单")
+            with self.assertRaisesRegex(ValueError, "生产工单"):
+                self.kitchen.on_submit_day(day)
+            self.assertIsNone(plan.flags.ignore_permissions)
+            plan.name = "UNRELATED"
+            self.kitchen._native_close.reset_mock()
+            with self.assertRaisesRegex(ValueError, "未被当天有效食谱引用"):
+                self.kitchen.on_submit_day(day)
+            self.kitchen._native_close.assert_not_called()
+            day.db_set.assert_not_called()
+
     def test_consumption_defaults_to_unconsumed_plan_within_balance(self):
         self.day.meals = []
         self.day.items = [{"item_code": "EGG", "stock_uom": "kg", "planned_qty": "0.624"}]

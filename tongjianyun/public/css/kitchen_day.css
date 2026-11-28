@@ -473,6 +473,16 @@
 	background: #fbf2dd;
 	color: #705017;
 }
+.ky-close-wait {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 14px 0 0;
+	padding: 12px 16px;
+	border-radius: 8px;
+	color: var(--ky-green);
+	background: var(--ky-pale);
+}
 .ky-issue-card + .ky-issue-card, .ky-extra-issue {
 	margin-top: 18px;
 	border-top: 1px solid var(--ky-line);

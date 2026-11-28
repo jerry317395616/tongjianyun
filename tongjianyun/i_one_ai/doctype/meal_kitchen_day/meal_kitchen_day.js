@@ -131,16 +131,12 @@
 			if (!this.ledger || d.name !== this.name) return;
 			this.root.addClass("ky-root");
 			const editable = writable(frm);
-			const stage =
-				d.docstatus === 1
-					? "已日结"
-					: d.docstatus === 2
-						? "已取消"
-						: this.ledger.can_close
-							? "待日结复核"
-							: this.ledger.carry_required && !this.ledger.carry_confirmation_current
-								? "待盘点"
-								: "执行中";
+			let stage = "执行中";
+			if (d.docstatus === 1) stage = "已日结";
+			else if (d.docstatus === 2) stage = "已取消";
+			else if (this.ledger.waiting_for_service) stage = "待供餐日复核";
+			else if (this.ledger.can_close) stage = "待日结复核";
+			else if (this.ledger.carry_required && !this.ledger.carry_confirmation_current) stage = "待盘点";
 			const weekday = frappe.datetime
 				.str_to_obj(d.meal_date)
 				.toLocaleDateString("zh-CN", { weekday: "short" });
@@ -416,7 +412,7 @@
 				<div><b>实际供餐人数</b><span>${confirmed} / 5 餐已确认</span>${btn("view:meals", "查看餐次")}</div>
 				<div><b>库存单据</b><span>${l.has_drafts ? "有待处理草稿" : "已提交流水 " + l.stock_entries.filter((r) => r.docstatus === 1).length + " 笔"}</span>${btn("view:ledger", "查看流水")}</div>
 				<div><b>厨房余料</b><span>${l.carry_required ? (l.carry_confirmation_current ? "已实盘" : "待实盘") : "无正结存"}</span>${btn("view:ledger", "查看余料")}</div></div>
-				${blocks.length ? `<ul class="ky-blockers">${blocks.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+				${l.waiting_for_service && blocks.length ? `<p class="ky-close-wait" role="status">${icon("calendar")} ${esc(blocks[0])}</p>` : blocks.length ? `<ul class="ky-blockers">${blocks.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
 				${closed ? `<p>审核人 ${esc(d.approved_by || "—")} · ${esc(d.approved_at || "")}</p>` : editable ? `<footer><small>由另一位有权限的审核人员完成日结。</small>${permitted ? btn("submit", "复核并提交日结", true, !l.can_close) : ""}</footer>` : ""}</section>`;
 		}
 		async activate(el) {

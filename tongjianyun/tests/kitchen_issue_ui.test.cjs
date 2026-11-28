@@ -27,7 +27,7 @@ function screen() {
 	}
 	const frm = {doc: {name: "DAY", meal_date: "2026-11-30", docstatus: 0, meals: []}, fields_dict: {ledger_html: {$wrapper: root}},
 		is_new: () => false, is_dirty: () => false, layout: {}, toolbar: {get_action_status: () => ""}, add_custom_button() {}, perm: [{write: 1}]};
-	const frappe = {ui: {form: {on: (name, events) => {fields[name] = events;}}, Dialog}, boot: {},
+	const frappe = {ui: {form: {on: (name, events) => {fields[name] = events;}}, Dialog}, boot: {}, session: {user: "审核人"},
 		utils: {escape_html: String, icon: () => ""}, datetime: {str_to_obj: d => new Date(d), str_to_user: String, get_today: () => "2026-11-30"},
 		workflow: {has_workflow: () => false}, model: {can_create: () => true}, show_alert() {},
 		set_route() {assert.fail("操作离开了厨房执行单");},
@@ -45,6 +45,23 @@ function screen() {
 	fields["Meal Kitchen Day"].refresh(frm);
 	return {k: frm._kitchen, root, entry, ledger, calls, dialogs, dateField};
 }
+
+test("资料已齐时显示可复核日期，供餐日前保持日结按钮禁用", async () => {
+	const {k, root, ledger} = screen();
+	k.frm.perm[0].submit = 1;
+	k.frm.doc.owner = "厨房经办";
+	Object.assign(ledger, {can_close: false, waiting_for_service: true,
+		blockers: ["日结资料已齐，11月30日供餐结束后可复核日结。"]});
+	await k.load();
+	await k.activate({dataset: {act: "view:close"}});
+	assert.match(root.content, /待供餐日复核/);
+	assert.match(root.content, /role="status"[^>]*>[\s\S]*11月30日供餐结束后可复核日结/);
+	assert.match(root.content, /data-act="submit"[^>]*disabled/);
+	Object.assign(ledger, {can_close: true, waiting_for_service: false, blockers: []});
+	await k.load();
+	assert.match(root.content, /待日结复核/);
+	assert.doesNotMatch(root.content, /data-act="submit"[^>]*disabled/);
+});
 
 test("生成领用草稿留在本页，创建人可以核对真实领用量", async () => {
 	const {k, root, entry, calls, dialogs} = screen();

@@ -219,7 +219,7 @@ def configure_kitchen_warehouse(week_name, kitchen_warehouse):
 	return {"name": week.name, "kitchen_warehouse": kitchen_warehouse, "changed": True}
 
 
-def _effective_day(week, meal_date, lock=False, *, stock_review=None):
+def _effective_day(week, meal_date, lock=False, *, check_plan_read=True):
 	# Delayed import: the adjustment module owns effective menu selection.
 	from tongjianyun.meal_adjustments import get_effective_meals
 	from tongjianyun.meal_planning import _recipe_signature
@@ -241,7 +241,7 @@ def _effective_day(week, meal_date, lock=False, *, stock_review=None):
 		if not meal.get("production_plan") or not meal.get("recipe_hash"):
 			_fail("有效餐次缺少已冻结的生产计划或配方依据。")
 		plan = frappe.get_doc("Production Plan", meal.production_plan, for_update=lock)
-		if stock_review is None:
+		if check_plan_read:
 			plan.check_permission("read")
 		if (
 			plan.docstatus != 1
@@ -286,6 +286,17 @@ def _effective_day(week, meal_date, lock=False, *, stock_review=None):
 	return sorted(meals, key=lambda row: SLOTS.index(row.meal_type)), items
 
 
+def _reviewing_day_submission(day):
+	# The day submitter may verify its frozen source internally without access to manufacturing forms.
+	if getattr(day, "_action", None) != "submit":
+		return False
+	_role(manager=True)
+	day.check_permission("submit")
+	if day.owner == frappe.session.user:
+		_fail("厨房日结必须由其他授权审核人批准，经办人不能自行日结。", permission=True)
+	return True
+
+
 def _verify_effective_source(day, week, lock=False, *, stock_review=None):
 	if stock_review is not None:
 		# Only verify the frozen plan internally for a reviewer of this linked stock entry.
@@ -295,7 +306,9 @@ def _verify_effective_source(day, week, lock=False, *, stock_review=None):
 			or not _can_review_stock(stock_review)
 		):
 			_fail("没有审核本日库存单的权限。", permission=True)
-	meals, expected = _effective_day(week, day.meal_date, lock=lock, stock_review=stock_review)
+	meals, expected = _effective_day(
+		week, day.meal_date, lock=lock, check_plan_read=stock_review is None and not _reviewing_day_submission(day)
+	)
 	if _item_signature(day.items) != _item_signature(expected):
 		_fail("厨房食材计划与当前有效食谱不一致，请先核对食谱调整。")
 	if len(day.meals) != 5 or {row.meal_type for row in day.meals} != set(SLOTS):
@@ -318,7 +331,7 @@ def _item_signature(items):
 def validate_day(doc, method=None):
 	week = _week(doc.meal_week, lock=True)
 	_warehouses(doc, week)
-	meals, expected = _effective_day(week, doc.meal_date, lock=True)
+	meals, expected = _effective_day(week, doc.meal_date, lock=True, check_plan_read=not _reviewing_day_submission(doc))
 	doc.active_day_key = _hash([doc.meal_week, str(_date(doc.meal_date))]) if doc.docstatus != 2 else None
 	old = doc.get_doc_before_save()
 	if not _MANAGED.get():
@@ -959,8 +972,6 @@ def get_kitchen_ledger(day_name, include_menu=False):
 	day = _day(day_name)
 	facts = _ledger(day, verify_sle=True)
 	blockers = []
-	if _date(day.meal_date) > _date(today()):
-		blockers.append("未来日期不能日结。")
 	if facts["drafts"]:
 		blockers.append("仍有未提交库存草稿，请核实后提交或删除。")
 	positive, basis, confirmed, proof = _carry_confirmation(day, facts)
@@ -974,6 +985,12 @@ def get_kitchen_ledger(day_name, include_menu=False):
 		blockers.append("有实际供餐人数但尚无实际耗用库存流水。")
 	if not positive_meals and consumed:
 		blockers.append("五餐均停供却存在供餐耗用，请先核对。")
+	service_date = _date(day.meal_date)
+	future = service_date > _date(today())
+	waiting_for_service = future and not blockers
+	if future:
+		timing = f"{service_date.month}月{service_date.day}日供餐结束后可复核日结。"
+		blockers.append(("日结资料已齐，" if waiting_for_service else "") + timing)
 	rows = []
 	planned = _item_signature(day.items)
 	for code, values in sorted(facts["totals"].items()):
@@ -1007,6 +1024,7 @@ def get_kitchen_ledger(day_name, include_menu=False):
 		],
 		"has_drafts": bool(facts["drafts"]),
 		"can_close": not blockers,
+		"waiting_for_service": waiting_for_service,
 		"blockers": blockers,
 		"carry_required": bool(positive),
 		"carry_confirmation_current": confirmed,
@@ -1705,7 +1723,7 @@ def before_submit_day(doc, method=None):
 	_role(manager=True)
 	if doc.owner == frappe.session.user:
 		_fail("厨房日结必须由其他授权审核人批准，经办人不能自行日结。", permission=True)
-	week = _week(doc.meal_week, lock=True)
+	_week(doc.meal_week, lock=True)
 	frappe.db.sql("SELECT name FROM `tabMeal Kitchen Day` WHERE name=%s FOR UPDATE", (doc.name,))
 	_check_execution_order(doc)
 	facts = _ledger(doc, lock=True, verify_sle=True)
@@ -1714,18 +1732,38 @@ def before_submit_day(doc, method=None):
 	if positive and carry_proof.get("confirmed_by") == frappe.session.user:
 		_fail("留存实盘确认人与日结审核人必须不同。", permission=True)
 	_day_execution(doc, lock=True)
-	for plan in _day_plans(week, doc.meal_date, lock=True):
-		plan.check_permission("write")
-		_no_work_orders(plan, lock=True)
 	doc.approved_by = frappe.session.user
 	doc.approved_at = now_datetime()
 
 
 def on_submit_day(doc, method=None):
+	from tongjianyun.meal_adjustments import get_effective_meals
+
+	if doc.docstatus != 1 or doc.approved_by != frappe.session.user or not _reviewing_day_submission(doc):
+		_fail("请通过厨房日结复核关闭当天的餐次计划。", permission=True)
 	proof = _day_execution(doc, lock=True)
-	closed = [
-		_native_close(plan) for plan in _day_plans(_week(doc.meal_week, lock=True), doc.meal_date, lock=True)
-	]
+	week = _week(doc.meal_week, lock=True)
+	effective = {
+		(row.meal_type, row.production_plan)
+		for row in get_effective_meals(week, lock=True)
+		if _date(row.meal_date) == _date(doc.meal_date) and row.production_plan
+	}
+	closed = []
+	for plan in _day_plans(week, doc.meal_date, lock=True):
+		# Already closed replacements remain in the historical day snapshot.
+		if plan.status in ("Closed", "Completed"):
+			_no_work_orders(plan, lock=True)
+			closed.append(plan.name)
+			continue
+		if (plan.custom_meal_type, plan.name) not in effective:
+			_fail("有未关闭的生产计划未被当天有效食谱引用，请先核对餐次来源。")
+		# Delegate only native close for this locked plan in the day submission transaction.
+		previous = plan.flags.ignore_permissions
+		try:
+			plan.flags.ignore_permissions = True
+			closed.append(_native_close(plan))
+		finally:
+			plan.flags.ignore_permissions = previous
 	proof["closed_plans"] = sorted(closed)
 	proof["ledger_hash"] = _hash(proof)
 	doc.db_set({"execution_snapshot": frappe.as_json(proof), "status": "已日结"}, update_modified=False)
