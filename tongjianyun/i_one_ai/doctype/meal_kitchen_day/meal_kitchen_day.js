@@ -150,12 +150,18 @@
 			const frm = this.frm,
 				l = this.ledger,
 				meals = frm.doc.meals || [];
-			const entries = l.stock_entries.filter((r) => r.action === "领用" && r.docstatus === 0);
+			const issues = l.stock_entries.filter((r) => r.action === "领用");
+			const pending = issues.filter((r) => r.docstatus === 0);
+			const submitted = issues.filter((r) => r.docstatus === 1);
 			const rows = l.rows.filter((r) => r.can_issue && r.allowed_actions.includes("领用"));
+			const form = !pending.length && (!submitted.length || editable)
+				? `<h4>领用明细</h4>${editable && rows.length ? '<p class="ky-help">本次数量默认按计划量扣除上日结余和今日已领量，可按实际领用修改。</p>' : ""}
+					${this.qtyTable(rows, editable, true)}${editable && rows.length ? `<footer>${btn("draft", "生成领用单，待审核", true)}</footer>` : ""}`
+				: "";
 			return `<div class="ky-prep"><section class="ky-card"><header class="ky-hero"><h3>今日领用备料</h3><p>${esc(frm.doc.source_warehouse)} → ${esc(frm.doc.kitchen_warehouse)}</p></header>
-				<div class="ky-card-body"><h4>领用明细</h4>${entries.map(stockLink).join("")}
-				${editable && !entries.length && rows.length ? '<p class="ky-help">本次数量默认按计划量扣除上日结余和今日已领量，可按实际领用修改。</p>' : ""}
-				${this.qtyTable(rows, editable && !entries.length, true)}${editable && !entries.length && rows.length ? `<footer>${btn("draft", "生成领用草稿", true)}</footer>` : ""}</div></section>
+				<div class="ky-card-body">${[...pending, ...submitted].map((entry) => this.issueCard(entry)).join("")}
+				${submitted.length && form ? `<details class="ky-extra-issue"><summary>追加领用</summary>${form}</details>` : form}
+				</div></section>
 				<section class="ky-card ky-card-body"><h3>今日供餐</h3>${slots
 					.map((s, i) => {
 						const r = meals.find((x) => x.meal_type === s);
@@ -164,6 +170,66 @@
 						return `<button type="button" class="ky-slot" data-act="meal:${s}"><span class="ky-icon">${icon(mealIcons[i])}</span><span><b>${s}</b><small>${m?.suspended ? "计划停供" : "计划 " + fmt(r.planned_headcount) + " 人"}</small></span><em class="ky-pill ${r.actual_confirmed ? "ok" : m?.suspended ? "muted" : "pending"}">${mealStatus(r, m)}</em></button>`;
 					})
 					.join("")}<footer>${btn("view:ledger", "查看库存流水")}</footer></section></div>`;
+		}
+		issueCard(entry) {
+			const done = entry.docstatus === 1;
+			const rows = this.ledger.rows.filter((row) => Number(entry.issue_quantities?.[row.item_code]) > 0);
+			return `<section class="ky-issue-card"><header class="ky-between"><h4>${done ? "领用结果" : "领用单"}</h4>
+				<span class="ky-pill ${done ? "ok" : "pending"}">${done ? "已领用" : "待库存主管审核"}</span></header>
+				<a href="/desk/stock-entry/${encodeURIComponent(entry.name)}">${esc(entry.name)}</a>
+				${rows.length ? `<ul class="ky-issue-lines">${rows.map((r) => `<li><span>${esc(r.item_name || r.item_code)}</span><b>${fmt(entry.issue_quantities[r.item_code])} ${esc(__(r.stock_uom))}</b></li>`).join("")}</ul>` : ""}
+				${done && entry.approved_by ? `<p class="ky-help">审核人 ${esc(entry.approved_by)} · ${esc(frappe.datetime.str_to_user(entry.approved_at))}</p>` : ""}
+				<footer>${done ? btn("view:meals", "去逐餐供餐", true) : btn("refresh", "刷新状态")}
+				${entry.issue_quantities ? btn("issue:" + entry.name, entry.can_review ? "审核领用" : "查看领用明细", entry.can_review) : ""}</footer></section>`;
+		}
+		openIssue(name) {
+			const entry = this.ledger.stock_entries.find((e) => e.name === name && e.action === "领用");
+			if (!entry?.issue_quantities || this.issueDialog) return;
+			const rows = this.ledger.rows.filter((r) => r.can_issue || r.item_code in entry.issue_quantities);
+			const dialog = new frappe.ui.Dialog({
+				title: entry.can_review ? "审核领用" : "领用明细",
+				no_submit_on_enter: true,
+				fields: [{fieldname: "details", fieldtype: "HTML"}],
+			});
+			this.issueDialog = dialog;
+			dialog.$wrapper.addClass("ky-issue-drawer").one("hidden.bs.modal", () => {
+				this.issueDialog = null;
+				dialog.$wrapper.remove();
+			});
+			const body = dialog.fields_dict.details.$wrapper;
+			body.html(`<div class="ky-issue-route"><div><small>领出仓库</small><b>${esc(entry.source_warehouse)}</b></div>
+				<span aria-hidden="true">→</span><div><small>领入仓库</small><b>${esc(entry.kitchen_warehouse)}</b></div></div>
+				<p class="ky-issue-meta">${esc(entry.name)} · 业务日期 ${esc(entry.posting_date)}</p>
+				<table><thead><tr><th>食材</th><th>当日计划量</th><th>本次领用</th></tr></thead><tbody>${rows.map((r) => {
+					const qty = entry.issue_quantities[r.item_code] || "0";
+					const diff = Number(qty) !== Number(r.planned_qty);
+					const unit = esc(__(r.stock_uom));
+					return `<tr><th>${esc(r.item_name || r.item_code)}</th><td>${fmt(r.planned_qty)} ${unit}</td>
+						<td><b>${fmt(qty)} ${unit}</b>${diff ? '<small class="ky-issue-diff">与计划有差异</small>' : ""}</td></tr>`;
+				}).join("")}</tbody></table>
+				${entry.review_blocker ? `<p class="ky-issue-note">${esc(entry.review_blocker)}</p>` : ""}`);
+			if (entry.can_review && !frappe.boot.read_only) {
+				dialog.set_primary_action("确认领用并调拨", async () => {
+					if (this.approving || entry.review_blocker || cur_frm !== this.frm || this.frm.doc.name !== this.name) return;
+					this.approving = true;
+					try {
+						const result = await rpc("approve_kitchen_issue", {
+							day_name: this.name, stock_entry: entry.name, review_token: entry.review_token,
+						}, true);
+						if (result?.stock_entry !== entry.name) throw new Error("未取得领用审核结果，请刷新状态。");
+						frappe.show_alert({message: result.already_submitted ? "该领用单已完成调拨" : "领用已审核，调拨完成", indicator: "green"});
+					} catch (e) {
+						if (!e?._server_messages && !e?.responseJSON?._server_messages)
+							frappe.msgprint(esc(e?.message || "调拨未确认，请刷新后核对。"));
+					} finally {
+						this.approving = false;
+						dialog.hide();
+						if (cur_frm === this.frm && this.frm.doc.name === this.name) await this.load();
+					}
+				});
+				dialog.get_primary_btn().prop("disabled", !!entry.review_blocker);
+			}
+			dialog.show();
 		}
 		qtyTable(rows, editable, prep) {
 			if (!rows.length) return '<p class="ky-empty">本日没有可操作的食材。</p>';
@@ -263,6 +329,7 @@
 			const [a, key] = el.dataset.act.split(":");
 			if (this.busy) return;
 			if (a === "refresh") return this.load();
+			if (a === "issue") return this.openIssue(el.dataset.act.slice("issue:".length));
 			if (a === "view" || a === "meal" || a === "stock" || a === "carry") {
 				if (a === "view") {
 					this.view = key;
@@ -272,7 +339,7 @@
 					this.view = "meals";
 					this.meal = key;
 				} else {
-					this.view = "ledger";
+					this.view = a === "stock" && key === "领用" ? "prep" : "ledger";
 					this.action = a === "carry" ? null : key;
 				}
 				return this.draw();
@@ -340,6 +407,12 @@
 			);
 			if (!result?.stock_entry) throw new Error("未取得库存单草稿。");
 			this.quantities.clear();
+			if (action === "领用") {
+				this.view = "prep";
+				await this.load();
+				frappe.show_alert({message: "领用单待库存主管审核", indicator: "green"});
+				return;
+			}
 			if (action === "损耗") this.lossReason = "";
 			frappe.set_route("Form", "Stock Entry", result.stock_entry);
 		}

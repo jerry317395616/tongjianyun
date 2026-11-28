@@ -462,6 +462,33 @@
 	background: #fbf2dd;
 	color: #705017;
 }
+.ky-issue-card + .ky-issue-card, .ky-extra-issue {
+	margin-top: 18px;
+	border-top: 1px solid var(--ky-line);
+	padding-top: 16px;
+}
+.ky-issue-card header h4 { margin: 0; }
+.ky-issue-card > a, .ky-issue-meta { display: block; font-size: 13px; color: var(--text-muted); margin: 8px 0 14px; }
+.ky-issue-lines { max-height: 38vh; overflow: auto; list-style: none; padding: 0; }
+.ky-issue-lines li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--ky-line); }
+.ky-extra-issue summary { cursor: pointer; font-weight: 600; color: var(--ky-green); }
+.ky-extra-issue[open] summary { margin-bottom: 14px; }
+.ky-issue-drawer .modal-dialog { width: min(540px, 100%); max-width: none; margin: 0 0 0 auto; }
+.ky-issue-drawer.fade .modal-dialog { transform: translateX(100%); }
+.ky-issue-drawer.show .modal-dialog { transform: none; }
+.ky-issue-drawer .modal-content { height: 100dvh; max-height: none; border-radius: 16px 0 0 16px; overflow: hidden; }
+.ky-issue-drawer .modal-body { flex: 1 1 auto; overflow: auto; padding: 20px; }
+.ky-issue-drawer :is(.modal-footer, .modal-header) { flex-shrink: 0; }
+.ky-issue-drawer .btn-primary { background-color: #205a43; color: white; }
+.ky-issue-route { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 16px; background: var(--control-bg); border-radius: 10px; }
+.ky-issue-route small, .ky-issue-diff { display: block; }
+.ky-issue-route small { color: var(--text-muted); margin-bottom: 5px; }
+.ky-issue-drawer table { width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ky-issue-drawer table :is(th, td) { text-align: right; padding: 9px 6px; border-bottom: 1px solid var(--border-color); }
+.ky-issue-drawer table th:first-child { text-align: left; }
+.ky-issue-drawer thead { background: var(--control-bg); }
+.ky-issue-diff, .ky-issue-note { color: #80511b; }
+.ky-issue-note { background: #fcf0d7; padding: 10px 12px; border-radius: 8px; margin-top: 16px; }
 @container (max-width:800px) {
 	.ky-ledger {
 		grid-template-columns: 1fr;

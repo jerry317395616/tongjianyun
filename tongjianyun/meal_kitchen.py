@@ -20,6 +20,7 @@ from frappe.utils import now_datetime, today
 
 SLOTS = ("早餐", "早点", "午餐", "午点", "晚餐")
 ACTIONS = ("领用", "退料", "耗用", "损耗")
+MANAGER_ROLES = {"System Manager", "Stock Manager"}
 ZERO = Decimal("0")
 EPSILON = Decimal("0.000000001")
 MAX_QTY = Decimal("999999999999.999999999")
@@ -106,7 +107,7 @@ def _login():
 
 def _role(manager=False):
 	_login()
-	allowed = {"System Manager", "Stock Manager"}
+	allowed = MANAGER_ROLES.copy()
 	if not manager:
 		allowed.update({"Stock User", "膳食业务经办员"})
 	if not allowed.intersection(frappe.get_roles()):
@@ -942,12 +943,7 @@ def get_kitchen_ledger(day_name, include_menu=False):
 		**({"menus": _service_menus(day)} if str(include_menu).lower() in ("1", "true") else {}),
 		"rows": rows,
 		"stock_entries": [
-			{
-				"name": entry.name,
-				"action": entry.custom_meal_action,
-				"docstatus": entry.docstatus,
-				"posting_date": str(entry.posting_date),
-			}
+			_stock_entry_summary(day, entry, include_menu=str(include_menu).lower() in ("1", "true"))
 			for entry in facts["entries"] + facts["drafts"]
 		],
 		"has_drafts": bool(facts["drafts"]),
@@ -960,6 +956,86 @@ def get_kitchen_ledger(day_name, include_menu=False):
 		"basis_hash": basis,
 		"opening_day": facts.get("opening_day"),
 	}
+
+
+def _issue_review_token(day, entry):
+	return _hash([entry.name, str(entry.modified), day.source_warehouse, day.kitchen_warehouse, _item_signature(day.items)])
+
+
+def _can_review_issue(entry):
+	return bool(
+		entry.owner != frappe.session.user
+		and MANAGER_ROLES.intersection(frappe.get_roles())
+		and entry.has_permission("submit")
+	)
+
+
+def _issue_review_blocker(day, entry):
+	from frappe.model.workflow import get_workflow_name
+
+	if day.docstatus != 0:
+		return "厨房执行单已关闭。"
+	if get_workflow_name("Stock Entry", entry):
+		return "此领用单已启用库存审批工作流，请按该工作流审批。"
+	earliest = max(_date(day.meal_date), _date(entry.posting_date))
+	if earliest > _date(today()):
+		return f"可提前核对，{earliest} 起可确认调拨。"
+	return ""
+
+
+def _stock_entry_summary(day, entry, include_menu):
+	result = {
+		"name": entry.name,
+		"action": entry.custom_meal_action,
+		"docstatus": entry.docstatus,
+		"posting_date": str(entry.posting_date),
+	}
+	if not include_menu or entry.custom_meal_action != "领用":
+		return result
+	doc = frappe.get_doc({"doctype": "Stock Entry", **entry})
+	if not doc.has_permission("read"):
+		return result
+	quantities = defaultdict(lambda: ZERO)
+	for row in doc.items:
+		quantities[row.item_code] += _decimal(row.qty)
+	result["source_warehouse"] = day.source_warehouse
+	result["kitchen_warehouse"] = day.kitchen_warehouse
+	result["issue_quantities"] = {code: _text(qty) for code, qty in quantities.items()}
+	if doc.docstatus == 0:
+		result.update(
+			can_review=_can_review_issue(doc),
+			review_blocker=_issue_review_blocker(day, doc),
+			review_token=_issue_review_token(day, doc),
+		)
+	else:
+		proof = _json(doc.get("custom_meal_raw_claim_snapshot"))
+		result.update(approved_by=proof.get("approved_by"), approved_at=proof.get("approved_at"))
+	return result
+
+
+@frappe.whitelist(methods=["POST"])
+def approve_kitchen_issue(day_name: str, stock_entry: str, review_token: str):
+	"""Submit the reviewed native transfer under the current user's permissions."""
+	_role(manager=True)
+	day = _day(day_name, lock=True)
+	entry = frappe.get_doc("Stock Entry", stock_entry, for_update=True)
+	entry.check_permission("read")
+	if (entry.custom_meal_kitchen_day, entry.custom_meal_week, entry.custom_meal_action) != (
+		day.name, day.meal_week, "领用"
+	):
+		_fail("请选择本日执行单的领用记录。")
+	if not _can_review_issue(entry):
+		_fail("领用单须由另一位有提交权限的库存主管审核。", permission=True)
+	if entry.docstatus == 1:
+		return {"stock_entry": entry.name, "already_submitted": True}
+	if entry.docstatus != 0:
+		_fail("领用单已取消，请刷新执行单。")
+	if review_token != _issue_review_token(day, entry):
+		_fail("领用单或计划已更新，请重新核对明细。")
+	if blocker := _issue_review_blocker(day, entry):
+		_fail(blocker)
+	entry.submit()
+	return {"stock_entry": entry.name, "already_submitted": False}
 
 
 def _input_items(day, items, action=None, opening=None):

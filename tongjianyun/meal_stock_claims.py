@@ -11,6 +11,7 @@ from collections import defaultdict
 
 import frappe
 from frappe import _
+from frappe.utils import now
 
 from tongjianyun.meal_procurement import ZERO, _date, _decimal, _hash, _text, _today
 
@@ -467,6 +468,8 @@ def assert_week_raw_stock_available(week, quantities, exclude_entry=None):
 		"week": week.name,
 		"entry": exclude_entry,
 		"warehouse": week.raw_material_warehouse,
+		"approved_by": frappe.session.user,
+		"approved_at": now(),
 		"items": items,
 	}
 	proof["proof_hash"] = _hash(proof)
