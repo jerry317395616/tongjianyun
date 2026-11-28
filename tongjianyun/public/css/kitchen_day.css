@@ -430,6 +430,17 @@
 	color: var(--ky-green);
 	font-size: 13px;
 }
+.ky-stock-panel {
+	display: grid;
+	align-content: start;
+	gap: 12px;
+	min-width: 0;
+}
+.ky-root button.ky-entry {
+	width: 100%;
+	background: transparent;
+	text-align: left;
+}
 .ky-count {
 	flex-wrap: wrap;
 	gap: 6px 12px;
@@ -540,3 +551,5 @@
 		flex-wrap: wrap;
 	}
 }
+
+.ky-issue-drawer td.ky-lot-warning { text-align: left; color: #80511b; background: #fcf0d7; }

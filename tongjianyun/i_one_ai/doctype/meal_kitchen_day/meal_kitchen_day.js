@@ -20,8 +20,15 @@
 	const input = (map, code, unit, value, label) =>
 		`<label class="ky-qty"><input type="number" inputmode="decimal" min="0" step="any" aria-label="${esc(label)}" data-map="${map}" data-code="${esc(code)}" value="${esc(value ?? "")}" placeholder="请输入"><span>${esc(__(unit))}</span></label>`;
 	const photo = (url) => typeof url === "string" && /^\/(?:files|private\/files|assets)\//.test(url);
-	const stockLink = (entry) =>
-		`<a class="ky-entry" href="/desk/stock-entry/${encodeURIComponent(entry.name)}">${esc(entry.action)} · ${esc(entry.name)}<small>${esc(entry.posting_date)} · ${["草稿", "已提交", "已取消"][entry.docstatus] || ""}</small></a>`;
+	const stockLink = (entry) => {
+		if (entry.action === "耗用") {
+			const label = esc(entry.name) + " · " + (entry.docstatus === 1 ? "已耗用" : "待库存主管审核");
+			return entry.consumption_lines
+				? `<button type="button" class="ky-entry" data-act="consumption:${esc(entry.name)}">耗用 · ${label}</button>`
+				: `<span class="ky-entry">耗用 · ${label}</span>`;
+		}
+		return `<a class="ky-entry" href="/desk/stock-entry/${encodeURIComponent(entry.name)}">${esc(entry.action)} · ${esc(entry.name)}<small>${esc(entry.posting_date)} · ${["草稿", "已提交", "已取消"][entry.docstatus] || ""}</small></a>`;
+	};
 	function writable(frm) {
 		return frm.doc.docstatus === 0 && !frm.is_new() && frm.perm?.[0]?.write && !frappe.boot.read_only;
 	}
@@ -185,23 +192,9 @@
 				<footer>${done ? btn("view:meals", "去逐餐供餐", true) : btn("refresh", "刷新状态")}
 				${entry.issue_quantities ? btn("issue:" + entry.name, entry.can_review ? "审核领用" : "查看领用明细", entry.can_review) : ""}</footer></section>`;
 		}
-		openIssue(name) {
-			const entry = this.ledger.stock_entries.find((e) => e.name === name && e.action === "领用");
-			if (!entry?.issue_quantities || this.issueDialog) return;
+		issueDetails(entry, canApprove) {
 			const rows = this.ledger.rows.filter((r) => r.can_issue || r.item_code in entry.issue_quantities);
-			const dialog = new frappe.ui.Dialog({
-				title: entry.can_review ? "审核领用" : "领用明细",
-				no_submit_on_enter: true,
-				fields: [{fieldname: "details", fieldtype: "HTML"}],
-			});
-			this.issueDialog = dialog;
-			dialog.$wrapper.addClass("ky-issue-drawer").one("hidden.bs.modal", () => {
-				this.issueDialog = null;
-				dialog.$wrapper.remove();
-			});
-			const body = dialog.fields_dict.details.$wrapper;
-			const canApprove = entry.can_review && !frappe.boot.read_only;
-			body.html(`<div class="ky-issue-route"><div><small>领出仓库</small><b>${esc(entry.source_warehouse)}</b></div>
+			return `<div class="ky-issue-route"><div><small>领出仓库</small><b>${esc(entry.source_warehouse)}</b></div>
 				<span aria-hidden="true">→</span><div><small>领入仓库</small><b>${esc(entry.kitchen_warehouse)}</b></div></div>
 				<p class="ky-issue-meta">${esc(entry.name)} · 供餐日期 ${esc(this.frm.doc.meal_date)}</p>
 				${canApprove ? `<label class="ky-issue-date">实际领用日期
@@ -214,23 +207,63 @@
 					const unit = esc(__(r.stock_uom));
 					return `<tr><th>${esc(r.item_name || r.item_code)}</th><td>${fmt(r.planned_qty)} ${unit}</td>
 						<td><b>${fmt(qty)} ${unit}</b>${diff ? '<small class="ky-issue-diff">与计划有差异</small>' : ""}</td></tr>`;
-				}).join("")}</tbody></table>
-				${entry.review_blocker ? `<p class="ky-issue-note">${esc(entry.review_blocker)}</p>` : ""}`);
+				}).join("")}</tbody></table>`;
+		}
+		consumptionDetails(entry) {
+			const pending = entry.docstatus === 0;
+			const ingredients = new Map(this.ledger.rows.map((row) => [row.item_code, row]));
+			const lines = Object.entries(entry.consumption_lines).map(([code, line]) => {
+				const row = ingredients.get(code);
+				const unit = esc(__(row?.stock_uom || ""));
+				const quantity = (qty) => `${fmt(qty)} ${unit}`;
+				return `<tr><th>${esc(row?.item_name || code)}</th>${pending ? `<td>${quantity(line.before)}</td>` : ""}
+					<td><b>${quantity(line.qty)}</b></td>${pending ? `<td>${quantity(line.after)}</td>` : ""}</tr>
+					${line.lot_warning ? `<tr><td colspan="4" class="ky-lot-warning">${esc(line.lot_warning)}</td></tr>` : ""}`;
+			});
+			return `<div class="ky-issue-route"><div><small>耗用仓库</small><b>${esc(entry.kitchen_warehouse)}</b></div><span></span>
+				<div><small>耗用日期</small><b>${esc(entry.posting_date)}</b></div></div>
+				<p class="ky-issue-meta">${esc(entry.name)} · 经办人 ${esc(entry.prepared_by)}</p>
+				<table><thead><tr><th>食材</th>${pending ? "<th>厨房结存</th>" : ""}<th>本次耗用</th>${pending ? "<th>确认后结存</th>" : ""}</tr></thead>
+				<tbody>${lines.join("")}</tbody></table>
+				${pending && !entry.can_review ? '<p class="ky-help">由另一位有提交权限的库存主管确认耗用。</p>' : ""}
+				${entry.approved_by ? `<p class="ky-issue-meta">审核人 ${esc(entry.approved_by)} · ${esc(frappe.datetime.str_to_user(entry.approved_at))}</p>` : ""}`;
+		}
+		openStockReview(name, action) {
+			const entry = this.ledger.stock_entries.find((e) => e.name === name && e.action === action);
+			const isIssue = action === "领用";
+			if (!(isIssue ? entry?.issue_quantities : entry?.consumption_lines) || this.stockDialog) return;
+			const canApprove = entry.docstatus === 0 && entry.can_review && !frappe.boot.read_only;
+			const dialog = new frappe.ui.Dialog({
+				title: canApprove ? "审核" + action : action + "明细",
+				no_submit_on_enter: true,
+				fields: [{fieldname: "details", fieldtype: "HTML"}],
+			});
+			this.stockDialog = dialog;
+			dialog.$wrapper.addClass("ky-issue-drawer").one("hidden.bs.modal", () => {
+				this.stockDialog = null;
+				dialog.$wrapper.remove();
+			});
+			const body = dialog.fields_dict.details.$wrapper;
+			const details = isIssue ? this.issueDetails(entry, canApprove) : this.consumptionDetails(entry);
+			body.html(details + (entry.review_blocker ? `<p class="ky-issue-note">${esc(entry.review_blocker)}</p>` : ""));
 			if (canApprove) {
-				dialog.set_primary_action("确认领用并调拨", async () => {
+				dialog.set_primary_action(isIssue ? "确认领用并调拨" : "确认耗用并扣减库存", async () => {
 					if (this.approving || entry.review_blocker || cur_frm !== this.frm || this.frm.doc.name !== this.name) return;
-					const dateInput = body.find("[data-issue-date]")[0];
-					if (!dateInput.reportValidity()) return;
+					const args = {day_name: this.name, stock_entry: entry.name, review_token: entry.review_token};
+					if (isIssue) {
+						const dateInput = body.find("[data-issue-date]")[0];
+						if (!dateInput.reportValidity()) return;
+						args.issue_date = dateInput.value;
+					}
 					this.approving = true;
 					try {
-						const result = await rpc("approve_kitchen_issue", {
-							day_name: this.name, stock_entry: entry.name, review_token: entry.review_token, issue_date: dateInput.value,
-						}, true);
-						if (result?.stock_entry !== entry.name) throw new Error("未取得领用审核结果，请刷新状态。");
-						frappe.show_alert({message: result.already_submitted ? "该领用单已完成调拨" : "领用已审核，调拨完成", indicator: "green"});
+						const result = await rpc(isIssue ? "approve_kitchen_issue" : "approve_kitchen_consumption", args, true);
+						if (result?.stock_entry !== entry.name) throw new Error("未取得审核结果，请刷新状态。");
+						if (!isIssue) this.action = null;
+						frappe.show_alert({message: isIssue ? "领用已审核，调拨完成" : "耗用已审核，厨房结存已更新", indicator: "green"});
 					} catch (e) {
 						if (!e?._server_messages && !e?.responseJSON?._server_messages)
-							frappe.msgprint(esc(e?.message || "调拨未确认，请刷新后核对。"));
+							frappe.msgprint(esc(e?.message || "审核未确认，请刷新后核对。"));
 					} finally {
 						this.approving = false;
 						dialog.hide();
@@ -281,27 +314,42 @@
 								: `比计划${delta > 0 ? "多" : "少"} ${fmt(Math.abs(delta))} 人`,
 				);
 		}
+		consumptionCard(entry) {
+			const done = entry.docstatus === 1;
+			return `<section class="ky-card ky-card-body"><header class="ky-between"><h3>耗用单</h3>
+				<span class="ky-pill ${done ? "ok" : "pending"}">${done ? "已耗用" : "待库存主管审核"}</span></header>
+				<p class="ky-issue-meta">${esc(entry.name)} · 耗用日期 ${esc(entry.posting_date)}</p>
+				${done && entry.approved_by ? `<p class="ky-help">审核人 ${esc(entry.approved_by)} · ${esc(frappe.datetime.str_to_user(entry.approved_at))}</p>` : ""}
+				${!done ? '<p class="ky-help">由另一位库存主管核对实际耗用，确认后扣减厨房库存。</p>' : ""}
+				${entry.review_blocker ? `<p class="ky-issue-note">${esc(entry.review_blocker)}</p>` : ""}
+				<footer>${btn("refresh", "刷新状态")}${entry.consumption_lines ? btn("consumption:" + entry.name, entry.can_review ? "审核耗用" : "查看耗用明细", !!entry.can_review) : ""}</footer></section>`;
+		}
 		stock(editable) {
 			const l = this.ledger,
 				headers = ["期初", "领用", "耗用", "退料", "损耗", "结存"];
 			const canStock = editable && frappe.model.can_create("Stock Entry");
 			const recent = l.stock_entries || [];
+			const consumptions = recent.filter((e) => e.action === "耗用" && e.docstatus !== 2);
+			const latest = consumptions.find((e) => e.docstatus === 0) || consumptions.at(-1);
+			const panel = this.action && canStock ? this.stockForm()
+				: `<div class="ky-stock-panel">${latest ? this.consumptionCard(latest) : ""}${this.carry(editable)}</div>`;
 			return `<div class="ky-ledger"><section class="ky-card ky-card-body"><h3>食材收支明细</h3><div class="ky-tools"><input type="search" data-key="query" aria-label="查找食材" placeholder="查找食材" value="${esc(this.query)}">
 				${canStock ? actions.map((a) => btn("stock:" + a, a)).join("") : ""}${btn("refresh", "刷新流水")}</div>
 				<div class="ky-scroll"><table><thead><tr><th>食材</th>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${l.rows.map((r) => `<tr data-search="${esc([r.item_name, r.item_code].join(" ").toLowerCase())}"><th>${esc(r.item_name || r.item_code)}<small>${esc(__(r.stock_uom))}</small></th>${[r.opening_qty, r.issued_qty, r.consumed_qty, r.returned_qty, r.loss_qty, balance(r)].map((q) => `<td>${fmt(q)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="ky-no-match ky-empty" hidden>没有匹配的食材。</p>
 				<p class="ky-help">仅已提交的库存单计入余额。</p>${l.opening_day?.day_name ? `<a href="/desk/meal-kitchen-day/${encodeURIComponent(l.opening_day.day_name)}">查看期初来源日结</a>` : ""}
-				${recent.length ? `<h4>关联库存单</h4>${recent.map(stockLink).join("")}` : ""}</section>${this.action && canStock ? this.stockForm() : this.carry(editable)}</div>`;
+				${recent.length ? `<h4>关联库存单</h4>${recent.map(stockLink).join("")}` : ""}</section>${panel}</div>`;
 		}
 		stockForm() {
 			const a = this.action,
 				pending = this.ledger.stock_entries.find((r) => r.action === a && !r.docstatus);
+			if (a === "耗用" && pending) return this.consumptionCard(pending);
 			const rows = this.ledger.rows.filter(
 				(r) => r.allowed_actions.includes(a) && (a !== "领用" || r.can_issue),
 			);
 			const hint = !pending && a === "耗用" && rows.length
 				? '<p class="ky-help">按当日剩余计划量预填，最多填至厨房结存。请按实际耗用修改，未使用的食材填 0 或留空。</p>' : "";
 			return `<aside class="ky-card ky-card-body"><div class="ky-between"><h3>登记${a}</h3>${btn("carry", "返回盘点")}</div>${hint}${pending ? stockLink(pending) : this.qtyTable(rows, true, false)}
-				${!pending && rows.length ? `${a === "损耗" ? `<label class="ky-label">损耗原因<textarea data-key="loss">${esc(this.lossReason)}</textarea></label>` : ""}<footer>${btn("draft", "生成" + a + "草稿", true)}</footer>` : ""}</aside>`;
+				${!pending && rows.length ? `${a === "损耗" ? `<label class="ky-label">损耗原因<textarea data-key="loss">${esc(this.lossReason)}</textarea></label>` : ""}<footer>${btn("draft", a === "耗用" ? "提交耗用审核" : "生成" + a + "草稿", true)}</footer>` : ""}</aside>`;
 		}
 		carry(editable) {
 			const l = this.ledger,
@@ -341,7 +389,8 @@
 			const [a, key] = el.dataset.act.split(":");
 			if (this.busy) return;
 			if (a === "refresh") return this.load();
-			if (a === "issue") return this.openIssue(el.dataset.act.slice("issue:".length));
+			if (a === "issue" || a === "consumption")
+				return this.openStockReview(el.dataset.act.slice(a.length + 1), a === "issue" ? "领用" : "耗用");
 			if (a === "view" || a === "meal" || a === "stock" || a === "carry") {
 				if (a === "view") {
 					this.view = key;
@@ -419,10 +468,10 @@
 			);
 			if (!result?.stock_entry) throw new Error("未取得库存单草稿。");
 			this.quantities.clear();
-			if (action === "领用") {
-				this.view = "prep";
+			if (action === "领用" || action === "耗用") {
+				this.view = action === "领用" ? "prep" : "ledger";
 				await this.load();
-				frappe.show_alert({message: "领用单待库存主管审核", indicator: "green"});
+				frappe.show_alert({message: action + "单待库存主管审核", indicator: "green"});
 				return;
 			}
 			if (action === "损耗") this.lossReason = "";

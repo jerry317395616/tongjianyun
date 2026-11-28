@@ -2,6 +2,7 @@
 from collections import defaultdict
 from datetime import timedelta
 from hashlib import sha256
+from html import escape
 
 import frappe
 from frappe.utils import cint, getdate
@@ -129,7 +130,7 @@ def site_warehouses(company):
     return result
 
 
-def check_stock_entry(doc, method=None):
+def _stock_allocations(doc, *, lock):
     if not frappe.db.table_exists(LOT_MOVEMENT):
         return
     mapping = site_warehouses(doc.company)
@@ -138,10 +139,11 @@ def check_stock_entry(doc, method=None):
     relevant = [row for row in doc.items if row.s_warehouse in mapping]
     if not relevant:
         return
-    lock_company(doc.company)
+    if lock:
+        lock_company(doc.company)
     item_codes = {row.item_code for row in relevant}
     day = getdate(doc.posting_date)
-    movements = live_movements(doc.company, item_codes=item_codes, until=day, lock=True)
+    movements = live_movements(doc.company, item_codes=item_codes, until=day, lock=lock)
     balances, lots = lot_balances(movements)
     source_rows = defaultdict(set)
     for movement in movements:
@@ -164,11 +166,35 @@ def check_stock_entry(doc, method=None):
         quantity = decimal(row.transfer_qty)
         picks, missing = allocate(balances, lots, row.s_warehouse, row.item_code, quantity, day,
                                   allowed=allowed, permit_expired=permit_expired)
-        require(missing <= EPSILON,
-                f"{row.item_code} 的可追溯合格批次数量不足。请核对历史未追溯库存、隔离和过期批次。")
+        warning = ""
+        if missing > EPSILON:
+            warning = "可追溯合格批次数量不足，请核对领用来源和批次结存。"
+            expired = sorted({
+                f"{lots[key].lot_number}（有效期至 {getdate(lots[key].expires_on)}）"
+                for key in allowed or () if key in lots and balances[(row.s_warehouse, *key)] > EPSILON
+                and getdate(lots[key].expires_on) < day
+            })
+            if expired:
+                warning += "业务日期已过期的批次：" + "、".join(expired)
+        yield row, origin, picks, warning
         for lot, qty in picks:
             if row.t_warehouse:
                 balances[(row.t_warehouse, lot.lot_key, lot.receiving)] += qty
+
+
+def consumption_lot_warnings(doc):
+    warnings = defaultdict(list)
+    for row, _, _, warning in _stock_allocations(doc, lock=False):
+        if warning and warning not in warnings[row.item_code]:
+            warnings[row.item_code].append(warning)
+    return {code: " ".join(messages) for code, messages in warnings.items()}
+
+
+def check_stock_entry(doc, method=None):
+    for row, origin, picks, warning in _stock_allocations(doc, lock=True):
+        if warning:
+            frappe.throw(escape(f"{row.item_name or row.item_code}：{warning}"))
+        for lot, qty in picks:
             _append(doc.company, origin, lot, doc, row.name, qty, row.s_warehouse, row.t_warehouse)
 
 

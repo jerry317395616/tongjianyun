@@ -30,7 +30,7 @@ class KitchenIssueReviewTests(unittest.TestCase):
         self.kitchen = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.kitchen)
         self.kitchen._day = Mock(return_value=self.day)
-        self.token = self.kitchen._issue_review_token(self.day, self.entry)
+        self.token = self.kitchen._stock_review_token(self.day, self.entry)
 
     @staticmethod
     def reject(message, exc):
@@ -86,6 +86,41 @@ class KitchenIssueReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.approve()
         self.entry.submit.assert_not_called()
+
+    def test_consumption_review_checks_date_balance_version_and_independent_authority(self):
+        self.entry.custom_meal_action = "耗用"
+        self.entry.items = [SimpleNamespace(item_code="RICE", qty=80), SimpleNamespace(item_code="RICE", qty=120)]
+        totals = {"RICE": {"balance_qty": Decimal("240")}}
+        self.kitchen._ledger = Mock(return_value={"totals": totals})
+        lines, token = self.kitchen._consumption_preview(self.day, self.entry, totals)
+        self.assertEqual(lines["RICE"], {"before": "240", "qty": "200", "after": "40"})
+
+        def approve():
+            return self.kitchen.approve_kitchen_consumption(self.day.name, self.entry.name, token)
+
+        self.frappe.session.user = self.entry.owner
+        with self.assertRaises(PermissionError):
+            approve()
+        self.frappe.session.user = "reviewer"
+        with patch.object(self.kitchen, "today", return_value="2026-11-28"), self.assertRaisesRegex(ValueError, "2026-11-30"):
+            approve()
+        with patch.object(self.entry, "custom_meal_action", "领用"), self.assertRaisesRegex(ValueError, "本日"):
+            approve()
+        totals["RICE"]["balance_qty"] = Decimal("220")
+        with self.assertRaisesRegex(ValueError, "重新核对"):
+            approve()
+        totals["RICE"]["balance_qty"] = Decimal("140")
+        _, token = self.kitchen._consumption_preview(self.day, self.entry, totals)
+        with self.assertRaisesRegex(ValueError, "超过厨房结存"):
+            approve()
+        self.entry.submit.assert_not_called()
+        totals["RICE"]["balance_qty"] = Decimal("240")
+        _, token = self.kitchen._consumption_preview(self.day, self.entry, totals)
+        self.assertFalse(approve()["already_submitted"])
+        self.entry.docstatus = 1
+        self.assertTrue(approve()["already_submitted"])
+        self.entry.submit.assert_called_once_with()
+        self.entry.add_comment.assert_called_once()
 
     def test_actual_handover_can_precede_service_and_cannot_be_in_the_future(self):
         self.kitchen.today = lambda: "2026-11-28"
