@@ -219,7 +219,7 @@ def configure_kitchen_warehouse(week_name, kitchen_warehouse):
 	return {"name": week.name, "kitchen_warehouse": kitchen_warehouse, "changed": True}
 
 
-def _effective_day(week, meal_date, lock=False):
+def _effective_day(week, meal_date, lock=False, *, issue_review=None):
 	# Delayed import: the adjustment module owns effective menu selection.
 	from tongjianyun.meal_adjustments import get_effective_meals
 	from tongjianyun.meal_planning import _recipe_signature
@@ -241,7 +241,8 @@ def _effective_day(week, meal_date, lock=False):
 		if not meal.get("production_plan") or not meal.get("recipe_hash"):
 			_fail("有效餐次缺少已冻结的生产计划或配方依据。")
 		plan = frappe.get_doc("Production Plan", meal.production_plan, for_update=lock)
-		plan.check_permission("read")
+		if issue_review is None:
+			plan.check_permission("read")
 		if (
 			plan.docstatus != 1
 			or plan.company != week.company
@@ -285,8 +286,15 @@ def _effective_day(week, meal_date, lock=False):
 	return sorted(meals, key=lambda row: SLOTS.index(row.meal_type)), items
 
 
-def _verify_effective_source(day, week, lock=False):
-	meals, expected = _effective_day(week, day.meal_date, lock=lock)
+def _verify_effective_source(day, week, lock=False, *, issue_review=None):
+	if issue_review is not None:
+		# The reviewer verifies the frozen recipe through the linked transfer. No
+		# manufacturing document is returned or made readable outside this check.
+		if (issue_review.custom_meal_kitchen_day, issue_review.custom_meal_week, issue_review.custom_meal_action) != (
+			day.name, week.name, "领用"
+		) or not _can_review_issue(issue_review):
+			_fail("没有审核本日领用单的权限。", permission=True)
+	meals, expected = _effective_day(week, day.meal_date, lock=lock, issue_review=issue_review)
 	if _item_signature(day.items) != _item_signature(expected):
 		_fail("厨房食材计划与当前有效食谱不一致，请先核对食谱调整。")
 	if len(day.meals) != 5 or {row.meal_type for row in day.meals} != set(SLOTS):
@@ -479,11 +487,13 @@ def _entry_facts(day, entries, exclude=None, opening=None):
 		if (
 			entry.custom_meal_week != day.meal_week
 			or entry.company != day.company
-			or _date(entry.posting_date) != _date(day.meal_date)
 			or entry.custom_meal_action not in ACTIONS
 		):
 			_fail("厨房库存单据的周、公司、日期或动作来源不一致。")
 		action = entry.custom_meal_action
+		posted, service = _date(entry.posting_date), _date(day.meal_date)
+		if posted > service or (action != "领用" and posted != service):
+			_fail("领用日期不能晚于供餐日期，其他厨房动作须按供餐日期记账。")
 		purpose = "Material Transfer" if action in ("领用", "退料") else "Material Issue"
 		if entry.purpose != purpose or entry.stock_entry_type != purpose or not entry.get("items"):
 			_fail("厨房动作与原生库存单据类型不一致。")
@@ -593,9 +603,12 @@ def _opening_sources(day, lock=False):
 	}
 
 
-def _check_execution_order(day):
+def _check_execution_order(day, advance_issue=False):
 	rows = frappe.db.sql(
-		"SELECT d.name,d.meal_date,d.docstatus FROM `tabMeal Kitchen Day` d WHERE d.company=%s "
+		"SELECT d.name,d.meal_date,d.docstatus, EXISTS(SELECT 1 FROM `tabStock Entry` e "
+		"WHERE e.custom_meal_kitchen_day=d.name AND e.docstatus=1 AND "
+		"(e.custom_meal_action<>'领用' OR e.posting_date>=d.meal_date)) AS started_service "
+		"FROM `tabMeal Kitchen Day` d WHERE d.company=%s "
 		"AND d.kitchen_warehouse=%s AND d.name<>%s AND d.docstatus<2 AND "
 		"(d.docstatus=1 OR EXISTS(SELECT s.name FROM `tabStock Entry` s "
 		"WHERE s.custom_meal_kitchen_day=d.name AND s.docstatus=1)) "
@@ -603,9 +616,9 @@ def _check_execution_order(day):
 		(day.company, day.kitchen_warehouse, day.name),
 		as_dict=True,
 	)
-	if any(_date(row.meal_date) > _date(day.meal_date) for row in rows):
+	if any(_date(row.meal_date) > _date(day.meal_date) and (row.docstatus == 1 or row.started_service) for row in rows):
 		_fail("厨房后日已有实际业务，不能回填或取消前日来源。")
-	if any(_date(row.meal_date) < _date(day.meal_date) and row.docstatus != 1 for row in rows):
+	if not advance_issue and any(_date(row.meal_date) < _date(day.meal_date) and row.docstatus != 1 for row in rows):
 		_fail("请先完成前一厨房执行日的真实日结，再使用留存。")
 
 
@@ -617,6 +630,19 @@ def _assert_actual_kitchen_stock(day, facts):
 	)
 	actual = {row.item_code: _decimal(row.actual_qty) for row in rows}
 	expected = {code: row["balance_qty"] for code, row in facts["totals"].items()}
+	# All open service days share this physical warehouse. Their individual allocations
+	# must be counted in Bin, but never passed into another day's carry or consumption.
+	others = frappe.db.sql(
+		"""SELECT i.item_code, SUM((CASE WHEN i.t_warehouse=d.kitchen_warehouse THEN i.transfer_qty ELSE 0 END)
+		    - (CASE WHEN i.s_warehouse=d.kitchen_warehouse THEN i.transfer_qty ELSE 0 END)) AS qty
+		FROM `tabMeal Kitchen Day` d JOIN `tabStock Entry` s ON s.custom_meal_kitchen_day=d.name
+		JOIN `tabStock Entry Detail` i ON i.parent=s.name
+		WHERE d.company=%s AND d.kitchen_warehouse=%s AND d.docstatus=0 AND d.name<>%s
+		  AND s.docstatus=1 GROUP BY i.item_code FOR UPDATE""",
+		(day.company, day.kitchen_warehouse, day.name), as_dict=True,
+	)
+	for row in others:
+		expected[row.item_code] = expected.get(row.item_code, ZERO) + _decimal(row.qty)
 	if any(
 		not _same(actual.get(code, ZERO), expected.get(code, ZERO)) for code in set(actual) | set(expected)
 	):
@@ -977,9 +1003,6 @@ def _issue_review_blocker(day, entry):
 		return "厨房执行单已关闭。"
 	if get_workflow_name("Stock Entry", entry):
 		return "此领用单已启用库存审批工作流，请按该工作流审批。"
-	earliest = max(_date(day.meal_date), _date(entry.posting_date))
-	if earliest > _date(today()):
-		return f"可提前核对，{earliest} 起可确认调拨。"
 	return ""
 
 
@@ -1004,6 +1027,7 @@ def _stock_entry_summary(day, entry, include_menu):
 	if doc.docstatus == 0:
 		result.update(
 			can_review=_can_review_issue(doc),
+			latest_issue_date=str(min(_date(day.meal_date), _date(today()))),
 			review_blocker=_issue_review_blocker(day, doc),
 			review_token=_issue_review_token(day, doc),
 		)
@@ -1014,7 +1038,7 @@ def _stock_entry_summary(day, entry, include_menu):
 
 
 @frappe.whitelist(methods=["POST"])
-def approve_kitchen_issue(day_name: str, stock_entry: str, review_token: str):
+def approve_kitchen_issue(day_name: str, stock_entry: str, review_token: str, issue_date: str | None = None):
 	"""Submit the reviewed native transfer under the current user's permissions."""
 	_role(manager=True)
 	day = _day(day_name, lock=True)
@@ -1034,6 +1058,14 @@ def approve_kitchen_issue(day_name: str, stock_entry: str, review_token: str):
 		_fail("领用单或计划已更新，请重新核对明细。")
 	if blocker := _issue_review_blocker(day, entry):
 		_fail(blocker)
+	# Older clients reviewed only the draft's posting date. Never silently move that
+	# transaction to an earlier day on their behalf.
+	actual_date = _date(entry.posting_date if issue_date is None else issue_date)
+	if actual_date > min(_date(today()), _date(day.meal_date)):
+		_fail("实际领用日期不能晚于今天或供餐日期。")
+	entry.posting_date = actual_date
+	entry.set_posting_time = 1
+	entry.posting_time = now_datetime().time() if actual_date == _date(today()) else "23:59:59"
 	entry.submit()
 	return {"stock_entry": entry.name, "already_submitted": False}
 
@@ -1200,10 +1232,9 @@ def validate_stock_entry(doc, method=None):
 	if day.docstatus != 0 or week.get("kitchen_reconciled"):
 		_fail("已日结或周结的厨房记录不能修改库存流水。")
 	_warehouses(day, week)
-	_verify_effective_source(day, week, lock=True)
-	if doc.docstatus == 1 and (
-		_date(day.meal_date) > _date(today()) or _date(doc.posting_date) > _date(today())
-	):
+	issue_review = doc if doc.docstatus == 1 and doc.custom_meal_action == "领用" else None
+	_verify_effective_source(day, week, lock=True, issue_review=issue_review)
+	if doc.docstatus == 1 and _date(doc.posting_date) > _date(today()):
 		_fail("未来日期的厨房库存草稿不能提交为实际执行。")
 	if doc.custom_meal_action == "损耗" and not str(doc.remarks or "").strip():
 		_fail("厨房损耗必须填写实际原因。")
@@ -1215,7 +1246,7 @@ def validate_stock_entry(doc, method=None):
 	candidate["items"] = [frappe._dict(row.as_dict()) for row in doc.items]
 	combined = _entry_facts(day, facts["entries"] + [candidate], opening=facts.get("opening_sources", []))
 	if doc.docstatus == 1 and (not old or old.docstatus != 1):
-		_check_execution_order(day)
+		_check_execution_order(day, advance_issue=doc.custom_meal_action == "领用" and _date(doc.posting_date) < _date(day.meal_date))
 		_assert_actual_kitchen_stock(day, facts)
 		_assert_global_source_balance(day, doc)
 		if doc.custom_meal_action == "领用":
@@ -1229,6 +1260,8 @@ def validate_stock_entry(doc, method=None):
 						for code in {row.item_code for row in doc.items}
 					},
 					exclude_entry=doc.name,
+					posting_date=doc.posting_date,
+					posting_time=doc.posting_time,
 				)
 			)
 	if doc.custom_meal_action == "领用" and not str(doc.remarks or "").strip():
@@ -1295,7 +1328,7 @@ def before_cancel_stock_entry(doc, method=None):
 			for row in entry.get("items")
 		):
 			_fail("该领用已有退料、耗用或损耗来源，请先处理后续单据及草稿。")
-	_check_execution_order(day)
+	_check_execution_order(day, advance_issue=doc.custom_meal_action == "领用" and _date(doc.posting_date) < _date(day.meal_date))
 	opening, _ = _opening_sources(day, lock=True)
 	_entry_facts(day, entries, exclude=doc.name, opening=opening)
 	_invalidate_carry(day)

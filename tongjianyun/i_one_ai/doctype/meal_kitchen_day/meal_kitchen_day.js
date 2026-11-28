@@ -177,6 +177,7 @@
 			return `<section class="ky-issue-card"><header class="ky-between"><h4>${done ? "领用结果" : "领用单"}</h4>
 				<span class="ky-pill ${done ? "ok" : "pending"}">${done ? "已领用" : "待库存主管审核"}</span></header>
 				<a href="/desk/stock-entry/${encodeURIComponent(entry.name)}">${esc(entry.name)}</a>
+				${done ? `<p class="ky-issue-meta">实际领用日期 ${esc(entry.posting_date)} · 供餐日期 ${esc(this.frm.doc.meal_date)}</p>` : ""}
 				${rows.length ? `<ul class="ky-issue-lines">${rows.map((r) => `<li><span>${esc(r.item_name || r.item_code)}</span><b>${fmt(entry.issue_quantities[r.item_code])} ${esc(__(r.stock_uom))}</b></li>`).join("")}</ul>` : ""}
 				${done && entry.approved_by ? `<p class="ky-help">审核人 ${esc(entry.approved_by)} · ${esc(frappe.datetime.str_to_user(entry.approved_at))}</p>` : ""}
 				<footer>${done ? btn("view:meals", "去逐餐供餐", true) : btn("refresh", "刷新状态")}
@@ -197,9 +198,14 @@
 				dialog.$wrapper.remove();
 			});
 			const body = dialog.fields_dict.details.$wrapper;
+			const canApprove = entry.can_review && !frappe.boot.read_only;
 			body.html(`<div class="ky-issue-route"><div><small>领出仓库</small><b>${esc(entry.source_warehouse)}</b></div>
 				<span aria-hidden="true">→</span><div><small>领入仓库</small><b>${esc(entry.kitchen_warehouse)}</b></div></div>
-				<p class="ky-issue-meta">${esc(entry.name)} · 业务日期 ${esc(entry.posting_date)}</p>
+				<p class="ky-issue-meta">${esc(entry.name)} · 供餐日期 ${esc(this.frm.doc.meal_date)}</p>
+				${canApprove ? `<label class="ky-issue-date">实际领用日期
+					<input type="date" required data-issue-date max="${esc(entry.latest_issue_date)}" value="${esc(entry.latest_issue_date)}">
+					<small>按食材从原料仓交给厨房的日期记账。</small></label>`
+					: `<p class="ky-issue-meta">实际领用日期 · ${entry.docstatus === 1 ? esc(entry.posting_date) : "待交接确认"}</p>`}
 				<table><thead><tr><th>食材</th><th>当日计划量</th><th>本次领用</th></tr></thead><tbody>${rows.map((r) => {
 					const qty = entry.issue_quantities[r.item_code] || "0";
 					const diff = Number(qty) !== Number(r.planned_qty);
@@ -208,13 +214,15 @@
 						<td><b>${fmt(qty)} ${unit}</b>${diff ? '<small class="ky-issue-diff">与计划有差异</small>' : ""}</td></tr>`;
 				}).join("")}</tbody></table>
 				${entry.review_blocker ? `<p class="ky-issue-note">${esc(entry.review_blocker)}</p>` : ""}`);
-			if (entry.can_review && !frappe.boot.read_only) {
+			if (canApprove) {
 				dialog.set_primary_action("确认领用并调拨", async () => {
 					if (this.approving || entry.review_blocker || cur_frm !== this.frm || this.frm.doc.name !== this.name) return;
+					const dateInput = body.find("[data-issue-date]")[0];
+					if (!dateInput.reportValidity()) return;
 					this.approving = true;
 					try {
 						const result = await rpc("approve_kitchen_issue", {
-							day_name: this.name, stock_entry: entry.name, review_token: entry.review_token,
+							day_name: this.name, stock_entry: entry.name, review_token: entry.review_token, issue_date: dateInput.value,
 						}, true);
 						if (result?.stock_entry !== entry.name) throw new Error("未取得领用审核结果，请刷新状态。");
 						frappe.show_alert({message: result.already_submitted ? "该领用单已完成调拨" : "领用已审核，调拨完成", indicator: "green"});

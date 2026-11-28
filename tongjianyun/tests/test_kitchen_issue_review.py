@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 class KitchenIssueReviewTests(unittest.TestCase):
     def setUp(self):
-        self.day = SimpleNamespace(name="DAY", meal_week="WEEK", meal_date="2026-11-30", docstatus=0,
+        self.day = SimpleNamespace(name="DAY", company="School", meal_week="WEEK", meal_date="2026-11-30", docstatus=0,
                                    items=[], source_warehouse="原料仓", kitchen_warehouse="厨房仓")
         self.entry = Mock(name="Stock Entry")
         self.entry.configure_mock(name="TRANSFER", owner="clerk", modified="version-1", docstatus=0,
@@ -35,8 +35,8 @@ class KitchenIssueReviewTests(unittest.TestCase):
     def reject(message, exc):
         raise exc(message)
 
-    def approve(self):
-        return self.kitchen.approve_kitchen_issue("DAY", "TRANSFER", self.token)
+    def approve(self, issue_date=None):
+        return self.kitchen.approve_kitchen_issue("DAY", "TRANSFER", self.token, issue_date)
 
     def test_uses_native_submission_and_handles_retry(self):
         self.assertFalse(self.approve()["already_submitted"])
@@ -67,12 +67,35 @@ class KitchenIssueReviewTests(unittest.TestCase):
             self.approve()
         self.entry.submit.assert_not_called()
 
-    def test_future_business_date_or_configured_workflow(self):
+    def test_actual_handover_can_precede_service_and_cannot_be_in_the_future(self):
         self.kitchen.today = lambda: "2026-11-28"
-        with self.assertRaisesRegex(ValueError, "2026-11-30"):
+        with self.assertRaisesRegex(ValueError, "实际领用日期"):
             self.approve()
+        self.approve("2026-11-28")
+        self.assertEqual(str(self.entry.posting_date), "2026-11-28")
+        self.assertEqual(self.day.meal_date, "2026-11-30")
+        self.entry.submit.assert_called_once()
+        self.kitchen.today = lambda: "2026-12-02"
+        with self.assertRaisesRegex(ValueError, "供餐日期"):
+            self.approve("2026-12-01")
+
+    def test_configured_workflow_still_applies(self):
         self.kitchen.today = lambda: "2026-11-30"
         self.workflow.return_value = "审批流程"
         with self.assertRaisesRegex(ValueError, "工作流"):
             self.approve()
         self.entry.submit.assert_not_called()
+
+    def test_advance_transfers_do_not_block_earlier_service_or_borrow_its_carry(self):
+        self.frappe.db = Mock()
+        future = SimpleNamespace(meal_date="2026-12-01", docstatus=0, started_service=0)
+        earlier = SimpleNamespace(meal_date="2026-11-29", docstatus=0, started_service=1)
+        self.frappe.db.sql.return_value = [future]
+        self.kitchen._check_execution_order(self.day)
+        self.frappe.db.sql.return_value = [earlier, future]
+        self.kitchen._check_execution_order(self.day, advance_issue=True)
+        with self.assertRaisesRegex(ValueError, "前一"):
+            self.kitchen._check_execution_order(self.day)
+        future.started_service = 1
+        with self.assertRaisesRegex(ValueError, "后日"):
+            self.kitchen._check_execution_order(self.day, advance_issue=True)

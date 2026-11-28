@@ -489,6 +489,9 @@
 .ky-issue-drawer thead { background: var(--control-bg); }
 .ky-issue-diff, .ky-issue-note { color: #80511b; }
 .ky-issue-note { background: #fcf0d7; padding: 10px 12px; border-radius: 8px; margin-top: 16px; }
+.ky-issue-date { display: grid; gap: 5px; margin: 0 0 14px; font-weight: 600; }
+.ky-issue-date input { width: 12em; max-width: 100%; padding: 6px 10px; background: var(--control-bg); border: 1px solid var(--border-color); border-radius: 7px; }
+.ky-issue-date small { color: var(--text-muted); font-weight: 400; }
 @container (max-width:800px) {
 	.ky-ledger {
 		grid-template-columns: 1fr;

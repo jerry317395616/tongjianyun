@@ -11,9 +11,10 @@ function screen() {
 	const ingredient = { item_code: "RICE", item_name: "小米", stock_uom: "克", can_issue: true,
 		allowed_actions: ["领用"], planned_qty: "240", suggested_issue_qty: "240" };
 	const ledger = { day_name: "DAY", rows: [ingredient], stock_entries: [] };
-	const entry = { name: "TRANSFER", action: "领用", docstatus: 0, posting_date: "2026-11-30",
+	const entry = { name: "TRANSFER", action: "领用", docstatus: 0, posting_date: "2026-11-30", latest_issue_date: "2026-11-28",
 		issue_quantities: { RICE: "200" }, review_token: "revision", source_warehouse: "原料仓", kitchen_warehouse: "厨房仓" };
-	const widget = () => ({ off() {return this;}, on() {return this;}, find() {return this;}, each() {return this;},
+	const dateField = {value: "2026-11-28", reportValidity: () => true};
+	const widget = () => ({ off() {return this;}, on() {return this;}, find(s) {return s === "[data-issue-date]" ? [dateField] : this;}, each() {return this;},
 		one() {return this;}, addClass() {return this;}, html(v) {this.content = v; return this;} });
 	const root = widget();
 	class Dialog {
@@ -57,9 +58,9 @@ test("生成领用草稿留在本页，创建人可以核对真实领用量", as
 	assert.match(dialogs[0].fields_dict.details.$wrapper.content, /与计划有差异/);
 });
 
-test("主管可提前核对，业务日前禁止提交", async () => {
+test("启用单独工作流时不可直接调拨", async () => {
 	const {k, entry, ledger, calls, dialogs} = screen();
-	Object.assign(entry, {can_review: true, review_blocker: "2026-11-30 起可确认调拨"});
+	Object.assign(entry, {can_review: true, review_blocker: "请按已启用的库存审批工作流审批"});
 	ledger.stock_entries.push(entry);
 	await k.load();
 	k.openIssue(entry.name);
@@ -76,10 +77,12 @@ test("主管确认时使用已核对的版本并返回本页显示调拨结果",
 	k.openIssue(entry.name);
 	const d = dialogs[0];
 	assert.equal(d.label, "确认领用并调拨");
+	assert.match(d.fields_dict.details.$wrapper.content, /供餐日期 2026-11-30/);
+	assert.match(d.fields_dict.details.$wrapper.content, /data-issue-date max="2026-11-28" value="2026-11-28"/);
 	assert.equal(d.disabled, false);
 	await Promise.all([d.confirm(), d.confirm()]);
 	assert.equal(calls.length, 1);
-	assert.deepEqual({...calls[0].args}, {day_name: "DAY", stock_entry: "TRANSFER", review_token: "revision"});
+	assert.deepEqual({...calls[0].args}, {day_name: "DAY", stock_entry: "TRANSFER", review_token: "revision", issue_date: "2026-11-28"});
 	assert.equal(d.visible, false);
 	assert.match(root.content, /已领用/);
 	assert.match(root.content, /审核人 主管/);

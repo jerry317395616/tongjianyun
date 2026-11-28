@@ -192,7 +192,7 @@ def _issue_free_claim(entry, quantities, warehouse):
 	return result
 
 
-def build_claim_context(week, codes, warehouses, *, for_update=False, exclude_entry=None):
+def build_claim_context(week, codes, warehouses, *, for_update=False, exclude_entry=None, as_of=None):
 	"""Rebuild ownership using current/read-only native facts, never future supply."""
 	codes, warehouses = sorted(set(codes)), sorted(set(warehouses))
 	if for_update:
@@ -275,8 +275,9 @@ def build_claim_context(week, codes, warehouses, *, for_update=False, exclude_en
 		i.purchase_order,i.purchase_order_item,i.material_request,i.material_request_item
 		FROM `tabPurchase Receipt` r JOIN `tabPurchase Receipt Item` i ON i.parent=r.name
 		WHERE r.company=%(company)s AND r.docstatus=1 AND i.item_code IN %(codes)s AND i.warehouse IN %(warehouses)s
+		AND (%(as_of)s IS NULL OR TIMESTAMP(r.posting_date,r.posting_time) <= %(as_of)s)
 		ORDER BY r.name,i.idx""",
-			{"company": week.company, "codes": codes, "warehouses": warehouses},
+			{"company": week.company, "codes": codes, "warehouses": warehouses, "as_of": as_of},
 			for_update,
 		)
 		for row in receipts:
@@ -306,8 +307,9 @@ def build_claim_context(week, codes, warehouses, *, for_update=False, exclude_en
 			"""SELECT DISTINCT s.name FROM `tabStock Entry` s JOIN `tabStock Entry Detail` i ON i.parent=s.name
 		WHERE s.company=%(company)s AND s.docstatus=1 AND s.custom_meal_week IN %(weeks)s
 		AND i.item_code IN %(codes)s AND (i.s_warehouse IN %(warehouses)s OR i.t_warehouse IN %(warehouses)s)
+		AND (%(as_of)s IS NULL OR TIMESTAMP(s.posting_date,s.posting_time) <= %(as_of)s)
 		ORDER BY s.name""",
-			{"company": week.company, "weeks": sorted(weeks), "codes": codes, "warehouses": warehouses},
+			{"company": week.company, "weeks": sorted(weeks), "codes": codes, "warehouses": warehouses, "as_of": as_of},
 			for_update,
 		)
 		verified_days = set()
@@ -383,7 +385,7 @@ def build_claim_context(week, codes, warehouses, *, for_update=False, exclude_en
 		"own": dict(own),
 		"other": dict(other),
 		"managed_reservations": dict(managed),
-		"advance": bool(_today() < _date(week.week_start) and prior),
+		"advance": bool((_date(as_of[:10]) if as_of else _today()) < _date(week.week_start) and prior),
 		"prior_unsettled_weeks": prior,
 		"evidence": evidence,
 		"week_documents": weeks,
@@ -432,7 +434,7 @@ def physical_pools(claims, bins):
 	return own, free, public
 
 
-def assert_week_raw_stock_available(week, quantities, exclude_entry=None):
+def assert_week_raw_stock_available(week, quantities, *, exclude_entry, posting_date, posting_time):
 	"""Bind a real issue to own/free physical stock before native submission."""
 	if isinstance(week, str):
 		week = frappe.get_doc("Meal Planning Week", week)
@@ -448,6 +450,26 @@ def assert_week_raw_stock_available(week, quantities, exclude_entry=None):
 	)
 	bins = {(row.item_code, row.warehouse): row for row in rows}
 	own, free, _public = physical_pools(claims, bins)
+	cutoff = f"{posting_date} {posting_time}"
+	warehouse = week.raw_material_warehouse
+	balances = _rows(
+		"""SELECT item_code, SUM(CASE WHEN posting_datetime<=%(cutoff)s THEN actual_qty ELSE 0 END) AS qty,
+			MAX(posting_datetime>%(cutoff)s) AS has_later FROM `tabStock Ledger Entry`
+		WHERE warehouse=%(warehouse)s AND item_code IN %(codes)s AND is_cancelled=0 GROUP BY item_code""",
+		{"cutoff": cutoff, "warehouse": warehouse, "codes": sorted(quantities)}, True,
+	)
+	dated_qty = {row.item_code: _decimal(row.qty) for row in balances}
+	for code, qty in quantities.items():
+		if _decimal(qty) > dated_qty.get(code, ZERO) + EPSILON:
+			_fail(f"食材 {code} 在实际领用日期 {posting_date} 的已入库数量不足。")
+	if any(row.has_later for row in balances) or _date(posting_date) < _today():
+		dated_claims = build_claim_context(
+			week, list(quantities), [warehouse], for_update=True, exclude_entry=exclude_entry, as_of=cutoff,
+		)
+		dated_bins = {key: {**row, "actual_qty": dated_qty.get(key[0], ZERO)} for key, row in bins.items()}
+		dated_own, dated_free, _ = physical_pools(dated_claims, dated_bins)
+		own = {key: min(qty, dated_own.get(key, ZERO)) for key, qty in own.items()}
+		free = {key: min(qty, dated_free.get(key, ZERO)) for key, qty in free.items()}
 	items = []
 	for code, value in sorted(quantities.items()):
 		quantity = _decimal(value)

@@ -133,18 +133,15 @@ def _current(doc, lock=False):
 			"AND docstatus=1 LIMIT 1 FOR UPDATE",
 			(week.name, doc.meal_date),
 		)
-		executed = frappe.db.sql(
-			"SELECT name FROM `tabStock Entry` WHERE custom_meal_week=%s AND posting_date=%s "
-			"AND docstatus=1 LIMIT 1 FOR UPDATE",
-			(week.name, doc.meal_date),
-		)
 	else:
 		closed_day = frappe.db.exists(
 			"Meal Kitchen Day", {"meal_week": week.name, "meal_date": doc.meal_date, "docstatus": 1}
 		)
-		executed = frappe.db.exists(
-			"Stock Entry", {"custom_meal_week": week.name, "posting_date": doc.meal_date, "docstatus": 1}
-		)
+	executed = frappe.db.sql(
+		"SELECT s.name FROM `tabStock Entry` s JOIN `tabMeal Kitchen Day` d ON d.name=s.custom_meal_kitchen_day "
+		"WHERE d.meal_week=%s AND d.meal_date=%s AND s.docstatus=1 LIMIT 1" + (" FOR UPDATE" if lock else ""),
+		(week.name, doc.meal_date),
+	)
 	if closed_day:
 		_fail("该日已经完成厨房日结，不能改写计划。")
 	if executed:
