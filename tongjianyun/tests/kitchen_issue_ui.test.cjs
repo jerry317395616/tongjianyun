@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 const script = fs.readFileSync(path.join(__dirname, "../i_one_ai/doctype/meal_kitchen_day/meal_kitchen_day.js"), "utf8");
 
-function screen() {
+function screen(onRoute = () => assert.fail("领用操作离开了厨房执行单")) {
 	const fields = {}, calls = [], dialogs = [];
 	const ingredient = { item_code: "RICE", item_name: "小米", stock_uom: "克", can_issue: true,
 		allowed_actions: ["领用"], planned_qty: "240", suggested_issue_qty: "240" };
@@ -29,7 +29,7 @@ function screen() {
 	const frappe = {ui: {form: {on: (name, events) => {fields[name] = events;}}, Dialog}, boot: {},
 		utils: {escape_html: String, icon: () => ""}, datetime: {str_to_obj: d => new Date(d), str_to_user: String},
 		workflow: {has_workflow: () => false}, model: {can_create: () => true}, show_alert() {},
-		set_route() {assert.fail("领用操作离开了厨房执行单");},
+		set_route: onRoute,
 		call: async ({method, args}) => {
 			const action = method.split(".").pop();
 			if (action === "get_kitchen_ledger") return {message: ledger};
@@ -56,6 +56,39 @@ test("生成领用草稿留在本页，创建人可以核对真实领用量", as
 	k.openIssue(entry.name);
 	assert.equal(dialogs[0].confirm, undefined);
 	assert.match(dialogs[0].fields_dict.details.$wrapper.content, /与计划有差异/);
+});
+
+test("耗用预填建议量并保留实际修改，清空或填零的食材不进入草稿", async () => {
+	const {k, root, ledger, calls, entry} = screen((...args) => {
+		assert.deepEqual(args, ["Form", "Stock Entry", "USE"]);
+	});
+	Object.assign(entry, {name: "USE", action: "耗用"});
+	ledger.rows = Object.entries({RICE: "240", EGG: "0.624", MILK: "1.8", TOFU: "0.384"}).map(
+		([item_code, qty]) => ({
+			item_code, stock_uom: item_code === "RICE" ? "克" : "公斤",
+			allowed_actions: ["耗用", "退料", "损耗"], balance_qty: qty, suggested_consumption_qty: qty,
+		}),
+	);
+	await k.load();
+	const open = (action) => k.activate({dataset: {act: "stock:" + action}});
+	await open("耗用");
+	assert.match(root.content, /data-code="RICE" value="240"/);
+	assert.match(root.content, /data-code="EGG" value="0.624"/);
+	for (const [code, value] of [["EGG", "0.5"], ["MILK", ""], ["TOFU", "0"]])
+		k.changed({dataset: {map: "qty", code}, value});
+	await open("退料");
+	assert.match(root.content, /data-code="RICE" value=""/);
+	await open("耗用");
+	assert.match(root.content, /data-code="MILK" value=""/);
+	assert.match(root.content, /data-code="TOFU" value="0"/);
+	assert.equal(calls.length, 0);
+	await k.createDraft();
+	assert.equal(calls[0].args.action, "耗用");
+	assert.deepEqual(Array.from(calls[0].args.items, row => ({...row})), [
+		{item_code: "RICE", qty: "240"}, {item_code: "EGG", qty: "0.5"},
+	]);
+	await k.load();
+	assert.doesNotMatch(root.content, /生成耗用草稿/);
 });
 
 test("启用单独工作流时不可直接调拨", async () => {

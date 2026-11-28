@@ -114,7 +114,9 @@
 			return this.stockEdits.get(this.stockAction);
 		}
 		quantityFor(row) {
-			return this.quantities.get(row.item_code) ?? (this.stockAction === "领用" ? row.suggested_issue_qty : "");
+			if (this.quantities.has(row.item_code)) return this.quantities.get(row.item_code);
+			if (this.stockAction === "耗用") return row.suggested_consumption_qty;
+			return this.stockAction === "领用" ? row.suggested_issue_qty : "";
 		}
 		draw() {
 			const frm = this.frm,
@@ -296,7 +298,9 @@
 			const rows = this.ledger.rows.filter(
 				(r) => r.allowed_actions.includes(a) && (a !== "领用" || r.can_issue),
 			);
-			return `<aside class="ky-card ky-card-body"><div class="ky-between"><h3>登记${a}</h3>${btn("carry", "返回盘点")}</div>${pending ? stockLink(pending) : this.qtyTable(rows, true, false)}
+			const hint = !pending && a === "耗用" && rows.length
+				? '<p class="ky-help">按当日剩余计划量预填，最多填至厨房结存。请按实际耗用修改，未使用的食材填 0 或留空。</p>' : "";
+			return `<aside class="ky-card ky-card-body"><div class="ky-between"><h3>登记${a}</h3>${btn("carry", "返回盘点")}</div>${hint}${pending ? stockLink(pending) : this.qtyTable(rows, true, false)}
 				${!pending && rows.length ? `${a === "损耗" ? `<label class="ky-label">损耗原因<textarea data-key="loss">${esc(this.lossReason)}</textarea></label>` : ""}<footer>${btn("draft", "生成" + a + "草稿", true)}</footer>` : ""}</aside>`;
 		}
 		carry(editable) {

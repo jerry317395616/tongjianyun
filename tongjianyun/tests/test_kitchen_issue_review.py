@@ -1,5 +1,6 @@
 import importlib.util
 import unittest
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -37,6 +38,25 @@ class KitchenIssueReviewTests(unittest.TestCase):
 
     def approve(self, issue_date=None):
         return self.kitchen.approve_kitchen_issue("DAY", "TRANSFER", self.token, issue_date)
+
+    def test_consumption_defaults_to_unconsumed_plan_within_balance(self):
+        self.day.meals = []
+        self.day.items = [{"item_code": "EGG", "stock_uom": "kg", "planned_qty": "0.624"}]
+        self.frappe.db = Mock()
+        self.kitchen._carry_confirmation = Mock(return_value=(False, "", False, {}))
+        for consumed, balance, expected in [
+            ("0", "1", "0.624"), ("0.1", "0.7", "0.524"), ("0.1", "0.28", "0.28"),
+            ("0.7", "1", "0"), ("0", "0", "0"),
+        ]:
+            with self.subTest(consumed=consumed, balance=balance):
+                values = {"opening_qty": Decimal("0"), "issued_qty": Decimal(consumed) + Decimal(balance),
+                          "consumed_qty": Decimal(consumed), "balance_qty": Decimal(balance)}
+                self.kitchen._ledger = Mock(return_value={
+                    "allowed_items": {"EGG": ("kg", Decimal("0.624"))}, "totals": {"EGG": values},
+                    "entries": [], "drafts": [],
+                })
+                row, = self.kitchen.get_kitchen_ledger("DAY")["rows"]
+                self.assertEqual(row["suggested_consumption_qty"], expected)
 
     def test_uses_native_submission_and_handles_retry(self):
         self.assertFalse(self.approve()["already_submitted"])
