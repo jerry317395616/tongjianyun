@@ -930,6 +930,7 @@ def get_kitchen_ledger(day_name, include_menu=False):
 				"item_name": frappe.db.get_value("Item", code, "item_name"),
 				"stock_uom": uom,
 				"planned_qty": _text(planned_qty),
+				"suggested_issue_qty": _text(max(ZERO, planned_qty - values["opening_qty"] - values["issued_qty"])),
 				"allowed_actions": actions,
 				"can_issue": code in planned,
 				**{key: _text(value) for key, value in values.items()},

@@ -107,8 +107,14 @@
 				});
 			return this.mealEdits.get(row.name);
 		}
+		get stockAction() {
+			return this.view === "prep" ? "领用" : this.action;
+		}
 		get quantities() {
-			return this.stockEdits.get(this.view === "prep" ? "领用" : this.action);
+			return this.stockEdits.get(this.stockAction);
+		}
+		quantityFor(row) {
+			return this.quantities.get(row.item_code) ?? (this.stockAction === "领用" ? row.suggested_issue_qty : "");
 		}
 		draw() {
 			const frm = this.frm,
@@ -148,6 +154,7 @@
 			const rows = l.rows.filter((r) => r.can_issue && r.allowed_actions.includes("领用"));
 			return `<div class="ky-prep"><section class="ky-card"><header class="ky-hero"><h3>今日领用备料</h3><p>${esc(frm.doc.source_warehouse)} → ${esc(frm.doc.kitchen_warehouse)}</p></header>
 				<div class="ky-card-body"><h4>领用明细</h4>${entries.map(stockLink).join("")}
+				${editable && !entries.length && rows.length ? '<p class="ky-help">本次数量默认按计划量扣除上日结余和今日已领量，可按实际领用修改。</p>' : ""}
 				${this.qtyTable(rows, editable && !entries.length, true)}${editable && !entries.length && rows.length ? `<footer>${btn("draft", "生成领用草稿", true)}</footer>` : ""}</div></section>
 				<section class="ky-card ky-card-body"><h3>今日供餐</h3>${slots
 					.map((s, i) => {
@@ -160,7 +167,7 @@
 		}
 		qtyTable(rows, editable, prep) {
 			if (!rows.length) return '<p class="ky-empty">本日没有可操作的食材。</p>';
-			return `<div class="ky-scroll"><table><thead><tr><th>食材</th><th>${prep ? "计划量" : "厨房结存"}</th>${editable ? "<th>本次数量</th>" : ""}</tr></thead><tbody>${rows.map((r) => `<tr><th>${esc(r.item_name || r.item_code)}</th><td>${fmt(prep ? r.planned_qty : balance(r))} ${esc(__(r.stock_uom))}</td>${editable ? `<td>${input("qty", r.item_code, r.stock_uom, this.quantities.get(r.item_code), r.item_name + "本次数量")}</td>` : ""}</tr>`).join("")}</tbody></table></div>`;
+			return `<div class="ky-scroll"><table><thead><tr><th>食材</th><th>${prep ? "计划量" : "厨房结存"}</th>${editable ? "<th>本次数量</th>" : ""}</tr></thead><tbody>${rows.map((r) => `<tr><th>${esc(r.item_name || r.item_code)}</th><td>${fmt(prep ? r.planned_qty : balance(r))} ${esc(__(r.stock_uom))}</td>${editable ? `<td>${input("qty", r.item_code, r.stock_uom, this.quantityFor(r), r.item_name + "本次数量")}</td>` : ""}</tr>`).join("")}</tbody></table></div>`;
 		}
 		service(editable) {
 			const l = this.ledger,
@@ -314,11 +321,11 @@
 		}
 		async createDraft() {
 			if (this.frm.is_dirty()) throw new Error("请先保存执行资料，再生成库存单。");
-			const action = this.view === "prep" ? "领用" : this.action,
+			const action = this.stockAction,
 				items = [];
 			const eligible = this.ledger.rows.filter((r) => r.allowed_actions.includes(action));
 			for (const r of eligible) {
-				const v = this.quantities.get(r.item_code);
+				const v = this.quantityFor(r);
 				if (!v || v === "0") continue;
 				const qty = Number(v);
 				if (!Number.isFinite(qty) || qty < 0) throw new Error("数量须为非负数。");
