@@ -99,11 +99,11 @@ def lot_balances(movements):
     return balances, lots
 
 
-def allocate(balances, lots, warehouse, item_code, quantity, date, *, allowed=None, permit_expired=False):
+def allocate(balances, lots, warehouse, item_code, quantity, date, *, allowed=None, permit_expired=False, valid_through=None):
     choices = [
         (key, lot) for key, lot in lots.items()
         if lot.item_code == item_code and balances[(warehouse, *key)] > EPSILON
-        and (permit_expired or (getdate(lot.manufactured_on) <= date <= getdate(lot.expires_on)))
+        and (permit_expired or (getdate(lot.manufactured_on) <= date and getdate(lot.expires_on) >= (valid_through or date)))
         and (allowed is None or key in allowed)
     ]
     picks = []
@@ -130,7 +130,7 @@ def site_warehouses(company):
     return result
 
 
-def _stock_allocations(doc, *, lock):
+def _stock_allocations(doc, *, lock, posting_date=None, service_date=None):
     if not frappe.db.table_exists(LOT_MOVEMENT):
         return
     mapping = site_warehouses(doc.company)
@@ -142,9 +142,26 @@ def _stock_allocations(doc, *, lock):
     if lock:
         lock_company(doc.company)
     item_codes = {row.item_code for row in relevant}
-    day = getdate(doc.posting_date)
-    movements = live_movements(doc.company, item_codes=item_codes, until=day, lock=lock)
+    day = getdate(posting_date or doc.posting_date)
+    kitchen_day = doc.get("custom_meal_kitchen_day")
+    consumption = bool(kitchen_day and doc.get("custom_meal_action") == "耗用")
+    valid_through = day
+    if consumption:
+        valid_through = getdate(service_date or frappe.db.get_value("Meal Kitchen Day", kitchen_day, "meal_date"))
+    movements = live_movements(doc.company, item_codes=item_codes, until=None if consumption else day, lock=lock)
+    later = [m for m in movements if getdate(m.posting_date) > day]
+    if later:
+        movements = [m for m in movements if getdate(m.posting_date) <= day]
     balances, lots = lot_balances(movements)
+    if later:
+        # A backdated issue must leave every subsequent posted lot movement covered.
+        running = balances.copy()
+        for move in sorted(later, key=lambda m: (getdate(m.posting_date), m.creation, m.name)):
+            for warehouse, sign in ((move.from_warehouse, -1), (move.to_warehouse, 1)):
+                if warehouse:
+                    key = (warehouse, move.lot_key, move.receiving)
+                    running[key] += sign * decimal(move.quantity)
+                    balances[key] = min(balances[key], running[key])
     source_rows = defaultdict(set)
     for movement in movements:
         if movement.source_type == STOCK:
@@ -152,7 +169,8 @@ def _stock_allocations(doc, *, lock):
     kitchen_action = doc.get("custom_meal_action")
     for row in relevant:
         origin, label = mapping[row.s_warehouse]
-        if not active_policy(origin, day, required=False):
+        if not active_policy(origin, day, required=False) and (
+                day == valid_through or not active_policy(origin, valid_through, required=False)):
             continue
         destination = mapping.get(row.t_warehouse)
         if destination:
@@ -165,26 +183,26 @@ def _stock_allocations(doc, *, lock):
         permit_expired = kitchen_action in ("退料", "损耗") or bool(destination and destination[1] == "隔离仓")
         quantity = decimal(row.transfer_qty)
         picks, missing = allocate(balances, lots, row.s_warehouse, row.item_code, quantity, day,
-                                  allowed=allowed, permit_expired=permit_expired)
+                                  allowed=allowed, permit_expired=permit_expired, valid_through=valid_through)
         warning = ""
         if missing > EPSILON:
             warning = "可追溯合格批次数量不足，请核对领用来源和批次结存。"
             expired = sorted({
                 f"{lots[key].lot_number}（有效期至 {getdate(lots[key].expires_on)}）"
                 for key in allowed or () if key in lots and balances[(row.s_warehouse, *key)] > EPSILON
-                and getdate(lots[key].expires_on) < day
+                and getdate(lots[key].expires_on) < valid_through
             })
             if expired:
-                warning += "业务日期已过期的批次：" + "、".join(expired)
+                warning += ("供餐日已过期的批次：" if consumption else "业务日期已过期的批次：") + "、".join(expired)
         yield row, origin, picks, warning
         for lot, qty in picks:
             if row.t_warehouse:
                 balances[(row.t_warehouse, lot.lot_key, lot.receiving)] += qty
 
 
-def consumption_lot_warnings(doc):
+def consumption_lot_warnings(doc, posting_date=None, service_date=None):
     warnings = defaultdict(list)
-    for row, _, _, warning in _stock_allocations(doc, lock=False):
+    for row, _, _, warning in _stock_allocations(doc, lock=False, posting_date=posting_date, service_date=service_date):
         if warning and warning not in warnings[row.item_code]:
             warnings[row.item_code].append(warning)
     return {code: " ".join(messages) for code, messages in warnings.items()}

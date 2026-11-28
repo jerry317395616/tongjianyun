@@ -12,9 +12,10 @@ function screen() {
 		allowed_actions: ["领用"], planned_qty: "240", suggested_issue_qty: "240" };
 	const ledger = { day_name: "DAY", rows: [ingredient], stock_entries: [] };
 	const entry = { name: "TRANSFER", action: "领用", docstatus: 0, posting_date: "2026-11-30", latest_issue_date: "2026-11-28",
+		consumption_date: "2026-11-28", earliest_consumption_date: "2026-11-27", latest_consumption_date: "2026-11-28",
 		issue_quantities: { RICE: "200" }, review_token: "revision", source_warehouse: "原料仓", kitchen_warehouse: "厨房仓" };
 	const dateField = {value: "2026-11-28", reportValidity: () => true};
-	const widget = () => ({ off() {return this;}, on() {return this;}, find(s) {return s === "[data-issue-date]" ? [dateField] : this;}, each() {return this;},
+	const widget = () => ({ off() {return this;}, on(e, selector, fn) {if (selector === "[data-consumption-date]") this.recheck = fn; return this;}, find(s) {return ["[data-issue-date]", "[data-consumption-date]"].includes(s) ? [dateField] : this;}, each() {return this;},
 		one() {return this;}, addClass() {return this;}, html(v) {this.content = v; return this;} });
 	const root = widget();
 	class Dialog {
@@ -34,6 +35,7 @@ function screen() {
 			const action = method.split(".").pop();
 			if (action === "get_kitchen_ledger") return {message: ledger};
 			calls.push({action, args});
+			if (action === "preview_kitchen_consumption_date") return {message: {consumption_date: args.consumption_date, review_token: "new-date", review_blocker: ""}};
 			if (action === "create_kitchen_stock_entry") ledger.stock_entries = [entry];
 			else if (["approve_kitchen_issue", "approve_kitchen_consumption"].includes(action)) Object.assign(entry, {docstatus: 1, can_review: false, approved_by: "主管", approved_at: "2026-11-30"});
 			else assert.fail(action);
@@ -41,7 +43,7 @@ function screen() {
 		}};
 	vm.runInNewContext(script, {frappe, cur_frm: frm, __: String});
 	fields["Meal Kitchen Day"].refresh(frm);
-	return {k: frm._kitchen, root, entry, ledger, calls, dialogs};
+	return {k: frm._kitchen, root, entry, ledger, calls, dialogs, dateField};
 }
 
 test("生成领用草稿留在本页，创建人可以核对真实领用量", async () => {
@@ -139,13 +141,13 @@ test("既有耗用草稿在余料盘点审核，显示扣减前后数量和审�
 	await Promise.all([d.confirm(), d.confirm()]);
 	assert.equal(calls.length, 1);
 	assert.equal(calls[0].action, "approve_kitchen_consumption");
-	assert.deepEqual({...calls[0].args}, {day_name: "DAY", stock_entry: "USE", review_token: "revision"});
+	assert.deepEqual({...calls[0].args}, {day_name: "DAY", stock_entry: "USE", review_token: "revision", consumption_date: "2026-11-28"});
 	assert.match(root.content, /审核人 主管/);
 	assert.match(root.content, /清点厨房余料/);
 });
 
-test("供餐日前可核对耗用，确认按钮显示日期限制", async () => {
-	const {k, entry, ledger, calls, dialogs} = screen();
+test("调整实际加工日期后，必须使用新日期的核对结果", async () => {
+	const {k, entry, ledger, calls, dialogs, dateField} = screen();
 	Object.assign(entry, {action: "耗用", can_review: true, review_blocker: "2026-11-30 起可确认",
 		consumption_lines: {RICE: {before: "240", qty: "200", after: "40", lot_warning: "大米批次有效期至 2026-11-29"}}});
 	ledger.stock_entries = [entry];
@@ -156,4 +158,10 @@ test("供餐日前可核对耗用，确认按钮显示日期限制", async () =>
 	assert.equal(dialogs[0].disabled, true);
 	await dialogs[0].confirm();
 	assert.equal(calls.length, 0);
+	dateField.value = "2026-11-27";
+	await dialogs[0].fields_dict.details.$wrapper.recheck({currentTarget: dateField});
+	assert.equal(dialogs[0].disabled, false);
+	await dialogs[0].confirm();
+	assert.equal(calls.at(-1).args.consumption_date, dateField.value);
+	assert.equal(calls.at(-1).args.review_token, "new-date");
 });

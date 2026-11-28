@@ -1,5 +1,6 @@
 import importlib.util
 import unittest
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ class KitchenIssueReviewTests(unittest.TestCase):
         self.workflow = Mock(return_value=None)
         modules = {"frappe": self.frappe, "frappe.utils": SimpleNamespace(now_datetime=Mock(), today=lambda: "2026-11-30"),
                    "frappe.model.workflow": SimpleNamespace(get_workflow_name=self.workflow)}
+        modules["tongjianyun.canteen_ops.inventory"] = SimpleNamespace(consumption_lot_warnings=Mock(return_value={}))
         patcher = patch.dict("sys.modules", modules)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -89,34 +91,46 @@ class KitchenIssueReviewTests(unittest.TestCase):
 
     def test_consumption_review_checks_date_balance_version_and_independent_authority(self):
         self.entry.custom_meal_action = "耗用"
-        self.entry.items = [SimpleNamespace(item_code="RICE", qty=80), SimpleNamespace(item_code="RICE", qty=120)]
+        self.entry.items = [SimpleNamespace(item_code="RICE", qty=q, custom_meal_issue_detail="LOT") for q in (80, 120)]
         totals = {"RICE": {"balance_qty": Decimal("240")}}
-        self.kitchen._ledger = Mock(return_value={"totals": totals})
-        lines, token = self.kitchen._consumption_preview(self.day, self.entry, totals)
-        self.assertEqual(lines["RICE"], {"before": "240", "qty": "200", "after": "40"})
+        facts = {"totals": totals, "issues": {"LOT": {"origin_date": "2026-11-28"}}}
+        self.kitchen._ledger = Mock(return_value=facts)
+        actual = date(2026, 11, 28)
 
-        def approve():
-            return self.kitchen.approve_kitchen_consumption(self.day.name, self.entry.name, token)
+        def preview():
+            return self.kitchen._consumption_preview(self.day, self.entry, facts, actual)
+
+        token = preview()["review_token"]
+        self.assertEqual(preview()["consumption_lines"]["RICE"], {"before": "240", "qty": "200", "after": "40"})
+
+        def approve(selected=None):
+            return self.kitchen.approve_kitchen_consumption(self.day.name, self.entry.name, token, selected or str(actual))
 
         self.frappe.session.user = self.entry.owner
         with self.assertRaises(PermissionError):
             approve()
         self.frappe.session.user = "reviewer"
-        with patch.object(self.kitchen, "today", return_value="2026-11-28"), self.assertRaisesRegex(ValueError, "2026-11-30"):
-            approve()
+        with patch.object(self.kitchen, "today", return_value="2026-11-28"), self.assertRaisesRegex(ValueError, "最晚可选"):
+            approve("2026-11-29")
+        with self.assertRaisesRegex(ValueError, "不能更早"):
+            approve("2026-11-27")
+        with self.assertRaisesRegex(ValueError, "重新核对"):
+            approve("2026-11-29")
         with patch.object(self.entry, "custom_meal_action", "领用"), self.assertRaisesRegex(ValueError, "本日"):
             approve()
         totals["RICE"]["balance_qty"] = Decimal("220")
         with self.assertRaisesRegex(ValueError, "重新核对"):
             approve()
         totals["RICE"]["balance_qty"] = Decimal("140")
-        _, token = self.kitchen._consumption_preview(self.day, self.entry, totals)
+        token = preview()["review_token"]
         with self.assertRaisesRegex(ValueError, "超过厨房结存"):
             approve()
         self.entry.submit.assert_not_called()
         totals["RICE"]["balance_qty"] = Decimal("240")
-        _, token = self.kitchen._consumption_preview(self.day, self.entry, totals)
+        token = preview()["review_token"]
         self.assertFalse(approve()["already_submitted"])
+        self.assertEqual(self.entry.posting_date, actual)
+        self.assertEqual(self.day.meal_date, "2026-11-30")
         self.entry.docstatus = 1
         self.assertTrue(approve()["already_submitted"])
         self.entry.submit.assert_called_once_with()
@@ -148,9 +162,23 @@ class KitchenIssueReviewTests(unittest.TestCase):
         self.frappe.db.sql.return_value = [future]
         self.kitchen._check_execution_order(self.day)
         self.frappe.db.sql.return_value = [earlier, future]
-        self.kitchen._check_execution_order(self.day, advance_issue=True)
+        self.kitchen._check_execution_order(self.day, advance_prep=True)
         with self.assertRaisesRegex(ValueError, "前一"):
             self.kitchen._check_execution_order(self.day)
         future.started_service = 1
         with self.assertRaisesRegex(ValueError, "后日"):
-            self.kitchen._check_execution_order(self.day, advance_issue=True)
+            self.kitchen._check_execution_order(self.day, advance_prep=True)
+
+    def test_advance_consumption_respects_day_ownership_of_issued_and_carried_stock(self):
+        issue = Mock(docstatus=1, custom_meal_action="领用")
+        issue.get.return_value = [SimpleNamespace(name="assigned")]
+        row = SimpleNamespace(custom_meal_issue_detail="assigned")
+        self.entry.configure_mock(custom_meal_action="耗用", posting_date="2026-11-28", items=[row])
+        facts = {"opening_day": {"day_name": "previous"}, "opening_sources": [{"issue_detail": "carry"}]}
+        self.assertTrue(self.kitchen._is_advance_prep(self.day, self.entry, [issue]))
+        self.assertIsNone(self.kitchen._carry_available_from(self.entry, facts))
+        row.custom_meal_issue_detail = "carry"
+        self.frappe.db = Mock()
+        self.frappe.db.get_value.return_value = "2026-11-29"
+        self.assertFalse(self.kitchen._is_advance_prep(self.day, self.entry, [issue]))
+        self.assertEqual(self.kitchen._carry_available_from(self.entry, facts), date(2026, 11, 29))

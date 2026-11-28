@@ -209,7 +209,7 @@
 						<td><b>${fmt(qty)} ${unit}</b>${diff ? '<small class="ky-issue-diff">与计划有差异</small>' : ""}</td></tr>`;
 				}).join("")}</tbody></table>`;
 		}
-		consumptionDetails(entry) {
+		consumptionDetails(entry, canApprove) {
 			const pending = entry.docstatus === 0;
 			const ingredients = new Map(this.ledger.rows.map((row) => [row.item_code, row]));
 			const lines = Object.entries(entry.consumption_lines).map(([code, line]) => {
@@ -221,8 +221,12 @@
 					${line.lot_warning ? `<tr><td colspan="4" class="ky-lot-warning">${esc(line.lot_warning)}</td></tr>` : ""}`;
 			});
 			return `<div class="ky-issue-route"><div><small>耗用仓库</small><b>${esc(entry.kitchen_warehouse)}</b></div><span></span>
-				<div><small>耗用日期</small><b>${esc(entry.posting_date)}</b></div></div>
+				<div><small>供餐日期</small><b>${esc(this.frm.doc.meal_date)}</b></div></div>
 				<p class="ky-issue-meta">${esc(entry.name)} · 经办人 ${esc(entry.prepared_by)}</p>
+				${canApprove ? `<label class="ky-issue-date">实际耗用日期
+					<input type="date" required data-consumption-date min="${esc(entry.earliest_consumption_date)}" max="${esc(entry.latest_consumption_date)}" value="${esc(entry.consumption_date)}">
+					<small>按实际加工用料的日期扣库。食材批次须在供餐日有效。</small></label>`
+					: `<p class="ky-issue-meta">实际耗用日期 · ${pending ? "待主管确认" : esc(entry.posting_date)}</p>`}
 				<table><thead><tr><th>食材</th>${pending ? "<th>厨房结存</th>" : ""}<th>本次耗用</th>${pending ? "<th>确认后结存</th>" : ""}</tr></thead>
 				<tbody>${lines.join("")}</tbody></table>
 				${pending && !entry.can_review ? '<p class="ky-help">由另一位有提交权限的库存主管确认耗用。</p>' : ""}
@@ -244,16 +248,46 @@
 				dialog.$wrapper.remove();
 			});
 			const body = dialog.fields_dict.details.$wrapper;
-			const details = isIssue ? this.issueDetails(entry, canApprove) : this.consumptionDetails(entry);
-			body.html(details + (entry.review_blocker ? `<p class="ky-issue-note">${esc(entry.review_blocker)}</p>` : ""));
+			let review = entry;
+			let revision = 0;
+			const render = () => {
+				const details = isIssue ? this.issueDetails(review, canApprove) : this.consumptionDetails(review, canApprove);
+				body.html(details + (review.review_blocker ? `<p class="ky-issue-note" role="status">${esc(review.review_blocker)}</p>` : ""));
+			};
+			render();
 			if (canApprove) {
+				if (!isIssue) body.on("change", "[data-consumption-date]", async (event) => {
+					const input = event.currentTarget;
+					const selected = input.value;
+					const version = ++revision;
+					review = {...entry, consumption_date: selected, review_token: null};
+					dialog.get_primary_btn().prop("disabled", true);
+					if (!input.reportValidity()) return;
+					try {
+						const refreshed = await rpc("preview_kitchen_consumption_date", {
+							day_name: this.name, stock_entry: entry.name, consumption_date: selected,
+						});
+						if (this.stockDialog !== dialog || version !== revision) return;
+						if (!refreshed?.review_token || refreshed.consumption_date !== selected) throw new Error();
+						review = {...entry, ...refreshed};
+					} catch {
+						if (this.stockDialog !== dialog || version !== revision) return;
+						review.review_blocker = "未能核对所选日期的库存，请重选日期或重新打开耗用明细。";
+					}
+					render();
+					dialog.get_primary_btn().prop("disabled", !review.review_token || !!review.review_blocker);
+				});
 				dialog.set_primary_action(isIssue ? "确认领用并调拨" : "确认耗用并扣减库存", async () => {
-					if (this.approving || entry.review_blocker || cur_frm !== this.frm || this.frm.doc.name !== this.name) return;
-					const args = {day_name: this.name, stock_entry: entry.name, review_token: entry.review_token};
+					if (this.approving || !review.review_token || review.review_blocker || cur_frm !== this.frm || this.frm.doc.name !== this.name) return;
+					const args = {day_name: this.name, stock_entry: entry.name, review_token: review.review_token};
 					if (isIssue) {
 						const dateInput = body.find("[data-issue-date]")[0];
 						if (!dateInput.reportValidity()) return;
 						args.issue_date = dateInput.value;
+					} else {
+						const input = body.find("[data-consumption-date]")[0];
+						if (!input.reportValidity() || input.value !== review.consumption_date) return;
+						args.consumption_date = input.value;
 					}
 					this.approving = true;
 					try {
@@ -318,7 +352,7 @@
 			const done = entry.docstatus === 1;
 			return `<section class="ky-card ky-card-body"><header class="ky-between"><h3>耗用单</h3>
 				<span class="ky-pill ${done ? "ok" : "pending"}">${done ? "已耗用" : "待库存主管审核"}</span></header>
-				<p class="ky-issue-meta">${esc(entry.name)} · 耗用日期 ${esc(entry.posting_date)}</p>
+				<p class="ky-issue-meta">${esc(entry.name)} · 供餐日期 ${esc(this.frm.doc.meal_date)}${done ? " · 实际耗用 " + esc(entry.posting_date) : ""}</p>
 				${done && entry.approved_by ? `<p class="ky-help">审核人 ${esc(entry.approved_by)} · ${esc(frappe.datetime.str_to_user(entry.approved_at))}</p>` : ""}
 				${!done ? '<p class="ky-help">由另一位库存主管核对实际耗用，确认后扣减厨房库存。</p>' : ""}
 				${entry.review_blocker ? `<p class="ky-issue-note">${esc(entry.review_blocker)}</p>` : ""}
